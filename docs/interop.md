@@ -95,7 +95,7 @@ disagrees:
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | signatures **agree** (§11.2–§11.4); combined tree todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
-| 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts and every encoding; three divergences recorded, see below |
+| 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts, every encoding, and every log root; three divergences recorded, see below |
 
 Steps 1 through 6 are done, along with step 9 and the signature half of step 7.
 Fourteen vector files pass from the Rust side — 6255 checks across 660 cases — and
@@ -110,6 +110,24 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### Two ways to reach the same root
+
+`log-append.json` exists because an auditor computes a root nobody else computes the same
+way. A prover holds every leaf and hashes the tree top-down. An auditor holds none: its
+whole view of the log tree is the head values of the current tree's full subtrees —
+`popcount(size)` hashes, under 64 for any log that can exist — and it grows them one entry
+at a time, folding them bottom-up when it needs a root. The two computations meet only at
+§11.8's `hashContent` rule.
+
+That is exactly the shape of bug the reverse direction caught in §12.1: agreement at every
+size someone tested, divergence at the next. So the file sweeps 64 sizes and checks three
+things at each — the heads after the append, the root they fold to, and the same root
+computed from every leaf instead. The head count is asserted against the population count
+of the size in the generator, since each merge is a carry and getting that wrong is how the
+shape drifts. The two implementations arrive differently: katie indexes a chain by level
+and propagates a carry, `kt-tree::log` keeps subtree lengths beside their heads and merges
+the rightmost pair while the lengths match.
 
 ### §4.2 can leave a user checking nothing at all
 

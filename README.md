@@ -124,6 +124,7 @@ Implemented and verified against the Go peer, byte for byte:
 | §13 request structures + response building blocks (`kt-wire::requests`) | §11.5, §13.1–§13.5 | [`requests.json`](interop/vectors/requests.json) — 22 structures |
 | Prefix tree root before and after an audited update (`kt-tree::prefix`) | §15.2, §3.3 | [`prefix-mutation.json`](interop/vectors/prefix-mutation.json) — 8 update shapes |
 | `AuditorUpdate` + the auditor's checks on one entry (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 12 cases through katie's own auditor |
+| Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that

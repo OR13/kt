@@ -299,6 +299,28 @@ pub struct MutationExpect {
     pub peer_error: Option<String>,
 }
 
+/// `log-append.json` input (§3.2, §11.8).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppendInput {
+    /// The tree size after the append.
+    pub size: u64,
+    /// The entry appended, as a one-element list.
+    pub entries: Vec<LogEntryInput>,
+    /// Every leaf value in the resulting tree, hex.
+    pub leaves: Vec<String>,
+}
+
+/// `log-append.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppendExpect {
+    /// Full subtree heads, left to right, hex.
+    pub full_subtrees: Vec<String>,
+    /// The root they fold to, hex.
+    pub root: String,
+}
+
 /// `auditor-update.json` input (§15.2).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -336,6 +358,13 @@ pub struct AuditorExpect {
     /// does not check.
     #[serde(default)]
     pub peer_step_5: bool,
+    /// The log tree size after the update, where it was accepted.
+    #[serde(default)]
+    pub tree_size: Option<u64>,
+    /// The log tree root over the new entry, hex, where the update was accepted. This is
+    /// what an `AuditorTreeHead` for `tree_size` is signed over (§11.3).
+    #[serde(default)]
+    pub log_root: Option<String>,
 }
 
 /// One `PrefixSearchResult` (§12.2).

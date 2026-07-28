@@ -44,6 +44,7 @@ import (
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/db/memory"
+	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
 	"github.com/Bren2010/katie/tree/transparency/auditor"
 	"github.com/Bren2010/katie/tree/transparency/structs"
@@ -150,7 +151,7 @@ func auditorVectors(sha string) (*File, error) {
 			return nil, fmt.Errorf("case %q: katie left %d bytes unread", spec.name, reread.Len())
 		}
 
-		verdict, detail, err := auditorVerdict(config, auditorKey, spec, before, update)
+		verdict, detail, accepted, err := auditorVerdict(config, auditorKey, spec, before, update)
 		if err != nil {
 			return nil, fmt.Errorf("case %q: %w", spec.name, err)
 		}
@@ -173,6 +174,15 @@ func auditorVectors(sha string) (*File, error) {
 		if detail != "" {
 			expect["peer_detail"] = detail
 		}
+		if accepted != nil {
+			// §15.2 step 7's second half, taken from the auditor's own committed state:
+			// the log tree grew by one entry and this is the root an AuditorTreeHead for
+			// `tree_size` is signed over (§11.3). The auditor holds no leaves, so this is
+			// a fold over the full subtree heads it carries — a different computation from
+			// hashing a tree, and worth pinning as such.
+			expect["tree_size"] = accepted.TreeSize
+			expect["log_root"] = hex.EncodeToString(accepted.LogRoot)
+		}
 		if spec.peerStep5 {
 			expect["peer_step_5"] = true
 		}
@@ -183,6 +193,12 @@ func auditorVectors(sha string) (*File, error) {
 	return f, nil
 }
 
+// acceptedState is what the auditor's state became, for the cases it accepted.
+type acceptedState struct {
+	TreeSize uint64
+	LogRoot  []byte
+}
+
 // auditorVerdict runs katie's stateful auditor over the case, priming its state with the
 // previous log entry so step 6 has something to match against.
 func auditorVerdict(
@@ -191,11 +207,11 @@ func auditorVerdict(
 	spec auditorCase,
 	before []byte,
 	update *structs.AuditorUpdate,
-) (string, string, error) {
+) (string, string, *acceptedState, error) {
 	store := memory.NewAuditorStore()
 	a, err := auditor.NewAuditor(config, auditorKey, store)
 	if err != nil {
-		return "", "", fmt.Errorf("constructing the auditor: %w", err)
+		return "", "", nil, fmt.Errorf("constructing the auditor: %w", err)
 	}
 
 	// Every case but the first-entry one needs the auditor to already hold the tree the
@@ -205,7 +221,7 @@ func auditorVerdict(
 		sorted := sortedEntries(spec.entries)
 		proof, err := emptyTreeProof(config.Suite, sorted)
 		if err != nil {
-			return "", "", fmt.Errorf("proving against an empty tree: %w", err)
+			return "", "", nil, fmt.Errorf("proving against an empty tree: %w", err)
 		}
 		priming := &structs.AuditorUpdate{
 			Timestamp: spec.previousTimestamp,
@@ -213,33 +229,53 @@ func auditorVerdict(
 			Proof:     *proof,
 		}
 		if err := a.Process(priming); err != nil {
-			return "", "", fmt.Errorf("priming the auditor: %w", err)
+			return "", "", nil, fmt.Errorf("priming the auditor: %w", err)
 		}
 		if _, err := a.Commit(); err != nil {
-			return "", "", fmt.Errorf("committing the primed state: %w", err)
+			return "", "", nil, fmt.Errorf("committing the primed state: %w", err)
 		}
 
 		// Read the committed state back out to confirm the auditor now holds the tree
 		// the case's update is supposed to start from. Without this the step 6 cases
 		// would be checking nothing.
-		raw, err := store.GetState()
+		state, err := committedState(config, store)
 		if err != nil {
-			return "", "", fmt.Errorf("reading the primed state: %w", err)
-		}
-		state, err := auditor.NewAuditorState(config.Suite, bytes.NewBuffer(raw))
-		if err != nil {
-			return "", "", fmt.Errorf("parsing the primed state: %w", err)
+			return "", "", nil, fmt.Errorf("reading the primed state: %w", err)
 		}
 		if !bytes.Equal(state.PrefixTree, before) {
-			return "", "", fmt.Errorf(
+			return "", "", nil, fmt.Errorf(
 				"priming produced prefix root %x, the case expects %x", state.PrefixTree, before)
 		}
 	}
 
 	if err := a.Process(update); err != nil {
-		return "rejected", err.Error(), nil
+		return "rejected", err.Error(), nil, nil
 	}
-	return "accepted", "", nil
+	if _, err := a.Commit(); err != nil {
+		return "", "", nil, fmt.Errorf("committing the accepted update: %w", err)
+	}
+	state, err := committedState(config, store)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("reading the accepted state: %w", err)
+	}
+	root, err := log.Root(config.Suite, state.TreeHead.TreeSize, state.FullSubtrees)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("rooting the log tree: %w", err)
+	}
+	return "accepted", "", &acceptedState{
+		TreeSize: state.TreeHead.TreeSize,
+		LogRoot:  root,
+	}, nil
+}
+
+// committedState reads back what the auditor persisted, which is the only way to see the
+// full subtree heads it is carrying.
+func committedState(config *structs.PublicConfig, store *memory.AuditorStore) (*auditor.AuditorState, error) {
+	raw, err := store.GetState()
+	if err != nil {
+		return nil, err
+	}
+	return auditor.NewAuditorState(config.Suite, bytes.NewBuffer(raw))
 }
 
 type auditorCase struct {

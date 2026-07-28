@@ -10,8 +10,9 @@
 //!
 //! # What is checked here
 //!
-//! Steps 1 through 4 of §15.2, which are structural, plus steps 6 and 7's prefix tree
-//! half via [`prefix::evaluate_before_after`].
+//! Steps 1 through 4 of §15.2, which are structural; step 6; and both halves of step 7 —
+//! the new prefix tree root via [`prefix::evaluate_before_after`], and the log tree root
+//! the `AuditorTreeHead` signature would cover via [`log::Retained::append`].
 //!
 //! # What is not
 //!
@@ -21,19 +22,20 @@
 //! across updates. It is a policy check over auditor state rather than a check on the
 //! update, so it belongs to whatever owns that state.
 //!
-//! **Step 7's log tree half** — appending a `LogEntry` for the new timestamp and prefix
-//! root, and computing the log root that the `AuditorTreeHead` signature covers — needs
-//! an incremental append over the log tree frontier, which `crate::log` does not do yet:
-//! it proves and verifies against a tree it is given, rather than growing one.
+//! **Step 8's signature.** Producing the `AuditorTreeHead` is the caller's business: this
+//! computes the size and root it would cover and hands them back, because whether to sign
+//! depends on [`Accepted::root_determined`] and on step 5, neither of which is a property
+//! of the bytes in front of it.
 //!
-//! Both are gaps in this implementation, not in the draft. [`Accepted`] therefore reports
-//! what it did establish rather than a bare "valid".
+//! The step 5 gap is in this implementation, not in the draft. [`Accepted`] therefore
+//! reports what it did establish rather than a bare "valid".
 
-use crate::prefix;
+use crate::{log, prefix};
+use alloc::vec::Vec;
 use kt_crypto::suite::CipherSuite;
 use kt_wire::audit::AuditorUpdate;
 use kt_wire::proofs::{PrefixLeaf, PrefixSearchResultType};
-use kt_wire::structs::HashValue;
+use kt_wire::structs::{HashValue, LogEntry};
 
 /// Why an auditor rejected an update (§15.2).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,6 +86,14 @@ pub enum Error {
     },
     /// Steps 6 and 7: the proof could not be evaluated at all.
     Prefix(prefix::Error),
+    /// Step 7: the new log entry could not be appended to the auditor's view.
+    Log(log::Error),
+}
+
+impl From<log::Error> for Error {
+    fn from(err: log::Error) -> Self {
+        Self::Log(err)
+    }
 }
 
 impl From<prefix::Error> for Error {
@@ -120,6 +130,7 @@ impl core::fmt::Display for Error {
                 )
             }
             Self::Prefix(err) => write!(f, "evaluating the proof: {err}"),
+            Self::Log(err) => write!(f, "appending the log entry: {err}"),
         }
     }
 }
@@ -128,6 +139,7 @@ impl core::error::Error for Error {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Prefix(err) => Some(err),
+            Self::Log(err) => Some(err),
             _ => None,
         }
     }
@@ -137,21 +149,43 @@ type Result<T> = core::result::Result<T, Error>;
 
 /// What an auditor carries between updates.
 ///
-/// Deliberately tiny: an auditor that kept more would be a mirror, and the point of the
-/// role is that it can check the log without storing it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Deliberately small: an auditor that kept more would be a mirror, and the point of the
+/// role is that it can check the log without storing it. `log` is the whole of its view of
+/// the log tree — the full subtree heads, which is `popcount(size)` hashes, so under 64 of
+/// them for any log that can exist.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditorState {
     /// Timestamp of the last entry accepted.
     pub timestamp: u64,
     /// Prefix tree root of the last entry accepted.
     pub prefix_root: HashValue,
+    /// The log tree as of the last entry accepted. `size` zero means no entries yet.
+    pub log: log::Retained,
+}
+
+impl AuditorState {
+    /// The state of an auditor that has accepted nothing.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            timestamp: 0,
+            prefix_root: HashValue::ZERO,
+            log: log::Retained {
+                size: 0,
+                full_subtrees: Vec::new(),
+            },
+        }
+    }
 }
 
 /// The state an accepted update moves the auditor to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Accepted {
     /// The new state, to be carried into the next update.
     pub state: AuditorState,
+    /// The log tree root over the new entry (§15.2 step 7). An `AuditorTreeHead` for
+    /// `state.log.size` is signed over this value (§11.3).
+    pub log_root: HashValue,
     /// Whether the new prefix root followed from the proof, or was reached by assuming
     /// no §3.3 collapse was needed. See [`prefix::Mutation::assumed_no_collapse`].
     ///
@@ -243,11 +277,32 @@ pub fn verify_update(
         }
     }
 
+    // Step 7's second half: the log gains one entry committing to the timestamp and the
+    // new prefix root (§11.8), and its root is what an `AuditorTreeHead` for the new size
+    // would be signed over (§11.3). The auditor holds no leaves, so this is done by
+    // carrying the full subtree heads forward.
+    let entry = LogEntry {
+        timestamp: update.timestamp,
+        prefix_tree: mutation.after,
+    };
+    let leaf = log::leaf_value(suite, &entry)?;
+    let mut view = previous.map_or_else(
+        || log::Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        },
+        |state| state.log.clone(),
+    );
+    view.append(suite, leaf)?;
+    let log_root = view.root(suite)?;
+
     Ok(Accepted {
         state: AuditorState {
             timestamp: update.timestamp,
             prefix_root: mutation.after,
+            log: view,
         },
+        log_root,
         root_determined: mutation.determined(),
     })
 }
@@ -283,6 +338,29 @@ mod tests {
     use kt_wire::proofs::PrefixProof;
 
     const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    /// An auditor that has accepted one entry, at `timestamp`, over `prefix_root`. Its log
+    /// tree holds that one entry, which is what makes the step 7 append meaningful.
+    fn state(timestamp: u64, prefix_root: HashValue) -> AuditorState {
+        let mut log = crate::log::Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        };
+        let leaf = crate::log::leaf_value(
+            SUITE,
+            &LogEntry {
+                timestamp,
+                prefix_tree: prefix_root,
+            },
+        )
+        .unwrap();
+        log.append(SUITE, leaf).unwrap();
+        AuditorState {
+            timestamp,
+            prefix_root,
+            log,
+        }
+    }
 
     fn leaf(first: u8, tag: u8, commitment: u8) -> PrefixLeaf {
         let mut key = [0_u8; 32];
@@ -324,10 +402,7 @@ mod tests {
         let existing = [leaf(0x00, 1, 0xa1), leaf(0x80, 2, 0xb2)];
         let added = [leaf(0x40, 3, 0xc3)];
         let (root, update) = update_for(&existing, &added, &[]);
-        let previous = AuditorState {
-            timestamp: 1_600_000_000_000,
-            prefix_root: root,
-        };
+        let previous = state(1_600_000_000_000, root);
 
         let accepted = verify_update(SUITE, &update, Some(&previous)).unwrap();
         assert!(accepted.root_determined);
@@ -353,19 +428,13 @@ mod tests {
     fn a_timestamp_may_repeat_but_not_regress() {
         let (root, update) = update_for(&[leaf(0x80, 2, 0xb2)], &[leaf(0x00, 1, 0xa1)], &[]);
 
-        let same = AuditorState {
-            timestamp: update.timestamp,
-            prefix_root: root,
-        };
+        let same = state(update.timestamp, root);
         assert!(
             verify_update(SUITE, &update, Some(&same)).is_ok(),
             "equal is allowed"
         );
 
-        let later = AuditorState {
-            timestamp: update.timestamp + 1,
-            prefix_root: root,
-        };
+        let later = state(update.timestamp + 1, root);
         assert_eq!(
             verify_update(SUITE, &update, Some(&later)),
             Err(Error::TimestampRegression {
@@ -382,10 +451,7 @@ mod tests {
         let high = leaf(0x40, 3, 0xc3);
 
         let (root, mut update) = update_for(&existing, &[low, high], &[]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         assert!(verify_update(SUITE, &update, Some(&state)).is_ok());
 
         update.added = vec![high, low];
@@ -416,10 +482,7 @@ mod tests {
             leaf(0x80, 2, 0xb2),
         ];
         let (root, mut update) = update_for(&existing, &[], &[existing[0], existing[1]]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         assert!(verify_update(SUITE, &update, Some(&state)).is_ok());
 
         update.removed = vec![existing[1], existing[0]];
@@ -435,10 +498,7 @@ mod tests {
     #[test]
     fn the_proof_must_answer_every_key() {
         let (root, mut update) = update_for(&[leaf(0x80, 2, 0xb2)], &[leaf(0x00, 1, 0xa1)], &[]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         update.proof = PrefixProof {
             results: Vec::new(),
             elements: update.proof.elements.clone(),
@@ -462,10 +522,7 @@ mod tests {
         overwrite.commitment = HashValue::from_bytes([0xff; 32]);
 
         let (root, update) = update_for(&existing, &[overwrite], &[]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         assert_eq!(
             verify_update(SUITE, &update, Some(&state)),
             Err(Error::AddedAlreadyPresent { index: 0 })
@@ -484,10 +541,7 @@ mod tests {
         replacement.commitment = HashValue::from_bytes([0xff; 32]);
 
         let (root, update) = update_for(&existing, &[replacement], &[existing[0]]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         let accepted = verify_update(SUITE, &update, Some(&state)).unwrap();
         assert!(accepted.root_determined, "the slot never empties");
 
@@ -504,10 +558,7 @@ mod tests {
         let existing = [leaf(0x00, 1, 0xa1), leaf(0x80, 2, 0xb2)];
         let absent = leaf(0x40, 9, 0xe5);
         let (root, update) = update_for(&existing, &[], &[absent]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
         assert_eq!(
             verify_update(SUITE, &update, Some(&state)),
             Err(Error::RemovedNotPresent { index: 0 })
@@ -519,10 +570,7 @@ mod tests {
     fn an_update_from_a_different_tree_is_rejected() {
         let (root, update) = update_for(&[leaf(0x80, 2, 0xb2)], &[leaf(0x00, 1, 0xa1)], &[]);
         let elsewhere = HashValue::from_bytes([0x5a; 32]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: elsewhere,
-        };
+        let state = state(0, elsewhere);
         assert_eq!(
             verify_update(SUITE, &update, Some(&state)),
             Err(Error::PrefixRootMismatch {
@@ -543,10 +591,7 @@ mod tests {
             leaf(0x80, 3, 0xc3),
         ];
         let (root, update) = update_for(&existing, &[], &[existing[0]]);
-        let state = AuditorState {
-            timestamp: 0,
-            prefix_root: root,
-        };
+        let state = state(0, root);
 
         let accepted = verify_update(SUITE, &update, Some(&state)).unwrap();
         assert!(!accepted.root_determined);
@@ -558,6 +603,86 @@ mod tests {
             after.root(SUITE),
             "and the root it would have signed is not the tree's"
         );
+    }
+
+    /// A chain of accepted updates, checked against the log tree an implementation that
+    /// held every leaf would have built. This is the whole of step 7: an auditor signs a
+    /// root it computed from `popcount(size)` hashes, and if that drifts from the real tree
+    /// by one entry every later signature is wrong too.
+    #[test]
+    fn a_chain_of_updates_tracks_the_real_log_tree() {
+        let pool: Vec<PrefixLeaf> = (0..8).map(|i| leaf(i * 0x20, i + 1, 0xa0 + i)).collect();
+
+        let mut auditor: Option<AuditorState> = None;
+        let mut tree = PrefixTree::new();
+        let mut leaves: Vec<HashValue> = Vec::new();
+
+        for (step, added) in pool.iter().enumerate() {
+            // The log's side: search the current tree, then add the leaf to it.
+            let proof = tree.prove(SUITE, &[added.vrf_output]).unwrap();
+            let update = AuditorUpdate {
+                timestamp: 1_700_000_000_000 + step as u64 * 1_000,
+                added: vec![*added],
+                removed: Vec::new(),
+                proof,
+            };
+            tree.insert(*added).unwrap();
+
+            let accepted = verify_update(SUITE, &update, auditor.as_ref()).unwrap();
+            assert_eq!(accepted.state.prefix_root, tree.root(SUITE), "step {step}");
+            assert!(accepted.root_determined);
+
+            // And the log tree, built the other way: every leaf, hashed from scratch.
+            leaves.push(
+                crate::log::leaf_value(
+                    SUITE,
+                    &LogEntry {
+                        timestamp: update.timestamp,
+                        prefix_tree: accepted.state.prefix_root,
+                    },
+                )
+                .unwrap(),
+            );
+            assert_eq!(
+                accepted.log_root,
+                crate::log::root(SUITE, &leaves).unwrap(),
+                "step {step}"
+            );
+            assert_eq!(accepted.state.log.size, leaves.len() as u64);
+
+            auditor = Some(accepted.state);
+        }
+    }
+
+    /// `AuditorState::empty` is what an auditor starts from, and it must be the same thing
+    /// as passing `None`: a first entry has no predecessor either way.
+    #[test]
+    fn an_empty_state_and_no_state_agree() {
+        let added = leaf(0x00, 1, 0xa1);
+        let (_, update) = update_for(&[], &[added], &[]);
+
+        let from_none = verify_update(SUITE, &update, None).unwrap();
+        let empty = AuditorState::empty();
+        let from_empty = verify_update(SUITE, &update, Some(&empty)).unwrap();
+        assert_eq!(from_none, from_empty);
+    }
+
+    /// A state whose log view is malformed cannot be advanced. Step 7 is the only place
+    /// this can surface, and it must be an error rather than a wrong root.
+    #[test]
+    fn a_malformed_log_view_is_refused() {
+        let existing = [leaf(0x00, 1, 0xa1), leaf(0x80, 2, 0xb2)];
+        let (root, update) = update_for(&existing, &[leaf(0x40, 3, 0xc3)], &[]);
+        let mut broken = state(1_600_000_000_000, root);
+        // Size 3 calls for two heads, not one.
+        broken.log = crate::log::Retained {
+            size: 3,
+            full_subtrees: vec![HashValue::ZERO],
+        };
+        assert!(matches!(
+            verify_update(SUITE, &update, Some(&broken)),
+            Err(Error::Log(crate::log::Error::RetainedShape { .. }))
+        ));
     }
 
     #[test]
@@ -596,5 +721,8 @@ mod tests {
                 .is_some()
         );
         assert!(core::error::Error::source(&Error::RemovedNotPresent { index: 0 }).is_none());
+        let log_error = Error::from(crate::log::Error::InvalidSize { size: 0 });
+        assert!(!log_error.to_string().is_empty());
+        assert!(core::error::Error::source(&log_error).is_some());
     }
 }

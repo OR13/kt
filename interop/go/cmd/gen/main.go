@@ -81,6 +81,7 @@ func main() {
 		{"update-view.json", updateViewVectors},
 		{"log-math.json", logMathVectors},
 		{"log-tree.json", logTreeVectors},
+		{"log-append.json", appendVectors},
 		{"prefix-tree.json", prefixTreeVectors},
 		{"prefix-mutation.json", mutationVectors},
 		{"auditor-update.json", auditorVectors},
