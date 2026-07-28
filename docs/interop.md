@@ -85,19 +85,70 @@ rejects must be rejected by Rust too, and vice versa.
 Bottom-up, because every later layer's vectors are meaningless if the layer below
 disagrees:
 
-| # | Primitive | Vector content | Why first |
-|---|---|---|---|
-| 1 | Commitment (§11.6) | `opening`, `label`, `version`, `update` → `commitment` | Pure HMAC-SHA256 over a `CommitmentValue` struct; no tree state. Doubles as the first `kt-wire` encoding test. |
-| 2 | Wire codec (§2.1, §11) | struct → hex bytes, both directions | Everything downstream is defined over these bytes. Include the optional-value and variable-length-vector edge cases. |
-| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. |
-| 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. |
-| 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. |
-| 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. |
-| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. |
-| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. |
+| # | Primitive | Vector content | Why first | State |
+|---|---|---|---|---|
+| 1 | Commitment (§11.6) | `opening`, `label`, `version`, `update` → `commitment` | Pure HMAC-SHA256 over a `CommitmentValue` struct; no tree state. Doubles as the first `kt-wire` encoding test. | **agrees** |
+| 2 | Wire codec (§2.1, §11) | struct → hex bytes, both directions | Everything downstream is defined over these bytes. Include the optional-value and variable-length-vector edge cases. | **agrees** for `CommitmentValue`/`UpdateValue`; other structs pending |
+| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. | todo |
+| 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | todo |
+| 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | todo |
+| 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
+| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | todo |
+| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
 
-Steps 1, 2, and 6 are self-contained enough to be done in any order and are the
-right first commits.
+Steps 1, 2, and 6 were the right first commits, and are done:
+`interop/vectors/commitment.json`, `ibst.json`, and `binary-ladder.json` all pass
+from the Rust side. "Agrees" here means a committed vector asserts it, not that
+the two implementations were eyeballed.
+
+### Findings from steps 1, 2, and 6
+
+Recorded here rather than rediscovered, and each is worth an upstream report.
+
+**katie's binary ladder does not terminate for versions at or above `2^31-1`.**
+`tree/transparency/math.baseBinaryLadder` computes in `uint32` and takes the
+binary-search midpoint as `(lower + upper) / 2`. Once that sum passes `MaxUint32`
+it wraps, the midpoint lands *below* the lower bound, and the loop walks away from
+its own interval, appending rungs until the process is killed. The first affected
+greatest-version is `2^31-1`, where the upper bound becomes `2^32-1`; verified at
+pin `00da5254`, where `2^31-2` returns a 62-rung ladder and `2^31-1` is OOM-killed.
+Separately, at `MaxUint32` the powers-of-two phase spins on its own, because
+`uint32(1) << 32` is 0 in Go and the rung wraps back to `MaxUint32`. A client's
+`n` comes from what the log proves to it, so a log picks this value — which makes
+it a remote hang, not just a robustness nit. Consequence for us:
+`binary-ladder.json` stops at `2^31-2`, and the range above it is covered by
+Rust-side tests.
+
+**A greatest version of `2^32-1` cannot be proven at all.** Appendix B is Python,
+so the ladder for `n = 2^32-1` contains `2^33-1`; on the wire a version is a
+`uint32` (§11.7), so that lookup does not exist. Establishing `2^32-1` as the
+greatest version requires a non-inclusion proof for version `2^32`, which is
+unrepresentable. `kt-tree::ladder` reports this rather than truncating. This is a
+draft-level gap: either the version space needs to exclude its own maximum, or
+Appendix B needs to say what happens there.
+
+**katie's search ladder is indexed on the target, Appendix B's on the greatest
+version — and they agree anyway.** draft-05's `search_binary_ladder` iterates
+`base_binary_ladder(n)`; katie iterates `baseBinaryLadder(t)`. The outputs are
+identical, because the two base ladders agree rung by rung until the first rung
+where a comparison against `n` differs from one against `t` — i.e. the first rung
+in `(min(t,n), max(t,n)]` — and that is exactly Appendix B's `would_end`
+condition, which both variants include before stopping. The generator checks this
+over a 131×131 grid at generation time and refuses to emit vectors if it ever
+fails, and `kt-tree` asserts it again from the Rust side. So katie-generated
+ladder vectors are a valid oracle for a draft-shaped implementation.
+
+**katie's monitoring ladder predates draft-05's deduplication parameter.**
+Appendix B's `monitoring_binary_ladder(t, left_inclusion)` drops lookups already
+proven to the left; katie's `MonitoringBinaryLadder(t)` takes only `t`. Monitoring
+vectors are therefore emitted with an empty set only, and the deduplication is
+covered by Rust-side tests. Not a disagreement, just a pin that is behind.
+
+**`opening` sits in a different place in the two implementations.** The draft puts
+`opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
+and writes it to the HMAC first. Same bytes, different factoring — the vectors
+record the full `CommitmentValue` encoding as well as the commitment, so both
+halves are pinned.
 
 ### Vector format contract
 

@@ -1,0 +1,2029 @@
+{
+  "primitive": "binary-ladder",
+  "draft": "draft-ietf-keytrans-protocol-05 §5, Appendix B",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "notes": "Versions looked up in a binary ladder. No cipher suite: pure integer math. `kind` selects the variant: base (§5), search (§6.2), or monitoring (§8.1). Base vectors come from SearchBinaryLadder(n, n) because a search ladder whose target equals the greatest version never terminates early. Monitoring vectors use an empty left_inclusion set only, since the pinned peer predates that parameter. Versions stop at 2^31-2, above which the peer's uint32 midpoint overflows and its binary search does not terminate; see the generator comment.",
+  "cases": [
+    {
+      "name": "base-greatest-0",
+      "input": {
+        "greatest": 0,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-1",
+      "input": {
+        "greatest": 1,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          2
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-2",
+      "input": {
+        "greatest": 2,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          2
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-3",
+      "input": {
+        "greatest": 3,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-4",
+      "input": {
+        "greatest": 4,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-5",
+      "input": {
+        "greatest": 5,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-6",
+      "input": {
+        "greatest": 6,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-7",
+      "input": {
+        "greatest": 7,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-8",
+      "input": {
+        "greatest": 8,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-9",
+      "input": {
+        "greatest": 9,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-10",
+      "input": {
+        "greatest": 10,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-15",
+      "input": {
+        "greatest": 15,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-16",
+      "input": {
+        "greatest": 16,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-17",
+      "input": {
+        "greatest": 17,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          18
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-31",
+      "input": {
+        "greatest": 31,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-32",
+      "input": {
+        "greatest": 32,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-33",
+      "input": {
+        "greatest": 33,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          34
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-63",
+      "input": {
+        "greatest": 63,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          79,
+          71,
+          67,
+          65,
+          64
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-64",
+      "input": {
+        "greatest": 64,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          79,
+          71,
+          67,
+          65,
+          64
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-65",
+      "input": {
+        "greatest": 65,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          79,
+          71,
+          67,
+          65,
+          66
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          111,
+          103,
+          99,
+          101,
+          100
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-255",
+      "input": {
+        "greatest": 255,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          383,
+          319,
+          287,
+          271,
+          263,
+          259,
+          257,
+          256
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-256",
+      "input": {
+        "greatest": 256,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          383,
+          319,
+          287,
+          271,
+          263,
+          259,
+          257,
+          256
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-257",
+      "input": {
+        "greatest": 257,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          383,
+          319,
+          287,
+          271,
+          263,
+          259,
+          257,
+          258
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-1000",
+      "input": {
+        "greatest": 1000,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          999,
+          1003,
+          1001,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-65535",
+      "input": {
+        "greatest": 65535,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          98303,
+          81919,
+          73727,
+          69631,
+          67583,
+          66559,
+          66047,
+          65791,
+          65663,
+          65599,
+          65567,
+          65551,
+          65543,
+          65539,
+          65537,
+          65536
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-65536",
+      "input": {
+        "greatest": 65536,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          98303,
+          81919,
+          73727,
+          69631,
+          67583,
+          66559,
+          66047,
+          65791,
+          65663,
+          65599,
+          65567,
+          65551,
+          65543,
+          65539,
+          65537,
+          65536
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-1048576",
+      "input": {
+        "greatest": 1048576,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          1572863,
+          1310719,
+          1179647,
+          1114111,
+          1081343,
+          1064959,
+          1056767,
+          1052671,
+          1050623,
+          1049599,
+          1049087,
+          1048831,
+          1048703,
+          1048639,
+          1048607,
+          1048591,
+          1048583,
+          1048579,
+          1048577,
+          1048576
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-1073741824",
+      "input": {
+        "greatest": 1073741824,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          2147483647,
+          1610612735,
+          1342177279,
+          1207959551,
+          1140850687,
+          1107296255,
+          1090519039,
+          1082130431,
+          1077936127,
+          1075838975,
+          1074790399,
+          1074266111,
+          1074003967,
+          1073872895,
+          1073807359,
+          1073774591,
+          1073758207,
+          1073750015,
+          1073745919,
+          1073743871,
+          1073742847,
+          1073742335,
+          1073742079,
+          1073741951,
+          1073741887,
+          1073741855,
+          1073741839,
+          1073741831,
+          1073741827,
+          1073741825,
+          1073741824
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-2147483645",
+      "input": {
+        "greatest": 2147483645,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          2147483647,
+          1610612735,
+          1879048191,
+          2013265919,
+          2080374783,
+          2113929215,
+          2130706431,
+          2139095039,
+          2143289343,
+          2145386495,
+          2146435071,
+          2146959359,
+          2147221503,
+          2147352575,
+          2147418111,
+          2147450879,
+          2147467263,
+          2147475455,
+          2147479551,
+          2147481599,
+          2147482623,
+          2147483135,
+          2147483391,
+          2147483519,
+          2147483583,
+          2147483615,
+          2147483631,
+          2147483639,
+          2147483643,
+          2147483645,
+          2147483646
+        ]
+      }
+    },
+    {
+      "name": "base-greatest-2147483646",
+      "input": {
+        "greatest": 2147483646,
+        "kind": "base"
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          2147483647,
+          1610612735,
+          1879048191,
+          2013265919,
+          2080374783,
+          2113929215,
+          2130706431,
+          2139095039,
+          2143289343,
+          2145386495,
+          2146435071,
+          2146959359,
+          2147221503,
+          2147352575,
+          2147418111,
+          2147450879,
+          2147467263,
+          2147475455,
+          2147479551,
+          2147481599,
+          2147482623,
+          2147483135,
+          2147483391,
+          2147483519,
+          2147483583,
+          2147483615,
+          2147483631,
+          2147483639,
+          2147483643,
+          2147483645,
+          2147483646
+        ]
+      }
+    },
+    {
+      "name": "search-0-target-0-greatest-0",
+      "input": {
+        "greatest": 0,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 0
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "search-1-target-0-greatest-1",
+      "input": {
+        "greatest": 1,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 0
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "search-2-target-1-greatest-0",
+      "input": {
+        "greatest": 0,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 1
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "search-3-target-5-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 5
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-4-target-100-greatest-5",
+      "input": {
+        "greatest": 5,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 100
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-5-target-6-greatest-6",
+      "input": {
+        "greatest": 6,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 6
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "name": "search-6-target-7-greatest-6",
+      "input": {
+        "greatest": 6,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 7
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-7-target-6-greatest-7",
+      "input": {
+        "greatest": 7,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 6
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-8-target-63-greatest-64",
+      "input": {
+        "greatest": 64,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 63
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          79,
+          71,
+          67,
+          65,
+          64
+        ]
+      }
+    },
+    {
+      "name": "search-9-target-64-greatest-63",
+      "input": {
+        "greatest": 63,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 64
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          95,
+          79,
+          71,
+          67,
+          65,
+          64
+        ]
+      }
+    },
+    {
+      "name": "search-10-target-1000-greatest-1000",
+      "input": {
+        "greatest": 1000,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 1000
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          999,
+          1003,
+          1001,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "search-11-target-999-greatest-1000",
+      "input": {
+        "greatest": 1000,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 999
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          999,
+          1003,
+          1001,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "search-12-target-1000-greatest-999",
+      "input": {
+        "greatest": 999,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 1000
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          999,
+          1003,
+          1001,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "search-13-target-0-greatest-2147483646",
+      "input": {
+        "greatest": 2147483646,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 0
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "search-14-target-2147483646-greatest-0",
+      "input": {
+        "greatest": 0,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 2147483646
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "search-15-target-2147483646-greatest-2147483646",
+      "input": {
+        "greatest": 2147483646,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 2147483646
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          2147483647,
+          1610612735,
+          1879048191,
+          2013265919,
+          2080374783,
+          2113929215,
+          2130706431,
+          2139095039,
+          2143289343,
+          2145386495,
+          2146435071,
+          2146959359,
+          2147221503,
+          2147352575,
+          2147418111,
+          2147450879,
+          2147467263,
+          2147475455,
+          2147479551,
+          2147481599,
+          2147482623,
+          2147483135,
+          2147483391,
+          2147483519,
+          2147483583,
+          2147483615,
+          2147483631,
+          2147483639,
+          2147483643,
+          2147483645,
+          2147483646
+        ]
+      }
+    },
+    {
+      "name": "search-16-target-2147483645-greatest-2147483646",
+      "input": {
+        "greatest": 2147483646,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [],
+        "target": 2147483645
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          2147483647,
+          1610612735,
+          1879048191,
+          2013265919,
+          2080374783,
+          2113929215,
+          2130706431,
+          2139095039,
+          2143289343,
+          2145386495,
+          2146435071,
+          2146959359,
+          2147221503,
+          2147352575,
+          2147418111,
+          2147450879,
+          2147467263,
+          2147475455,
+          2147479551,
+          2147481599,
+          2147482623,
+          2147483135,
+          2147483391,
+          2147483519,
+          2147483583,
+          2147483615,
+          2147483631,
+          2147483639,
+          2147483643,
+          2147483645,
+          2147483646
+        ]
+      }
+    },
+    {
+      "name": "search-17-target-5-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "search",
+        "left_inclusion": [
+          0,
+          1
+        ],
+        "right_non_inclusion": [],
+        "target": 5
+      },
+      "expect": {
+        "versions": [
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-18-target-5-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "search",
+        "left_inclusion": [
+          7
+        ],
+        "right_non_inclusion": [],
+        "target": 5
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3
+        ]
+      }
+    },
+    {
+      "name": "search-19-target-5-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "search",
+        "left_inclusion": [],
+        "right_non_inclusion": [
+          3
+        ],
+        "target": 5
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          7
+        ]
+      }
+    },
+    {
+      "name": "search-20-target-5-greatest-100",
+      "input": {
+        "greatest": 100,
+        "kind": "search",
+        "left_inclusion": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "right_non_inclusion": [],
+        "target": 5
+      },
+      "expect": {
+        "versions": []
+      }
+    },
+    {
+      "name": "search-21-target-6-greatest-6",
+      "input": {
+        "greatest": 6,
+        "kind": "search",
+        "left_inclusion": [
+          0,
+          1,
+          3
+        ],
+        "right_non_inclusion": [
+          5
+        ],
+        "target": 6
+      },
+      "expect": {
+        "versions": [
+          7,
+          6
+        ]
+      }
+    },
+    {
+      "name": "search-22-target-1000-greatest-1000",
+      "input": {
+        "greatest": 1000,
+        "kind": "search",
+        "left_inclusion": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "right_non_inclusion": [
+          1023
+        ],
+        "target": 1000
+      },
+      "expect": {
+        "versions": [
+          63,
+          127,
+          255,
+          511,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          999,
+          1003,
+          1001,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-0",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 0
+      },
+      "expect": {
+        "versions": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-1",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 1
+      },
+      "expect": {
+        "versions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-2",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 2
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-3",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 3
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-4",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 4
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-5",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 5
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-6",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 6
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-7",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 7
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-8",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 8
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          8
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-15",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 15
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-16",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 16
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-17",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 17
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          17
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-63",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 63
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-64",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 64
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          64
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-100",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 100
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          95,
+          99,
+          100
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-255",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 255
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-256",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 256
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          256
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-1000",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 1000
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          767,
+          895,
+          959,
+          991,
+          999,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-65535",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 65535
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-1048576",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 1048576
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          1048576
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-1073741824",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 1073741824
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          1073741824
+        ]
+      }
+    },
+    {
+      "name": "monitoring-target-2147483646",
+      "input": {
+        "kind": "monitoring",
+        "left_inclusion": [],
+        "target": 2147483646
+      },
+      "expect": {
+        "versions": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          127,
+          255,
+          511,
+          1023,
+          2047,
+          4095,
+          8191,
+          16383,
+          32767,
+          65535,
+          131071,
+          262143,
+          524287,
+          1048575,
+          2097151,
+          4194303,
+          8388607,
+          16777215,
+          33554431,
+          67108863,
+          134217727,
+          268435455,
+          536870911,
+          1073741823,
+          1610612735,
+          1879048191,
+          2013265919,
+          2080374783,
+          2113929215,
+          2130706431,
+          2139095039,
+          2143289343,
+          2145386495,
+          2146435071,
+          2146959359,
+          2147221503,
+          2147352575,
+          2147418111,
+          2147450879,
+          2147467263,
+          2147475455,
+          2147479551,
+          2147481599,
+          2147482623,
+          2147483135,
+          2147483391,
+          2147483519,
+          2147483583,
+          2147483615,
+          2147483631,
+          2147483639,
+          2147483643,
+          2147483645,
+          2147483646
+        ]
+      }
+    }
+  ]
+}

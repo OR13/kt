@@ -1,0 +1,4205 @@
+{
+  "primitive": "ibst",
+  "draft": "draft-ietf-keytrans-protocol-05 §4.1, Appendix A",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "notes": "Implicit binary search tree over log entry indices. No cipher suite: pure integer math. `root` is 2^floor(log2(size))-1, `frontier` is the root followed by repeated right children to the last entry. In `nodes`, a null `left` means the index is a leaf and a null `right` means the node is the rightmost entry and its right subtree is empty; both must be refused rather than answered. `nodes` lists every index when size \u003c= 64 and the frontier otherwise.",
+  "cases": [
+    {
+      "name": "size-1",
+      "input": {
+        "size": 1
+      },
+      "expect": {
+        "frontier": [
+          0
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 0
+      }
+    },
+    {
+      "name": "size-2",
+      "input": {
+        "size": 2
+      },
+      "expect": {
+        "frontier": [
+          1
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": null
+          }
+        ],
+        "root": 1
+      }
+    },
+    {
+      "name": "size-3",
+      "input": {
+        "size": 3
+      },
+      "expect": {
+        "frontier": [
+          1,
+          2
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 1
+      }
+    },
+    {
+      "name": "size-4",
+      "input": {
+        "size": 4
+      },
+      "expect": {
+        "frontier": [
+          3
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": null
+          }
+        ],
+        "root": 3
+      }
+    },
+    {
+      "name": "size-5",
+      "input": {
+        "size": 5
+      },
+      "expect": {
+        "frontier": [
+          3,
+          4
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 4
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 3
+      }
+    },
+    {
+      "name": "size-6",
+      "input": {
+        "size": 6
+      },
+      "expect": {
+        "frontier": [
+          3,
+          5
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": null
+          }
+        ],
+        "root": 3
+      }
+    },
+    {
+      "name": "size-7",
+      "input": {
+        "size": 7
+      },
+      "expect": {
+        "frontier": [
+          3,
+          5,
+          6
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 3
+      }
+    },
+    {
+      "name": "size-8",
+      "input": {
+        "size": 8
+      },
+      "expect": {
+        "frontier": [
+          7
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": null
+          }
+        ],
+        "root": 7
+      }
+    },
+    {
+      "name": "size-9",
+      "input": {
+        "size": 9
+      },
+      "expect": {
+        "frontier": [
+          7,
+          8
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 8
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 7
+      }
+    },
+    {
+      "name": "size-13",
+      "input": {
+        "size": 13
+      },
+      "expect": {
+        "frontier": [
+          7,
+          11,
+          12
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 12
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 7
+      }
+    },
+    {
+      "name": "size-14",
+      "input": {
+        "size": 14
+      },
+      "expect": {
+        "frontier": [
+          7,
+          11,
+          13
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": null
+          }
+        ],
+        "root": 7
+      }
+    },
+    {
+      "name": "size-15",
+      "input": {
+        "size": 15
+      },
+      "expect": {
+        "frontier": [
+          7,
+          11,
+          13,
+          14
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 7
+      }
+    },
+    {
+      "name": "size-16",
+      "input": {
+        "size": 16
+      },
+      "expect": {
+        "frontier": [
+          15
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": null
+          }
+        ],
+        "root": 15
+      }
+    },
+    {
+      "name": "size-17",
+      "input": {
+        "size": 17
+      },
+      "expect": {
+        "frontier": [
+          15,
+          16
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 16
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 15
+      }
+    },
+    {
+      "name": "size-31",
+      "input": {
+        "size": 31
+      },
+      "expect": {
+        "frontier": [
+          15,
+          23,
+          27,
+          29,
+          30
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 15
+      }
+    },
+    {
+      "name": "size-32",
+      "input": {
+        "size": 32
+      },
+      "expect": {
+        "frontier": [
+          31
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-33",
+      "input": {
+        "size": 33
+      },
+      "expect": {
+        "frontier": [
+          31,
+          32
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 32
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-49",
+      "input": {
+        "size": 49
+      },
+      "expect": {
+        "frontier": [
+          31,
+          47,
+          48
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 47
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 33,
+            "left": 32,
+            "right": 34
+          },
+          {
+            "index": 34,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 35,
+            "left": 33,
+            "right": 37
+          },
+          {
+            "index": 36,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 37,
+            "left": 36,
+            "right": 38
+          },
+          {
+            "index": 38,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 39,
+            "left": 35,
+            "right": 43
+          },
+          {
+            "index": 40,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 41,
+            "left": 40,
+            "right": 42
+          },
+          {
+            "index": 42,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 43,
+            "left": 41,
+            "right": 45
+          },
+          {
+            "index": 44,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 45,
+            "left": 44,
+            "right": 46
+          },
+          {
+            "index": 46,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 47,
+            "left": 39,
+            "right": 48
+          },
+          {
+            "index": 48,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-50",
+      "input": {
+        "size": 50
+      },
+      "expect": {
+        "frontier": [
+          31,
+          47,
+          49
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 47
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 33,
+            "left": 32,
+            "right": 34
+          },
+          {
+            "index": 34,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 35,
+            "left": 33,
+            "right": 37
+          },
+          {
+            "index": 36,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 37,
+            "left": 36,
+            "right": 38
+          },
+          {
+            "index": 38,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 39,
+            "left": 35,
+            "right": 43
+          },
+          {
+            "index": 40,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 41,
+            "left": 40,
+            "right": 42
+          },
+          {
+            "index": 42,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 43,
+            "left": 41,
+            "right": 45
+          },
+          {
+            "index": 44,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 45,
+            "left": 44,
+            "right": 46
+          },
+          {
+            "index": 46,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 47,
+            "left": 39,
+            "right": 49
+          },
+          {
+            "index": 48,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 49,
+            "left": 48,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-51",
+      "input": {
+        "size": 51
+      },
+      "expect": {
+        "frontier": [
+          31,
+          47,
+          49,
+          50
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 47
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 33,
+            "left": 32,
+            "right": 34
+          },
+          {
+            "index": 34,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 35,
+            "left": 33,
+            "right": 37
+          },
+          {
+            "index": 36,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 37,
+            "left": 36,
+            "right": 38
+          },
+          {
+            "index": 38,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 39,
+            "left": 35,
+            "right": 43
+          },
+          {
+            "index": 40,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 41,
+            "left": 40,
+            "right": 42
+          },
+          {
+            "index": 42,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 43,
+            "left": 41,
+            "right": 45
+          },
+          {
+            "index": 44,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 45,
+            "left": 44,
+            "right": 46
+          },
+          {
+            "index": 46,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 47,
+            "left": 39,
+            "right": 49
+          },
+          {
+            "index": 48,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 49,
+            "left": 48,
+            "right": 50
+          },
+          {
+            "index": 50,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-63",
+      "input": {
+        "size": 63
+      },
+      "expect": {
+        "frontier": [
+          31,
+          47,
+          55,
+          59,
+          61,
+          62
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 47
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 33,
+            "left": 32,
+            "right": 34
+          },
+          {
+            "index": 34,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 35,
+            "left": 33,
+            "right": 37
+          },
+          {
+            "index": 36,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 37,
+            "left": 36,
+            "right": 38
+          },
+          {
+            "index": 38,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 39,
+            "left": 35,
+            "right": 43
+          },
+          {
+            "index": 40,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 41,
+            "left": 40,
+            "right": 42
+          },
+          {
+            "index": 42,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 43,
+            "left": 41,
+            "right": 45
+          },
+          {
+            "index": 44,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 45,
+            "left": 44,
+            "right": 46
+          },
+          {
+            "index": 46,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 47,
+            "left": 39,
+            "right": 55
+          },
+          {
+            "index": 48,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 49,
+            "left": 48,
+            "right": 50
+          },
+          {
+            "index": 50,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 51,
+            "left": 49,
+            "right": 53
+          },
+          {
+            "index": 52,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 53,
+            "left": 52,
+            "right": 54
+          },
+          {
+            "index": 54,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 55,
+            "left": 51,
+            "right": 59
+          },
+          {
+            "index": 56,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 57,
+            "left": 56,
+            "right": 58
+          },
+          {
+            "index": 58,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 59,
+            "left": 57,
+            "right": 61
+          },
+          {
+            "index": 60,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 61,
+            "left": 60,
+            "right": 62
+          },
+          {
+            "index": 62,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 31
+      }
+    },
+    {
+      "name": "size-64",
+      "input": {
+        "size": 64
+      },
+      "expect": {
+        "frontier": [
+          63
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 5
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 5,
+            "left": 4,
+            "right": 6
+          },
+          {
+            "index": 6,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 7,
+            "left": 3,
+            "right": 11
+          },
+          {
+            "index": 8,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 9,
+            "left": 8,
+            "right": 10
+          },
+          {
+            "index": 10,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 11,
+            "left": 9,
+            "right": 13
+          },
+          {
+            "index": 12,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 13,
+            "left": 12,
+            "right": 14
+          },
+          {
+            "index": 14,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 15,
+            "left": 7,
+            "right": 23
+          },
+          {
+            "index": 16,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 17,
+            "left": 16,
+            "right": 18
+          },
+          {
+            "index": 18,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 19,
+            "left": 17,
+            "right": 21
+          },
+          {
+            "index": 20,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 21,
+            "left": 20,
+            "right": 22
+          },
+          {
+            "index": 22,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 23,
+            "left": 19,
+            "right": 27
+          },
+          {
+            "index": 24,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 25,
+            "left": 24,
+            "right": 26
+          },
+          {
+            "index": 26,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 27,
+            "left": 25,
+            "right": 29
+          },
+          {
+            "index": 28,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 29,
+            "left": 28,
+            "right": 30
+          },
+          {
+            "index": 30,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 31,
+            "left": 15,
+            "right": 47
+          },
+          {
+            "index": 32,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 33,
+            "left": 32,
+            "right": 34
+          },
+          {
+            "index": 34,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 35,
+            "left": 33,
+            "right": 37
+          },
+          {
+            "index": 36,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 37,
+            "left": 36,
+            "right": 38
+          },
+          {
+            "index": 38,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 39,
+            "left": 35,
+            "right": 43
+          },
+          {
+            "index": 40,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 41,
+            "left": 40,
+            "right": 42
+          },
+          {
+            "index": 42,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 43,
+            "left": 41,
+            "right": 45
+          },
+          {
+            "index": 44,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 45,
+            "left": 44,
+            "right": 46
+          },
+          {
+            "index": 46,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 47,
+            "left": 39,
+            "right": 55
+          },
+          {
+            "index": 48,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 49,
+            "left": 48,
+            "right": 50
+          },
+          {
+            "index": 50,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 51,
+            "left": 49,
+            "right": 53
+          },
+          {
+            "index": 52,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 53,
+            "left": 52,
+            "right": 54
+          },
+          {
+            "index": 54,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 55,
+            "left": 51,
+            "right": 59
+          },
+          {
+            "index": 56,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 57,
+            "left": 56,
+            "right": 58
+          },
+          {
+            "index": 58,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 59,
+            "left": 57,
+            "right": 61
+          },
+          {
+            "index": 60,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 61,
+            "left": 60,
+            "right": 62
+          },
+          {
+            "index": 62,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 63,
+            "left": 31,
+            "right": null
+          }
+        ],
+        "root": 63
+      }
+    },
+    {
+      "name": "size-65",
+      "input": {
+        "size": 65
+      },
+      "expect": {
+        "frontier": [
+          63,
+          64
+        ],
+        "nodes": [
+          {
+            "index": 63,
+            "left": 31,
+            "right": 64
+          },
+          {
+            "index": 64,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 63
+      }
+    },
+    {
+      "name": "size-100",
+      "input": {
+        "size": 100
+      },
+      "expect": {
+        "frontier": [
+          63,
+          95,
+          99
+        ],
+        "nodes": [
+          {
+            "index": 63,
+            "left": 31,
+            "right": 95
+          },
+          {
+            "index": 95,
+            "left": 79,
+            "right": 99
+          },
+          {
+            "index": 99,
+            "left": 97,
+            "right": null
+          }
+        ],
+        "root": 63
+      }
+    },
+    {
+      "name": "size-127",
+      "input": {
+        "size": 127
+      },
+      "expect": {
+        "frontier": [
+          63,
+          95,
+          111,
+          119,
+          123,
+          125,
+          126
+        ],
+        "nodes": [
+          {
+            "index": 63,
+            "left": 31,
+            "right": 95
+          },
+          {
+            "index": 95,
+            "left": 79,
+            "right": 111
+          },
+          {
+            "index": 111,
+            "left": 103,
+            "right": 119
+          },
+          {
+            "index": 119,
+            "left": 115,
+            "right": 123
+          },
+          {
+            "index": 123,
+            "left": 121,
+            "right": 125
+          },
+          {
+            "index": 125,
+            "left": 124,
+            "right": 126
+          },
+          {
+            "index": 126,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 63
+      }
+    },
+    {
+      "name": "size-128",
+      "input": {
+        "size": 128
+      },
+      "expect": {
+        "frontier": [
+          127
+        ],
+        "nodes": [
+          {
+            "index": 127,
+            "left": 63,
+            "right": null
+          }
+        ],
+        "root": 127
+      }
+    },
+    {
+      "name": "size-129",
+      "input": {
+        "size": 129
+      },
+      "expect": {
+        "frontier": [
+          127,
+          128
+        ],
+        "nodes": [
+          {
+            "index": 127,
+            "left": 63,
+            "right": 128
+          },
+          {
+            "index": 128,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 127
+      }
+    },
+    {
+      "name": "size-1000",
+      "input": {
+        "size": 1000
+      },
+      "expect": {
+        "frontier": [
+          511,
+          767,
+          895,
+          959,
+          991,
+          999
+        ],
+        "nodes": [
+          {
+            "index": 511,
+            "left": 255,
+            "right": 767
+          },
+          {
+            "index": 767,
+            "left": 639,
+            "right": 895
+          },
+          {
+            "index": 895,
+            "left": 831,
+            "right": 959
+          },
+          {
+            "index": 959,
+            "left": 927,
+            "right": 991
+          },
+          {
+            "index": 991,
+            "left": 975,
+            "right": 999
+          },
+          {
+            "index": 999,
+            "left": 995,
+            "right": null
+          }
+        ],
+        "root": 511
+      }
+    },
+    {
+      "name": "size-1023",
+      "input": {
+        "size": 1023
+      },
+      "expect": {
+        "frontier": [
+          511,
+          767,
+          895,
+          959,
+          991,
+          1007,
+          1015,
+          1019,
+          1021,
+          1022
+        ],
+        "nodes": [
+          {
+            "index": 511,
+            "left": 255,
+            "right": 767
+          },
+          {
+            "index": 767,
+            "left": 639,
+            "right": 895
+          },
+          {
+            "index": 895,
+            "left": 831,
+            "right": 959
+          },
+          {
+            "index": 959,
+            "left": 927,
+            "right": 991
+          },
+          {
+            "index": 991,
+            "left": 975,
+            "right": 1007
+          },
+          {
+            "index": 1007,
+            "left": 999,
+            "right": 1015
+          },
+          {
+            "index": 1015,
+            "left": 1011,
+            "right": 1019
+          },
+          {
+            "index": 1019,
+            "left": 1017,
+            "right": 1021
+          },
+          {
+            "index": 1021,
+            "left": 1020,
+            "right": 1022
+          },
+          {
+            "index": 1022,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 511
+      }
+    },
+    {
+      "name": "size-1024",
+      "input": {
+        "size": 1024
+      },
+      "expect": {
+        "frontier": [
+          1023
+        ],
+        "nodes": [
+          {
+            "index": 1023,
+            "left": 511,
+            "right": null
+          }
+        ],
+        "root": 1023
+      }
+    },
+    {
+      "name": "size-1025",
+      "input": {
+        "size": 1025
+      },
+      "expect": {
+        "frontier": [
+          1023,
+          1024
+        ],
+        "nodes": [
+          {
+            "index": 1023,
+            "left": 511,
+            "right": 1024
+          },
+          {
+            "index": 1024,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 1023
+      }
+    },
+    {
+      "name": "size-1048576",
+      "input": {
+        "size": 1048576
+      },
+      "expect": {
+        "frontier": [
+          1048575
+        ],
+        "nodes": [
+          {
+            "index": 1048575,
+            "left": 524287,
+            "right": null
+          }
+        ],
+        "root": 1048575
+      }
+    },
+    {
+      "name": "size-1099511627776",
+      "input": {
+        "size": 1099511627776
+      },
+      "expect": {
+        "frontier": [
+          1099511627775
+        ],
+        "nodes": [
+          {
+            "index": 1099511627775,
+            "left": 549755813887,
+            "right": null
+          }
+        ],
+        "root": 1099511627775
+      }
+    },
+    {
+      "name": "size-4611686018427387904",
+      "input": {
+        "size": 4611686018427387904
+      },
+      "expect": {
+        "frontier": [
+          4611686018427387903
+        ],
+        "nodes": [
+          {
+            "index": 4611686018427387903,
+            "left": 2305843009213693951,
+            "right": null
+          }
+        ],
+        "root": 4611686018427387903
+      }
+    },
+    {
+      "name": "size-9223372036854775808",
+      "input": {
+        "size": 9223372036854775808
+      },
+      "expect": {
+        "frontier": [
+          9223372036854775807
+        ],
+        "nodes": [
+          {
+            "index": 9223372036854775807,
+            "left": 4611686018427387903,
+            "right": null
+          }
+        ],
+        "root": 9223372036854775807
+      }
+    },
+    {
+      "name": "size-6148914691236517205",
+      "input": {
+        "size": 6148914691236517205
+      },
+      "expect": {
+        "frontier": [
+          4611686018427387903,
+          5764607523034234879,
+          6052837899185946623,
+          6124895493223874559,
+          6142909891733356543,
+          6147413491360727039,
+          6148539391267569663,
+          6148820866244280319,
+          6148891234988457983,
+          6148908827174502399,
+          6148913225221013503,
+          6148914324732641279,
+          6148914599610548223,
+          6148914668330024959,
+          6148914685509894143,
+          6148914689804861439,
+          6148914690878603263,
+          6148914691147038719,
+          6148914691214147583,
+          6148914691230924799,
+          6148914691235119103,
+          6148914691236167679,
+          6148914691236429823,
+          6148914691236495359,
+          6148914691236511743,
+          6148914691236515839,
+          6148914691236516863,
+          6148914691236517119,
+          6148914691236517183,
+          6148914691236517199,
+          6148914691236517203,
+          6148914691236517204
+        ],
+        "nodes": [
+          {
+            "index": 4611686018427387903,
+            "left": 2305843009213693951,
+            "right": 5764607523034234879
+          },
+          {
+            "index": 5764607523034234879,
+            "left": 5188146770730811391,
+            "right": 6052837899185946623
+          },
+          {
+            "index": 6052837899185946623,
+            "left": 5908722711110090751,
+            "right": 6124895493223874559
+          },
+          {
+            "index": 6124895493223874559,
+            "left": 6088866696204910591,
+            "right": 6142909891733356543
+          },
+          {
+            "index": 6142909891733356543,
+            "left": 6133902692478615551,
+            "right": 6147413491360727039
+          },
+          {
+            "index": 6147413491360727039,
+            "left": 6145161691547041791,
+            "right": 6148539391267569663
+          },
+          {
+            "index": 6148539391267569663,
+            "left": 6147976441314148351,
+            "right": 6148820866244280319
+          },
+          {
+            "index": 6148820866244280319,
+            "left": 6148680128755924991,
+            "right": 6148891234988457983
+          },
+          {
+            "index": 6148891234988457983,
+            "left": 6148856050616369151,
+            "right": 6148908827174502399
+          },
+          {
+            "index": 6148908827174502399,
+            "left": 6148900031081480191,
+            "right": 6148913225221013503
+          },
+          {
+            "index": 6148913225221013503,
+            "left": 6148911026197757951,
+            "right": 6148914324732641279
+          },
+          {
+            "index": 6148914324732641279,
+            "left": 6148913774976827391,
+            "right": 6148914599610548223
+          },
+          {
+            "index": 6148914599610548223,
+            "left": 6148914462171594751,
+            "right": 6148914668330024959
+          },
+          {
+            "index": 6148914668330024959,
+            "left": 6148914633970286591,
+            "right": 6148914685509894143
+          },
+          {
+            "index": 6148914685509894143,
+            "left": 6148914676919959551,
+            "right": 6148914689804861439
+          },
+          {
+            "index": 6148914689804861439,
+            "left": 6148914687657377791,
+            "right": 6148914690878603263
+          },
+          {
+            "index": 6148914690878603263,
+            "left": 6148914690341732351,
+            "right": 6148914691147038719
+          },
+          {
+            "index": 6148914691147038719,
+            "left": 6148914691012820991,
+            "right": 6148914691214147583
+          },
+          {
+            "index": 6148914691214147583,
+            "left": 6148914691180593151,
+            "right": 6148914691230924799
+          },
+          {
+            "index": 6148914691230924799,
+            "left": 6148914691222536191,
+            "right": 6148914691235119103
+          },
+          {
+            "index": 6148914691235119103,
+            "left": 6148914691233021951,
+            "right": 6148914691236167679
+          },
+          {
+            "index": 6148914691236167679,
+            "left": 6148914691235643391,
+            "right": 6148914691236429823
+          },
+          {
+            "index": 6148914691236429823,
+            "left": 6148914691236298751,
+            "right": 6148914691236495359
+          },
+          {
+            "index": 6148914691236495359,
+            "left": 6148914691236462591,
+            "right": 6148914691236511743
+          },
+          {
+            "index": 6148914691236511743,
+            "left": 6148914691236503551,
+            "right": 6148914691236515839
+          },
+          {
+            "index": 6148914691236515839,
+            "left": 6148914691236513791,
+            "right": 6148914691236516863
+          },
+          {
+            "index": 6148914691236516863,
+            "left": 6148914691236516351,
+            "right": 6148914691236517119
+          },
+          {
+            "index": 6148914691236517119,
+            "left": 6148914691236516991,
+            "right": 6148914691236517183
+          },
+          {
+            "index": 6148914691236517183,
+            "left": 6148914691236517151,
+            "right": 6148914691236517199
+          },
+          {
+            "index": 6148914691236517199,
+            "left": 6148914691236517191,
+            "right": 6148914691236517203
+          },
+          {
+            "index": 6148914691236517203,
+            "left": 6148914691236517201,
+            "right": 6148914691236517204
+          },
+          {
+            "index": 6148914691236517204,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 4611686018427387903
+      }
+    },
+    {
+      "name": "size-18446744073709551614",
+      "input": {
+        "size": 18446744073709551614
+      },
+      "expect": {
+        "frontier": [
+          9223372036854775807,
+          13835058055282163711,
+          16140901064495857663,
+          17293822569102704639,
+          17870283321406128127,
+          18158513697557839871,
+          18302628885633695743,
+          18374686479671623679,
+          18410715276690587647,
+          18428729675200069631,
+          18437736874454810623,
+          18442240474082181119,
+          18444492273895866367,
+          18445618173802708991,
+          18446181123756130303,
+          18446462598732840959,
+          18446603336221196287,
+          18446673704965373951,
+          18446708889337462783,
+          18446726481523507199,
+          18446735277616529407,
+          18446739675663040511,
+          18446741874686296063,
+          18446742974197923839,
+          18446743523953737727,
+          18446743798831644671,
+          18446743936270598143,
+          18446744004990074879,
+          18446744039349813247,
+          18446744056529682431,
+          18446744065119617023,
+          18446744069414584319,
+          18446744071562067967,
+          18446744072635809791,
+          18446744073172680703,
+          18446744073441116159,
+          18446744073575333887,
+          18446744073642442751,
+          18446744073675997183,
+          18446744073692774399,
+          18446744073701163007,
+          18446744073705357311,
+          18446744073707454463,
+          18446744073708503039,
+          18446744073709027327,
+          18446744073709289471,
+          18446744073709420543,
+          18446744073709486079,
+          18446744073709518847,
+          18446744073709535231,
+          18446744073709543423,
+          18446744073709547519,
+          18446744073709549567,
+          18446744073709550591,
+          18446744073709551103,
+          18446744073709551359,
+          18446744073709551487,
+          18446744073709551551,
+          18446744073709551583,
+          18446744073709551599,
+          18446744073709551607,
+          18446744073709551611,
+          18446744073709551613
+        ],
+        "nodes": [
+          {
+            "index": 9223372036854775807,
+            "left": 4611686018427387903,
+            "right": 13835058055282163711
+          },
+          {
+            "index": 13835058055282163711,
+            "left": 11529215046068469759,
+            "right": 16140901064495857663
+          },
+          {
+            "index": 16140901064495857663,
+            "left": 14987979559889010687,
+            "right": 17293822569102704639
+          },
+          {
+            "index": 17293822569102704639,
+            "left": 16717361816799281151,
+            "right": 17870283321406128127
+          },
+          {
+            "index": 17870283321406128127,
+            "left": 17582052945254416383,
+            "right": 18158513697557839871
+          },
+          {
+            "index": 18158513697557839871,
+            "left": 18014398509481983999,
+            "right": 18302628885633695743
+          },
+          {
+            "index": 18302628885633695743,
+            "left": 18230571291595767807,
+            "right": 18374686479671623679
+          },
+          {
+            "index": 18374686479671623679,
+            "left": 18338657682652659711,
+            "right": 18410715276690587647
+          },
+          {
+            "index": 18410715276690587647,
+            "left": 18392700878181105663,
+            "right": 18428729675200069631
+          },
+          {
+            "index": 18428729675200069631,
+            "left": 18419722475945328639,
+            "right": 18437736874454810623
+          },
+          {
+            "index": 18437736874454810623,
+            "left": 18433233274827440127,
+            "right": 18442240474082181119
+          },
+          {
+            "index": 18442240474082181119,
+            "left": 18439988674268495871,
+            "right": 18444492273895866367
+          },
+          {
+            "index": 18444492273895866367,
+            "left": 18443366373989023743,
+            "right": 18445618173802708991
+          },
+          {
+            "index": 18445618173802708991,
+            "left": 18445055223849287679,
+            "right": 18446181123756130303
+          },
+          {
+            "index": 18446181123756130303,
+            "left": 18445899648779419647,
+            "right": 18446462598732840959
+          },
+          {
+            "index": 18446462598732840959,
+            "left": 18446321861244485631,
+            "right": 18446603336221196287
+          },
+          {
+            "index": 18446603336221196287,
+            "left": 18446532967477018623,
+            "right": 18446673704965373951
+          },
+          {
+            "index": 18446673704965373951,
+            "left": 18446638520593285119,
+            "right": 18446708889337462783
+          },
+          {
+            "index": 18446708889337462783,
+            "left": 18446691297151418367,
+            "right": 18446726481523507199
+          },
+          {
+            "index": 18446726481523507199,
+            "left": 18446717685430484991,
+            "right": 18446735277616529407
+          },
+          {
+            "index": 18446735277616529407,
+            "left": 18446730879570018303,
+            "right": 18446739675663040511
+          },
+          {
+            "index": 18446739675663040511,
+            "left": 18446737476639784959,
+            "right": 18446741874686296063
+          },
+          {
+            "index": 18446741874686296063,
+            "left": 18446740775174668287,
+            "right": 18446742974197923839
+          },
+          {
+            "index": 18446742974197923839,
+            "left": 18446742424442109951,
+            "right": 18446743523953737727
+          },
+          {
+            "index": 18446743523953737727,
+            "left": 18446743249075830783,
+            "right": 18446743798831644671
+          },
+          {
+            "index": 18446743798831644671,
+            "left": 18446743661392691199,
+            "right": 18446743936270598143
+          },
+          {
+            "index": 18446743936270598143,
+            "left": 18446743867551121407,
+            "right": 18446744004990074879
+          },
+          {
+            "index": 18446744004990074879,
+            "left": 18446743970630336511,
+            "right": 18446744039349813247
+          },
+          {
+            "index": 18446744039349813247,
+            "left": 18446744022169944063,
+            "right": 18446744056529682431
+          },
+          {
+            "index": 18446744056529682431,
+            "left": 18446744047939747839,
+            "right": 18446744065119617023
+          },
+          {
+            "index": 18446744065119617023,
+            "left": 18446744060824649727,
+            "right": 18446744069414584319
+          },
+          {
+            "index": 18446744069414584319,
+            "left": 18446744067267100671,
+            "right": 18446744071562067967
+          },
+          {
+            "index": 18446744071562067967,
+            "left": 18446744070488326143,
+            "right": 18446744072635809791
+          },
+          {
+            "index": 18446744072635809791,
+            "left": 18446744072098938879,
+            "right": 18446744073172680703
+          },
+          {
+            "index": 18446744073172680703,
+            "left": 18446744072904245247,
+            "right": 18446744073441116159
+          },
+          {
+            "index": 18446744073441116159,
+            "left": 18446744073306898431,
+            "right": 18446744073575333887
+          },
+          {
+            "index": 18446744073575333887,
+            "left": 18446744073508225023,
+            "right": 18446744073642442751
+          },
+          {
+            "index": 18446744073642442751,
+            "left": 18446744073608888319,
+            "right": 18446744073675997183
+          },
+          {
+            "index": 18446744073675997183,
+            "left": 18446744073659219967,
+            "right": 18446744073692774399
+          },
+          {
+            "index": 18446744073692774399,
+            "left": 18446744073684385791,
+            "right": 18446744073701163007
+          },
+          {
+            "index": 18446744073701163007,
+            "left": 18446744073696968703,
+            "right": 18446744073705357311
+          },
+          {
+            "index": 18446744073705357311,
+            "left": 18446744073703260159,
+            "right": 18446744073707454463
+          },
+          {
+            "index": 18446744073707454463,
+            "left": 18446744073706405887,
+            "right": 18446744073708503039
+          },
+          {
+            "index": 18446744073708503039,
+            "left": 18446744073707978751,
+            "right": 18446744073709027327
+          },
+          {
+            "index": 18446744073709027327,
+            "left": 18446744073708765183,
+            "right": 18446744073709289471
+          },
+          {
+            "index": 18446744073709289471,
+            "left": 18446744073709158399,
+            "right": 18446744073709420543
+          },
+          {
+            "index": 18446744073709420543,
+            "left": 18446744073709355007,
+            "right": 18446744073709486079
+          },
+          {
+            "index": 18446744073709486079,
+            "left": 18446744073709453311,
+            "right": 18446744073709518847
+          },
+          {
+            "index": 18446744073709518847,
+            "left": 18446744073709502463,
+            "right": 18446744073709535231
+          },
+          {
+            "index": 18446744073709535231,
+            "left": 18446744073709527039,
+            "right": 18446744073709543423
+          },
+          {
+            "index": 18446744073709543423,
+            "left": 18446744073709539327,
+            "right": 18446744073709547519
+          },
+          {
+            "index": 18446744073709547519,
+            "left": 18446744073709545471,
+            "right": 18446744073709549567
+          },
+          {
+            "index": 18446744073709549567,
+            "left": 18446744073709548543,
+            "right": 18446744073709550591
+          },
+          {
+            "index": 18446744073709550591,
+            "left": 18446744073709550079,
+            "right": 18446744073709551103
+          },
+          {
+            "index": 18446744073709551103,
+            "left": 18446744073709550847,
+            "right": 18446744073709551359
+          },
+          {
+            "index": 18446744073709551359,
+            "left": 18446744073709551231,
+            "right": 18446744073709551487
+          },
+          {
+            "index": 18446744073709551487,
+            "left": 18446744073709551423,
+            "right": 18446744073709551551
+          },
+          {
+            "index": 18446744073709551551,
+            "left": 18446744073709551519,
+            "right": 18446744073709551583
+          },
+          {
+            "index": 18446744073709551583,
+            "left": 18446744073709551567,
+            "right": 18446744073709551599
+          },
+          {
+            "index": 18446744073709551599,
+            "left": 18446744073709551591,
+            "right": 18446744073709551607
+          },
+          {
+            "index": 18446744073709551607,
+            "left": 18446744073709551603,
+            "right": 18446744073709551611
+          },
+          {
+            "index": 18446744073709551611,
+            "left": 18446744073709551609,
+            "right": 18446744073709551613
+          },
+          {
+            "index": 18446744073709551613,
+            "left": 18446744073709551612,
+            "right": null
+          }
+        ],
+        "root": 9223372036854775807
+      }
+    },
+    {
+      "name": "size-18446744073709551615",
+      "input": {
+        "size": 18446744073709551615
+      },
+      "expect": {
+        "frontier": [
+          9223372036854775807,
+          13835058055282163711,
+          16140901064495857663,
+          17293822569102704639,
+          17870283321406128127,
+          18158513697557839871,
+          18302628885633695743,
+          18374686479671623679,
+          18410715276690587647,
+          18428729675200069631,
+          18437736874454810623,
+          18442240474082181119,
+          18444492273895866367,
+          18445618173802708991,
+          18446181123756130303,
+          18446462598732840959,
+          18446603336221196287,
+          18446673704965373951,
+          18446708889337462783,
+          18446726481523507199,
+          18446735277616529407,
+          18446739675663040511,
+          18446741874686296063,
+          18446742974197923839,
+          18446743523953737727,
+          18446743798831644671,
+          18446743936270598143,
+          18446744004990074879,
+          18446744039349813247,
+          18446744056529682431,
+          18446744065119617023,
+          18446744069414584319,
+          18446744071562067967,
+          18446744072635809791,
+          18446744073172680703,
+          18446744073441116159,
+          18446744073575333887,
+          18446744073642442751,
+          18446744073675997183,
+          18446744073692774399,
+          18446744073701163007,
+          18446744073705357311,
+          18446744073707454463,
+          18446744073708503039,
+          18446744073709027327,
+          18446744073709289471,
+          18446744073709420543,
+          18446744073709486079,
+          18446744073709518847,
+          18446744073709535231,
+          18446744073709543423,
+          18446744073709547519,
+          18446744073709549567,
+          18446744073709550591,
+          18446744073709551103,
+          18446744073709551359,
+          18446744073709551487,
+          18446744073709551551,
+          18446744073709551583,
+          18446744073709551599,
+          18446744073709551607,
+          18446744073709551611,
+          18446744073709551613,
+          18446744073709551614
+        ],
+        "nodes": [
+          {
+            "index": 9223372036854775807,
+            "left": 4611686018427387903,
+            "right": 13835058055282163711
+          },
+          {
+            "index": 13835058055282163711,
+            "left": 11529215046068469759,
+            "right": 16140901064495857663
+          },
+          {
+            "index": 16140901064495857663,
+            "left": 14987979559889010687,
+            "right": 17293822569102704639
+          },
+          {
+            "index": 17293822569102704639,
+            "left": 16717361816799281151,
+            "right": 17870283321406128127
+          },
+          {
+            "index": 17870283321406128127,
+            "left": 17582052945254416383,
+            "right": 18158513697557839871
+          },
+          {
+            "index": 18158513697557839871,
+            "left": 18014398509481983999,
+            "right": 18302628885633695743
+          },
+          {
+            "index": 18302628885633695743,
+            "left": 18230571291595767807,
+            "right": 18374686479671623679
+          },
+          {
+            "index": 18374686479671623679,
+            "left": 18338657682652659711,
+            "right": 18410715276690587647
+          },
+          {
+            "index": 18410715276690587647,
+            "left": 18392700878181105663,
+            "right": 18428729675200069631
+          },
+          {
+            "index": 18428729675200069631,
+            "left": 18419722475945328639,
+            "right": 18437736874454810623
+          },
+          {
+            "index": 18437736874454810623,
+            "left": 18433233274827440127,
+            "right": 18442240474082181119
+          },
+          {
+            "index": 18442240474082181119,
+            "left": 18439988674268495871,
+            "right": 18444492273895866367
+          },
+          {
+            "index": 18444492273895866367,
+            "left": 18443366373989023743,
+            "right": 18445618173802708991
+          },
+          {
+            "index": 18445618173802708991,
+            "left": 18445055223849287679,
+            "right": 18446181123756130303
+          },
+          {
+            "index": 18446181123756130303,
+            "left": 18445899648779419647,
+            "right": 18446462598732840959
+          },
+          {
+            "index": 18446462598732840959,
+            "left": 18446321861244485631,
+            "right": 18446603336221196287
+          },
+          {
+            "index": 18446603336221196287,
+            "left": 18446532967477018623,
+            "right": 18446673704965373951
+          },
+          {
+            "index": 18446673704965373951,
+            "left": 18446638520593285119,
+            "right": 18446708889337462783
+          },
+          {
+            "index": 18446708889337462783,
+            "left": 18446691297151418367,
+            "right": 18446726481523507199
+          },
+          {
+            "index": 18446726481523507199,
+            "left": 18446717685430484991,
+            "right": 18446735277616529407
+          },
+          {
+            "index": 18446735277616529407,
+            "left": 18446730879570018303,
+            "right": 18446739675663040511
+          },
+          {
+            "index": 18446739675663040511,
+            "left": 18446737476639784959,
+            "right": 18446741874686296063
+          },
+          {
+            "index": 18446741874686296063,
+            "left": 18446740775174668287,
+            "right": 18446742974197923839
+          },
+          {
+            "index": 18446742974197923839,
+            "left": 18446742424442109951,
+            "right": 18446743523953737727
+          },
+          {
+            "index": 18446743523953737727,
+            "left": 18446743249075830783,
+            "right": 18446743798831644671
+          },
+          {
+            "index": 18446743798831644671,
+            "left": 18446743661392691199,
+            "right": 18446743936270598143
+          },
+          {
+            "index": 18446743936270598143,
+            "left": 18446743867551121407,
+            "right": 18446744004990074879
+          },
+          {
+            "index": 18446744004990074879,
+            "left": 18446743970630336511,
+            "right": 18446744039349813247
+          },
+          {
+            "index": 18446744039349813247,
+            "left": 18446744022169944063,
+            "right": 18446744056529682431
+          },
+          {
+            "index": 18446744056529682431,
+            "left": 18446744047939747839,
+            "right": 18446744065119617023
+          },
+          {
+            "index": 18446744065119617023,
+            "left": 18446744060824649727,
+            "right": 18446744069414584319
+          },
+          {
+            "index": 18446744069414584319,
+            "left": 18446744067267100671,
+            "right": 18446744071562067967
+          },
+          {
+            "index": 18446744071562067967,
+            "left": 18446744070488326143,
+            "right": 18446744072635809791
+          },
+          {
+            "index": 18446744072635809791,
+            "left": 18446744072098938879,
+            "right": 18446744073172680703
+          },
+          {
+            "index": 18446744073172680703,
+            "left": 18446744072904245247,
+            "right": 18446744073441116159
+          },
+          {
+            "index": 18446744073441116159,
+            "left": 18446744073306898431,
+            "right": 18446744073575333887
+          },
+          {
+            "index": 18446744073575333887,
+            "left": 18446744073508225023,
+            "right": 18446744073642442751
+          },
+          {
+            "index": 18446744073642442751,
+            "left": 18446744073608888319,
+            "right": 18446744073675997183
+          },
+          {
+            "index": 18446744073675997183,
+            "left": 18446744073659219967,
+            "right": 18446744073692774399
+          },
+          {
+            "index": 18446744073692774399,
+            "left": 18446744073684385791,
+            "right": 18446744073701163007
+          },
+          {
+            "index": 18446744073701163007,
+            "left": 18446744073696968703,
+            "right": 18446744073705357311
+          },
+          {
+            "index": 18446744073705357311,
+            "left": 18446744073703260159,
+            "right": 18446744073707454463
+          },
+          {
+            "index": 18446744073707454463,
+            "left": 18446744073706405887,
+            "right": 18446744073708503039
+          },
+          {
+            "index": 18446744073708503039,
+            "left": 18446744073707978751,
+            "right": 18446744073709027327
+          },
+          {
+            "index": 18446744073709027327,
+            "left": 18446744073708765183,
+            "right": 18446744073709289471
+          },
+          {
+            "index": 18446744073709289471,
+            "left": 18446744073709158399,
+            "right": 18446744073709420543
+          },
+          {
+            "index": 18446744073709420543,
+            "left": 18446744073709355007,
+            "right": 18446744073709486079
+          },
+          {
+            "index": 18446744073709486079,
+            "left": 18446744073709453311,
+            "right": 18446744073709518847
+          },
+          {
+            "index": 18446744073709518847,
+            "left": 18446744073709502463,
+            "right": 18446744073709535231
+          },
+          {
+            "index": 18446744073709535231,
+            "left": 18446744073709527039,
+            "right": 18446744073709543423
+          },
+          {
+            "index": 18446744073709543423,
+            "left": 18446744073709539327,
+            "right": 18446744073709547519
+          },
+          {
+            "index": 18446744073709547519,
+            "left": 18446744073709545471,
+            "right": 18446744073709549567
+          },
+          {
+            "index": 18446744073709549567,
+            "left": 18446744073709548543,
+            "right": 18446744073709550591
+          },
+          {
+            "index": 18446744073709550591,
+            "left": 18446744073709550079,
+            "right": 18446744073709551103
+          },
+          {
+            "index": 18446744073709551103,
+            "left": 18446744073709550847,
+            "right": 18446744073709551359
+          },
+          {
+            "index": 18446744073709551359,
+            "left": 18446744073709551231,
+            "right": 18446744073709551487
+          },
+          {
+            "index": 18446744073709551487,
+            "left": 18446744073709551423,
+            "right": 18446744073709551551
+          },
+          {
+            "index": 18446744073709551551,
+            "left": 18446744073709551519,
+            "right": 18446744073709551583
+          },
+          {
+            "index": 18446744073709551583,
+            "left": 18446744073709551567,
+            "right": 18446744073709551599
+          },
+          {
+            "index": 18446744073709551599,
+            "left": 18446744073709551591,
+            "right": 18446744073709551607
+          },
+          {
+            "index": 18446744073709551607,
+            "left": 18446744073709551603,
+            "right": 18446744073709551611
+          },
+          {
+            "index": 18446744073709551611,
+            "left": 18446744073709551609,
+            "right": 18446744073709551613
+          },
+          {
+            "index": 18446744073709551613,
+            "left": 18446744073709551612,
+            "right": 18446744073709551614
+          },
+          {
+            "index": 18446744073709551614,
+            "left": null,
+            "right": null
+          }
+        ],
+        "root": 9223372036854775807
+      }
+    }
+  ]
+}
