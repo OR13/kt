@@ -35,12 +35,15 @@
 //!
 //! [`audit`] sits a level above the trees: it is the §15.2 third-party auditor,
 //! which checks that one new log entry follows from the last one it accepted.
+//! [`distinguished`] is §6.1's choice of reference-point entries, and §10.1's walk
+//! over them.
 
 #![no_std]
 
 extern crate alloc;
 
 pub mod audit;
+pub mod distinguished;
 pub mod log;
 
 pub mod prefix;

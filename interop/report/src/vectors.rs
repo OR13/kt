@@ -299,6 +299,36 @@ pub struct MutationExpect {
     pub peer_error: Option<String>,
 }
 
+/// `distinguished.json` input (§6.1).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DistinguishedInput {
+    /// The tree size.
+    pub size: u64,
+    /// The Reasonable Monitoring Window.
+    pub window: u64,
+    /// Timestamp per log entry, indexed by position.
+    pub timestamps: Vec<u64>,
+}
+
+/// `distinguished.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DistinguishedExpect {
+    /// The rightmost distinguished entry, absent where there is none.
+    #[serde(default)]
+    pub rightmost: Option<u64>,
+    /// The rightmost distinguished entry left of the log's last entry.
+    #[serde(default)]
+    pub previous_rightmost: Option<u64>,
+    /// Every position the peer asked a timestamp for, deduplicated and sorted.
+    pub requested: Vec<u64>,
+    /// Positions the peer asked about while finding `rightmost`, in order.
+    pub requested_rightmost: Vec<u64>,
+    /// Positions the peer asked about while finding `previous_rightmost`, in order.
+    pub requested_previous: Vec<u64>,
+}
+
 /// `log-append.json` input (§3.2, §11.8).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -467,7 +467,10 @@ pub fn coverage_table() -> Vec<Area> {
         todo("§6, §7, §13.1", "Greatest-version and fixed-version search"),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),
-        todo("§10, §13.6", "Walking distinguished heads, fork detection"),
+        todo(
+            "§13.6",
+            "Requesting distinguished heads, and fork detection (§10.2)",
+        ),
         todo("§14", "Credentials"),
         verified(
             "§15.2",
@@ -475,6 +478,22 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-wire::audit, kt-tree::audit",
             &["auditor-update.json"],
         ),
+        verified(
+            "§6.1",
+            "Distinguished log entries: which entries every user checks against",
+            "kt-tree::distinguished",
+            &["distinguished.json"],
+        ),
+        Area {
+            section: "§10.1".to_owned(),
+            name: "Walking recent distinguished heads".to_owned(),
+            module: Some("kt-tree::distinguished".to_owned()),
+            // The peer exposes no walk to compare against — its client asks only for the
+            // rightmost distinguished entry — so this is covered by Rust tests against the
+            // §6.1 set and nothing more. Saying "verified" would overstate it.
+            coverage: Coverage::ImplementedUnverified,
+            evidence: Vec::new(),
+        },
         verified(
             "§3.2, §11.8",
             "Growing the log tree one leaf at a time, from retained subtree heads",

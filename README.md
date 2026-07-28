@@ -125,6 +125,7 @@ Implemented and verified against the Go peer, byte for byte:
 | Prefix tree root before and after an audited update (`kt-tree::prefix`) | §15.2, §3.3 | [`prefix-mutation.json`](interop/vectors/prefix-mutation.json) — 8 update shapes |
 | `AuditorUpdate` + the auditor's checks on one entry (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 12 cases through katie's own auditor |
 | Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
+| Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/distinguished.json) — 42 size/window/timestamp shapes |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
@@ -192,11 +193,15 @@ against regression, not a target: what it mostly bought was covering every error
 type's `Display` — the text a verifier emits when it rejects something — which turned
 up one real inconsistency, a wrapped error that did not chain to its cause.
 
-Interop work has turned up three bugs in the Go peer and five gaps or ambiguities in
-the draft — see the findings in [`docs/interop.md`](docs/interop.md). The most
-substantive: §15.2 asks an auditor to compute a prefix tree root that the proof it is
-given cannot determine, so some removals are unauditable as specified and both
-implementations reach the root by guessing. This one reports the guess
+Interop work has turned up three bugs in the Go peer and six gaps or ambiguities in
+the draft. Each is written up and given a stable identifier in
+[`docs/interop.md`](docs/interop.md), whose findings register is the tracker — nothing is
+filed upstream, by decision, and every entry is pinned by a committed vector so a filing
+could point at reproducible bytes rather than at prose.
+
+The most substantive is `DRAFT-04`: §15.2 asks an auditor to compute a prefix tree root
+that the proof it is given cannot determine, so some removals are unauditable as specified
+and both implementations reach the root by guessing. This one reports the guess
 (`Accepted::root_determined`) so an auditor can decline to sign.
 
 Next: the combined tree (§3.4, §12.3), which is what the search, monitor, and update

@@ -88,6 +88,7 @@ func main() {
 		{"tree-head.json", headVectors},
 		{"requests.json", requestVectors},
 		{"ladder-interpretation.json", ladderInterpretationVectors},
+		{"distinguished.json", distinguishedVectors},
 		{"tampered.json", tamperedVectors},
 	}
 
