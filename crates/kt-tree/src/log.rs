@@ -724,9 +724,9 @@ mod tests {
     use super::*;
     use alloc::vec;
 
-    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+    pub(super) const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
 
-    fn leaves(n: u64) -> Vec<HashValue> {
+    pub(super) fn leaves(n: u64) -> Vec<HashValue> {
         (0..n)
             .map(|i| {
                 leaf_value(
@@ -1089,5 +1089,139 @@ mod tests {
                 actual: 1
             })
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod error_tests {
+    use super::tests::{SUITE, leaves};
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every variant renders with the indices it is complaining about. `§12.1`'s
+    /// `RetainedMismatch` is the one that matters most: it is the error a client sees
+    /// when a log tries the redundancy trick the draft warns about, and it should
+    /// name the subtree.
+    #[test]
+    fn every_error_renders_its_detail() {
+        use core::error::Error as _;
+
+        let cases: [(Error, &[&str]); 8] = [
+            (Error::InvalidSize { size: 0 }, &["0"]),
+            (Error::LeafOutOfRange { index: 9, size: 8 }, &["9", "8"]),
+            (Error::LeavesNotSorted, &["sorted"]),
+            (
+                Error::RetainedTooLarge {
+                    retained: 9,
+                    size: 8,
+                },
+                &["9", "8"],
+            ),
+            (
+                Error::RetainedShape {
+                    expected: 2,
+                    actual: 1,
+                },
+                &["2", "1"],
+            ),
+            // 0..4, so both ends of the range appear.
+            (
+                Error::RetainedMismatch { start: 0, len: 4 },
+                &["0", "4", "retained"],
+            ),
+            (
+                Error::ProofShape {
+                    expected: 3,
+                    actual: 2,
+                },
+                &["3", "2"],
+            ),
+            (Error::MissingLeaf { index: 5 }, &["5"]),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            for needle in needles {
+                assert!(rendered.contains(needle), "{rendered:?} omits {needle:?}");
+            }
+            assert!(error.source().is_none(), "{error:?} should be a leaf error");
+        }
+
+        assert!(Error::RootMismatch.to_string().contains("root"));
+
+        let wire = Error::Wire(codec::Error::TrailingBytes { remaining: 1 });
+        assert!(wire.to_string().contains("encoding"));
+        assert!(wire.source().is_some(), "Wire must chain");
+    }
+
+    #[test]
+    fn codec_errors_convert() {
+        let converted: Error = codec::Error::UnexpectedEof {
+            needed: 4,
+            remaining: 0,
+        }
+        .into();
+        assert!(matches!(converted, Error::Wire(_)));
+    }
+
+    /// `MissingLeaf` needs a caller that claims a leaf is proven and then does not
+    /// supply its value. `verify` counts elements first, so this is reached by
+    /// passing a proof of the right shape with the leaf list emptied out.
+    #[test]
+    fn missing_leaf_value_is_reported() {
+        let values = leaves(8);
+        let proof = prove(SUITE, &values, &[3], None).unwrap();
+        // The plan still says leaf 3 is proven, but no value is supplied for it.
+        let plan = Plan::new(8, &[3], None).unwrap();
+        let mut supplied = proof.elements.iter().copied();
+        assert_eq!(
+            evaluate_subtree(SUITE, &plan, &[], 0, 8, &mut supplied),
+            Err(Error::MissingLeaf { index: 3 })
+        );
+    }
+
+    /// A retained view whose size is out of range, which `Retained::ranges` reports
+    /// rather than panicking on.
+    #[test]
+    fn retained_view_validates_its_own_size() {
+        let empty = Retained {
+            size: 0,
+            full_subtrees: alloc::vec::Vec::new(),
+        };
+        assert_eq!(empty.ranges(), Err(Error::InvalidSize { size: 0 }));
+
+        let values = leaves(4);
+        assert_eq!(
+            Retained::from_leaves(SUITE, 5, &values),
+            Err(Error::LeafOutOfRange { index: 4, size: 4 }),
+            "a retained size beyond the leaves supplied"
+        );
+        assert_eq!(
+            Retained::from_leaves(SUITE, 0, &values),
+            Err(Error::InvalidSize { size: 0 })
+        );
+    }
+
+    /// `split(0)` and `split(1)` have no children to point at; the constant they
+    /// return is documented rather than left to chance.
+    #[test]
+    fn split_of_a_leaf_is_zero() {
+        assert_eq!(split(0), 0);
+        assert_eq!(split(1), 0);
+    }
+
+    /// Sizes above `MAX_TREE_SIZE` are refused rather than wrapped.
+    #[test]
+    fn oversized_trees_are_refused() {
+        assert_eq!(
+            full_subtrees(MAX_TREE_SIZE.saturating_add(1)),
+            Err(Error::InvalidSize {
+                size: MAX_TREE_SIZE + 1
+            })
+        );
+        assert!(full_subtrees(MAX_TREE_SIZE).is_ok());
     }
 }

@@ -39,6 +39,28 @@ jobs:
           path: site
           if-no-files-found: error
 
+  coverage:
+    # A floor on the protocol crates, not the whole workspace: the two binaries in
+    # interop/report are CLI entry points that CI exercises by running them, not by
+    # unit-testing their argument parsing, and averaging them in would let real
+    # coverage in kt-wire/kt-crypto/kt-tree slide while the number stayed put.
+    #
+    # The floor is deliberately a few points below where the crates sit, so it
+    # catches a regression rather than punishing a refactor.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Line coverage of the protocol crates
+        run: |
+          cargo llvm-cov --summary-only \
+            --package kt-wire --package kt-crypto --package kt-tree \
+            --fail-under-lines 97
+
   interop-vectors:
     # Regenerate the committed vectors from the pinned Go peer. A diff means
     # either an upstream bump changed behavior or someone hand-edited a vector —

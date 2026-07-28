@@ -137,7 +137,18 @@ impl fmt::Display for Error {
     }
 }
 
-impl core::error::Error for Error {}
+impl core::error::Error for Error {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            // The wrapping variant has to be walkable, like the one in
+            // `crate::Error` and `kt_tree::log::Error`: a caller that wants to know
+            // *which* field of a VrfInput was too long should not have to parse the
+            // rendered message to find out.
+            Self::Wire(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl From<codec::Error> for Error {
     fn from(err: codec::Error) -> Self {
@@ -888,5 +899,112 @@ mod tests {
         let secret = SecretKey::from_seed([0xab; 32]);
         let rendered = alloc::format!("{secret:?}");
         assert!(!rendered.contains("ab"), "{rendered}");
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lint protects library paths"
+)]
+mod error_tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every variant renders. Two of them deliberately carry no detail —
+    /// [`Error::BadProof`] and [`Error::SmallOrderPublicKey`] — because which byte of a
+    /// proof failed is not information to hand back to whoever supplied it.
+    #[test]
+    fn every_error_renders() {
+        use core::error::Error as _;
+
+        let cases: [(Error, &[&str]); 8] = [
+            (
+                Error::UnsupportedSuite {
+                    suite: CipherSuite::Kt128Sha256P256,
+                },
+                &["KT_128_SHA256_P256", "not implemented"],
+            ),
+            (Error::MalformedPublicKey, &["public key"]),
+            (Error::SmallOrderPublicKey, &["small order"]),
+            (
+                Error::ProofLength {
+                    expected: 80,
+                    actual: 79,
+                },
+                &["80", "79"],
+            ),
+            (Error::MalformedGamma, &["Gamma"]),
+            (Error::NonCanonicalScalar, &["canonical"]),
+            (Error::BadProof, &["does not verify"]),
+            (
+                Error::Wire(codec::Error::VectorTooLong {
+                    count: 256,
+                    max: 255,
+                }),
+                &["256", "255"],
+            ),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            for needle in needles {
+                assert!(rendered.contains(needle), "{rendered:?} omits {needle:?}");
+            }
+        }
+
+        // Only the wrapping variant chains.
+        assert!(
+            Error::Wire(codec::Error::TrailingBytes { remaining: 1 })
+                .source()
+                .is_some()
+        );
+        assert!(Error::BadProof.source().is_none());
+    }
+
+    #[test]
+    fn codec_errors_convert() {
+        let converted: Error = codec::Error::TrailingBytes { remaining: 2 }.into();
+        assert!(matches!(converted, Error::Wire(_)));
+    }
+
+    /// The accessors a caller uses to get a search key out of an output, and a proof
+    /// on and off the wire.
+    #[test]
+    fn outputs_and_proofs_expose_their_bytes() {
+        let secret = SecretKey::from_seed([0x33; SECRET_KEY_SIZE]);
+        assert_eq!(secret.seed(), &[0x33; SECRET_KEY_SIZE]);
+
+        let (output, proof) = secret
+            .evaluate(
+                CipherSuite::Kt128Sha256Ed25519,
+                &VrfInput::new(b"x".to_vec(), 0),
+            )
+            .unwrap();
+
+        // The search key is the output, and it is what the prefix tree is indexed by.
+        assert_eq!(output.search_key().as_bytes(), output.as_bytes());
+        assert_eq!(output.as_bytes().len(), OUTPUT_SIZE);
+
+        assert_eq!(Proof::from_bytes(*proof.as_bytes()), proof);
+        assert_eq!(Proof::from_slice(proof.as_bytes()).unwrap(), proof);
+
+        // A public key round-trips through its encoding.
+        let public = *secret.public_key();
+        assert_eq!(PublicKey::from_bytes(*public.as_bytes()).unwrap(), public);
+    }
+
+    /// The P-256 suite is refused on the verifying side too, not only when proving.
+    #[test]
+    fn p256_is_refused_when_verifying() {
+        let secret = SecretKey::from_seed([0x44; SECRET_KEY_SIZE]);
+        let suite = CipherSuite::Kt128Sha256Ed25519;
+        let input = VrfInput::new(b"y".to_vec(), 0);
+        let (_, proof) = secret.evaluate(suite, &input).unwrap();
+
+        let p256 = CipherSuite::Kt128Sha256P256;
+        assert_eq!(
+            secret.public_key().verify(p256, &input, &proof),
+            Err(Error::UnsupportedSuite { suite: p256 })
+        );
     }
 }

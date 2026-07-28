@@ -22,18 +22,19 @@ use kt_wire::structs::{
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
     CommitmentExpect, CommitmentInput, IbstExpect, IbstInput, LadderExpect, LadderInput,
-    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, VectorFile, VrfCaseInput,
-    VrfExpect,
+    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, TamperedExpect, TamperedInput,
+    VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 6] = [
+pub const FILES: [&str; 7] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
     "vrf.json",
     "log-tree.json",
     "prefix-tree.json",
+    "tampered.json",
 ];
 
 /// Something wrong with a vector file itself, as opposed to a disagreement.
@@ -146,6 +147,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         vrf_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
+        tampered_suite(dir)?,
     ])
 }
 
@@ -1037,6 +1039,186 @@ fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
     Ok(Suite {
         primitive: file.primitive,
         title: "VRF".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// The must-reject suite: proofs the peer says are invalid.
+///
+/// Every other suite asks "do you compute the same value?", which a verifier that
+/// accepts everything passes. This one asks "do you say no?", and the peer has
+/// already confirmed that it does.
+fn tampered_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "tampered.json";
+    let file: VectorFile<TamperedInput, TamperedExpect> = load(dir, FILE)?;
+
+    let code = file.cipher_suite.unwrap_or_default();
+    let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
+        file: FILE.to_owned(),
+        value: code,
+    })?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        if !case.expect.error {
+            return Err(Error::MissingField {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                field: "expect.error must be true in this file".to_owned(),
+            });
+        }
+
+        let (what, got) = match &case.input {
+            TamperedInput::LogTree {
+                size,
+                entries,
+                values,
+                retained_size,
+                retained,
+                elements,
+                root,
+            } => {
+                let mut leaves = Vec::new();
+                for (index, value) in entries.iter().zip(values.iter()) {
+                    leaves.push((*index, hash_field(FILE, name, "values[]", value)?));
+                }
+                let retained_view = match retained_size {
+                    None => None,
+                    Some(retained_size) => {
+                        let mut heads = Vec::new();
+                        for head in retained {
+                            heads.push(hash_field(FILE, name, "retained[]", head)?);
+                        }
+                        Some(log::Retained {
+                            size: *retained_size,
+                            full_subtrees: heads,
+                        })
+                    }
+                };
+                let mut proof_elements = Vec::new();
+                for element in elements {
+                    proof_elements.push(hash_field(FILE, name, "elements[]", element)?);
+                }
+                let proof = InclusionProof::new(proof_elements);
+                let root = hash_field(FILE, name, "root", root)?;
+
+                let got = match log::verify(
+                    suite,
+                    *size,
+                    &leaves,
+                    retained_view.as_ref(),
+                    &proof,
+                    root,
+                ) {
+                    Err(err) => format!("rejected: {err}"),
+                    Ok(()) => "accepted".to_owned(),
+                };
+                ("log::verify rejects it (§12.1)", got)
+            }
+            TamperedInput::PrefixTree {
+                searches,
+                proof,
+                root,
+            } => {
+                let mut entries = Vec::new();
+                for search in searches {
+                    let key = hash_field(FILE, name, "searches[].vrf_output", &search.vrf_output)?;
+                    entries.push(match &search.commitment {
+                        Some(commitment) => prefix::SearchEntry::included(
+                            key,
+                            hash_field(FILE, name, "searches[].commitment", commitment)?,
+                        ),
+                        None => prefix::SearchEntry::absent(key),
+                    });
+                }
+                let bytes = unhex(FILE, name, "proof", proof)?;
+                let root = hash_field(FILE, name, "root", root)?;
+                let got = match kt_wire::codec::decode::<PrefixProof>(&bytes) {
+                    // A proof that will not even decode is rejected, which is the
+                    // outcome the case calls for.
+                    Err(err) => format!("rejected while decoding: {err}"),
+                    Ok(proof) => match prefix::verify(suite, &entries, &proof, root) {
+                        Err(err) => format!("rejected: {err}"),
+                        Ok(()) => "accepted".to_owned(),
+                    },
+                };
+                ("prefix::verify rejects it (§12.2)", got)
+            }
+            TamperedInput::Vrf {
+                public_key,
+                label,
+                version,
+                proof,
+            } => {
+                let key = unhex(FILE, name, "public_key", public_key)?;
+                let bytes = unhex(FILE, name, "proof", proof)?;
+                let input = VrfInput::new(unhex(FILE, name, "label", label)?, *version);
+                let got = match (
+                    vrf::PublicKey::from_slice(&key),
+                    vrf::Proof::from_slice(&bytes),
+                ) {
+                    (Err(err), _) => format!("rejected with the key: {err}"),
+                    (_, Err(err)) => format!("rejected with the proof: {err}"),
+                    (Ok(public), Ok(proof)) => match public.verify(suite, &input, &proof) {
+                        Err(err) => format!("rejected: {err}"),
+                        Ok(_) => "accepted".to_owned(),
+                    },
+                };
+                ("vrf verify rejects it (§11.7)", got)
+            }
+            TamperedInput::Commitment {
+                opening,
+                label,
+                version,
+                update,
+                commitment,
+            } => {
+                let value = CommitmentValue {
+                    opening: unhex(FILE, name, "opening", opening)?,
+                    label: unhex(FILE, name, "label", label)?,
+                    version: *version,
+                    update: UpdateValue::new(unhex(FILE, name, "update.value", &update.value)?),
+                };
+                let bytes = unhex(FILE, name, "commitment", commitment)?;
+                let got = match Commitment::from_slice(&bytes) {
+                    Err(err) => format!("rejected with the commitment: {err}"),
+                    Ok(target) => match commitment::verify(suite, &value, &target) {
+                        Err(err) => format!("rejected: {err}"),
+                        Ok(()) => "accepted".to_owned(),
+                    },
+                };
+                ("commitment::verify rejects it (§11.6)", got)
+            }
+        };
+
+        // The comparison is deliberately on the prefix "rejected", not on the exact
+        // message: which error a verifier reports is its own business, and pinning
+        // the text here would make the vector untestable across implementations —
+        // the same reason the format contract forbids error strings.
+        let verdict = if got.starts_with("rejected") {
+            "rejected".to_owned()
+        } else {
+            got.clone()
+        };
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: true,
+            input: case.expect.tamper.clone(),
+            checks: vec![Check::new(what, "rejected", verdict)],
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Must reject".to_owned(),
         draft_section: section_of(&file.draft),
         file: FILE.to_owned(),
         generator: Generator {

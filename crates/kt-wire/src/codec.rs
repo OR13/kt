@@ -803,3 +803,143 @@ mod tests {
         assert_eq!(decode::<u16>(&[0x00, 0x01]), Ok(1));
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lint protects the parsing paths"
+)]
+mod error_tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every error variant renders, and says which numbers it is complaining about.
+    ///
+    /// Error text is how a verifier explains a rejection, so a `Display` that drops
+    /// the interesting value is a real if small defect — and until this test existed,
+    /// not one of these arms had ever been executed.
+    #[test]
+    fn every_error_renders_its_detail() {
+        let cases = [
+            (
+                Error::UnexpectedEof {
+                    needed: 4,
+                    remaining: 3,
+                },
+                ["4", "3"],
+            ),
+            (Error::TrailingBytes { remaining: 7 }, ["7", "trailing"]),
+            (
+                Error::VectorTooLong {
+                    count: 300,
+                    max: 255,
+                },
+                ["300", "255"],
+            ),
+            (Error::InvalidPresence { octet: 9 }, ["9", "0 or 1"]),
+            (
+                Error::InvalidEnum {
+                    name: "DeploymentMode",
+                    value: 4,
+                },
+                ["4", "DeploymentMode"],
+            ),
+            (
+                Error::HashLength {
+                    expected: 32,
+                    actual: 31,
+                },
+                ["32", "31"],
+            ),
+            (
+                Error::LengthOverflow { value: 1 << 40 },
+                ["1099511627776", "usize"],
+            ),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            assert!(!rendered.is_empty(), "{error:?} rendered empty");
+            for needle in needles {
+                assert!(
+                    rendered.contains(needle),
+                    "{error:?} rendered as {rendered:?}, which omits {needle:?}"
+                );
+            }
+        }
+    }
+
+    /// Codec errors are leaves: they wrap nothing, so `source` is `None` and a
+    /// caller walking the chain terminates.
+    #[test]
+    fn codec_errors_have_no_source() {
+        use core::error::Error as _;
+        assert!(Error::TrailingBytes { remaining: 1 }.source().is_none());
+    }
+
+    /// The accessors on the vector declaration, which the struct definitions use as
+    /// constants and nothing had yet read back.
+    #[test]
+    fn vector_spec_reports_its_own_shape() {
+        const LABEL: VectorSpec = VectorSpec::new(255);
+        assert_eq!(LABEL.max_count(), 255);
+        assert_eq!(LABEL.prefix(), LengthPrefix::U8);
+        assert_eq!(LABEL.prefix().capacity(), 255);
+
+        const HEADS: VectorSpec = VectorSpec::new(256);
+        assert_eq!(HEADS.max_count(), 256);
+        assert_eq!(HEADS.prefix(), LengthPrefix::U16);
+        assert_eq!(HEADS.prefix().capacity(), 65_535);
+        assert_eq!(HEADS.prefix().width(), 2);
+
+        // The invariant the type exists to hold: a ceiling always fits its prefix.
+        for max in [0_u64, 1, 255, 256, 65_535, 65_536, u32::MAX as u64] {
+            let spec = VectorSpec::new(max);
+            assert!(
+                spec.max_count() <= spec.prefix().capacity(),
+                "ceiling {max} does not fit its own prefix"
+            );
+        }
+    }
+
+    /// `LengthOverflow` is only reachable where `usize` is narrower than the length
+    /// prefix, i.e. on a 32-bit target. Constructing the error directly is the only
+    /// way to cover its rendering on a 64-bit host, and the variant is worth keeping
+    /// because the code path that raises it is real on wasm32.
+    #[test]
+    fn length_overflow_is_a_32_bit_case() {
+        let err = Error::LengthOverflow {
+            value: u64::from(u32::MAX),
+        };
+        assert!(err.to_string().contains("does not fit"));
+    }
+
+    #[test]
+    fn encoder_exposes_its_buffer_both_ways() {
+        let mut enc = Encoder::with_capacity(8);
+        enc.u16(0x0102);
+        assert_eq!(enc.as_bytes(), &[0x01, 0x02]);
+        assert_eq!(enc.into_bytes(), alloc::vec![0x01, 0x02]);
+        assert!(Encoder::default().as_bytes().is_empty());
+    }
+
+    #[test]
+    fn decoder_reports_its_position() {
+        let mut dec = Decoder::new(&[1, 2, 3, 4]);
+        assert_eq!(dec.remaining(), 4);
+        assert!(!dec.is_empty());
+        dec.u16().unwrap();
+        assert_eq!(dec.remaining(), 2);
+        dec.u16().unwrap();
+        assert!(dec.is_empty());
+        dec.finish().unwrap();
+    }
+
+    /// `Encode` is implemented for references so a slice of references can be
+    /// encoded as a vector; nothing in the protocol has needed it yet.
+    #[test]
+    fn references_encode_like_their_referents() {
+        let direct = encode(&7_u32).unwrap();
+        let through_reference = encode(&&7_u32).unwrap();
+        assert_eq!(direct, through_reference);
+    }
+}

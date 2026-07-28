@@ -150,3 +150,30 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `commitment.json` | commitment | §11.6 | 6 positive, 1 negative |
 | `ibst.json` | implicit binary search tree | §4.1, Appendix A | 38 log sizes |
 | `binary-ladder.json` | binary ladder | §5, Appendix B | 76 across base, search, monitoring |
+| `vrf.json` | VRF | §11.7 | 10 positive, 1 negative |
+| `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
+| `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
+| `tampered.json` | **must reject** | §11.6, §11.7, §12.1, §12.2 | 18, all negative |
+| `from-kt.json` | must accept / must reject, in reverse | as above | 201, half negative |
+
+## Asking a verifier to say no
+
+`tampered.json` is the odd one out: one file across four primitives rather than one
+per primitive. That is deliberate. Every other file asks "the peer computed this, do
+you compute it too?", which a verifier that accepted everything would pass, because
+nothing in those files asks it to reject anything. Before `tampered.json` there was
+exactly **one** must-reject case in the whole Go → Rust direction, and the reason
+nobody noticed is that rejection coverage was scattered across per-primitive files
+where its absence looked like nothing at all. One file makes "how many must-reject
+cases are there?" a question with an obvious answer.
+
+Each case was built by katie, corrupted in a described way, and then **confirmed
+rejected by katie's own verifier** before being written out. That confirmation is
+what makes it a shared oracle rather than an opinion: the peer is asserting the proof
+is invalid, so a verifier that accepts it is wrong rather than merely different.
+`from-kt.json` runs the same idea in the opposite direction. Between them, the two
+implementations have to agree about what is *invalid* and not only about what is
+valid.
+
+The evidence page reflects this in a **Refuses** column: an area whose only evidence
+is a file of values is marked "values only", which is a weaker claim than it looks.

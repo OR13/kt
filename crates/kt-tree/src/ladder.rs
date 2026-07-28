@@ -453,3 +453,26 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// The one error a ladder can produce says which rung it wanted and for which
+    /// greatest version, because both are needed to see why it is unrepresentable.
+    #[test]
+    fn the_unrepresentable_rung_renders_both_numbers() {
+        use core::error::Error as _;
+
+        let err = Error::UnrepresentableRung {
+            rung: (1 << 33) - 1,
+            greatest: u32::MAX,
+        };
+        let rendered = err.to_string();
+        assert!(rendered.contains("8589934591"), "{rendered}");
+        assert!(rendered.contains("4294967295"), "{rendered}");
+        assert!(rendered.contains("uint32"), "{rendered}");
+        assert!(err.source().is_none());
+    }
+}

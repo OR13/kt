@@ -23,6 +23,9 @@ for the plan, [`docs/licensing.md`](docs/licensing.md) before you read any Go.
    modifications inside them. Bumping a pin is its own commit, with a reason.
 4. **No unproven interop claims.** "Interoperates" means there is a vector or a
    live test asserting it. Until then say "implemented, not yet verified against Go."
+   Agreeing on computed values is the weaker half: a verifier that accepts everything
+   passes every such vector. A primitive with a verifier is not done until
+   `tampered.json` has cases the peer confirms are invalid and this code rejects.
 5. **No `unsafe`, no panics on untrusted input.** This is verification code that
    parses adversary-controlled bytes. Every parse returns `Result`. Indexing and
    arithmetic on wire-derived values must be checked.
@@ -48,6 +51,8 @@ title, draft PR on first push, merge when green.
 - `crates/kt-client` — search, monitor, update, distinguished heads (§4.2, §6–§10, §13)
 - `interop/go` — **separate Go module, AGPL-3.0** (it links katie). Emits JSON vectors only.
 - `interop/vectors` — committed JSON test vectors, each stamped with its generator's SHA.
+  `tampered.json` is the must-reject suite and `from-kt.json` is the reverse
+  direction; a new primitive needs cases in both, not only a file of values.
 - `interop/report` — workspace member `kt-interop`: checks the vectors, and renders
   the evidence page at [or13.github.io/kt](https://or13.github.io/kt/). Not published.
 - `upstream/` — pinned submodules: two drafts, two Go implementations.
@@ -111,6 +116,14 @@ Verified facts worth not rediscovering:
   `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike
   every other integer in this protocol. RFC 9381's Appendix B vectors are in
   `kt-crypto::vrf`'s tests and are what adjudicate both.
+- §12.2's `depth` is a `uint8`, so a prefix tree whose leaves sit at depth 256 — two
+  search keys agreeing on 255 bits — cannot be described by a proof at all.
+  `kt-tree::prefix` errors instead of saturating the field. Unreachable in practice
+  (`2^-255` for VRF outputs, and a log cannot grind for it), but recorded in
+  `docs/interop.md`.
+- Coverage: `cargo llvm-cov --package kt-wire --package kt-crypto --package kt-tree`
+  sits at 99% lines and CI fails below 97%. Error `Display` impls count: they are what
+  a verifier says when it rejects something.
 - Curve arithmetic trips `clippy::arithmetic_side_effects`, which cannot tell an
   operator overload on a group element from a machine integer. The allow is scoped
   to the two functions that do group operations, with the reason spelled out — do

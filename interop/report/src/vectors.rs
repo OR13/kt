@@ -303,3 +303,83 @@ pub struct VrfExpect {
     #[serde(default)]
     pub error: bool,
 }
+
+/// `tampered.json` input: what to check, and with which primitive.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum TamperedInput {
+    /// A log tree batch proof that must not reach `root` (§12.1).
+    LogTree {
+        /// The log size.
+        size: u64,
+        /// Leaf indices claimed proven.
+        entries: Vec<u64>,
+        /// Their claimed values, hex.
+        values: Vec<String>,
+        /// A retained view's size, if the case uses one.
+        #[serde(default)]
+        retained_size: Option<u64>,
+        /// The retained full subtree heads, hex.
+        #[serde(default)]
+        retained: Vec<String>,
+        /// The proof's elements, hex.
+        elements: Vec<String>,
+        /// The root it must not reach, hex.
+        root: String,
+    },
+    /// A prefix tree proof that must not verify (§12.2).
+    PrefixTree {
+        /// The searches, in request order.
+        searches: Vec<TamperedSearch>,
+        /// The wire-encoded `PrefixProof`, hex.
+        proof: String,
+        /// The root it must not verify against, hex.
+        root: String,
+    },
+    /// A VRF proof that must not verify (§11.7).
+    Vrf {
+        /// The public key to check against, hex.
+        public_key: String,
+        /// The label, hex.
+        label: String,
+        /// The version.
+        version: u32,
+        /// The proof, hex.
+        proof: String,
+    },
+    /// A commitment opening that must not verify (§11.6).
+    Commitment {
+        /// The opening, hex.
+        opening: String,
+        /// The label, hex.
+        label: String,
+        /// The version.
+        version: u32,
+        /// The update being opened to.
+        update: UpdateInput,
+        /// The commitment it must not open, hex.
+        commitment: String,
+    },
+}
+
+/// One search in a tampered prefix-tree case.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TamperedSearch {
+    /// The search key, hex.
+    pub vrf_output: String,
+    /// The commitment expected, for inclusion results, hex.
+    #[serde(default)]
+    pub commitment: Option<String>,
+}
+
+/// `tampered.json` expectations: always a rejection, plus what was corrupted.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TamperedExpect {
+    /// Always true; the field exists so the format matches every other file's
+    /// negative cases.
+    pub error: bool,
+    /// A description of the corruption, for the report.
+    pub tamper: String,
+}
