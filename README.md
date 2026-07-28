@@ -119,6 +119,7 @@ Implemented and verified against the Go peer, byte for byte:
 | Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs; [`log-math.json`](interop/vectors/log-math.json) — 1679 decompositions |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 | `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — all three deployment modes |
+| `FullTreeHead` wire encoding, both shapes (`kt-wire::heads`) | §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — the mode decides how many bytes follow |
 | Updating a view of the tree (`kt-tree::ibst`) | §4.2 | [`update-view.json`](interop/vectors/update-view.json) — 190 size/advertised pairs |
 | Search ladder interpretation (`kt-tree::ladder`) | §6.2 | [`ladder-interpretation.json`](interop/vectors/ladder-interpretation.json) — 211 target/greatest pairs |
 | §13 request structures + response building blocks (`kt-wire::requests`) | §11.5, §13.1–§13.5 | [`requests.json`](interop/vectors/requests.json) — 22 structures |

@@ -419,6 +419,12 @@ pub fn coverage_table() -> Vec<Area> {
             &["tree-head.json"],
         ),
         verified(
+            "§11.4",
+            "FullTreeHead wire encoding, whose shape the deployment mode decides",
+            "kt-wire::heads",
+            &["tree-head.json"],
+        ),
+        verified(
             "§11.3",
             "AuditorTreeHead verification",
             "kt-crypto::signature",
@@ -460,10 +466,6 @@ pub fn coverage_table() -> Vec<Area> {
             evidence: Vec::new(),
         },
         todo("§3.4, §12.3", "Combined tree and CombinedTreeProof"),
-        todo(
-            "§11.2–§11.4",
-            "Tree head, auditor head, and full head signatures",
-        ),
         todo("§6, §7, §13.1", "Greatest-version and fixed-version search"),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),

@@ -601,6 +601,11 @@ pub struct HeadExpect {
     /// The encoded `AuditorTreeHead`, hex.
     #[serde(default)]
     pub auditor_tree_head: Option<String>,
+    /// A `FullTreeHead` of type `same`, hex.
+    pub full_tree_head_same: String,
+    /// A `FullTreeHead` of type `updated`, hex — carrying an `AuditorTreeHead` only where
+    /// the deployment mode calls for one.
+    pub full_tree_head_updated: String,
 }
 
 /// `update-view.json` input (§4.2).
