@@ -122,6 +122,9 @@ pub enum Error {
         /// The index whose value was missing.
         index: u64,
     },
+    /// The proof recomputed to a different root than the one it was checked
+    /// against.
+    RootMismatch,
     /// A structure could not be encoded for hashing.
     Wire(codec::Error),
 }
@@ -163,6 +166,7 @@ impl fmt::Display for Error {
                 write!(f, "proof needs {expected} elements, got {actual}")
             }
             Self::MissingLeaf { index } => write!(f, "no value supplied for leaf {index}"),
+            Self::RootMismatch => f.write_str("proof does not recompute the expected root"),
             Self::Wire(err) => write!(f, "encoding: {err}"),
         }
     }
@@ -395,18 +399,24 @@ pub fn prove(
     Ok(InclusionProof::new(elements))
 }
 
-/// Verifies a batch proof and returns the root it implies (§12.1).
+/// Recomputes the root a batch proof implies (§12.1).
 ///
 /// `leaves` pairs each proven index with the value being claimed for it, sorted
 /// by index. `retained` is the verifier's earlier view, whose heads are checked
 /// rather than trusted wherever the proof lets them be recomputed.
+///
+/// Returning the root rather than a yes/no is what the algorithms above this layer
+/// need — §12.3's combined proof feeds it into a signature check — but it is the
+/// wrong shape for deciding whether to *believe* a proof. Use [`verify`] for that:
+/// a caller that compares the returned root itself is one `!=` away from accepting
+/// everything.
 ///
 /// # Errors
 ///
 /// Any [`Error`]; in particular [`Error::ProofShape`] if the proof has the wrong
 /// number of elements for what was asked, and [`Error::RetainedMismatch`] for the
 /// §12.1 edge case.
-pub fn verify(
+pub fn evaluate(
     suite: CipherSuite,
     size: u64,
     leaves: &[Leaf],
@@ -432,8 +442,33 @@ pub fn verify(
     }
 
     let mut supplied = proof.elements.iter().copied();
-    let (value, _) = evaluate(suite, &plan, leaves, 0, size, &mut supplied)?;
+    let (value, _) = evaluate_subtree(suite, &plan, leaves, 0, size, &mut supplied)?;
     Ok(value)
+}
+
+/// Checks that a batch proof proves `leaves` against `root` (§12.1).
+///
+/// This is the client-facing shape: a proof is either good for the root the log
+/// signed, or it is not.
+///
+/// # Errors
+///
+/// [`Error::RootMismatch`] if the proof recomputes to a different root, plus
+/// anything [`evaluate`] reports.
+pub fn verify(
+    suite: CipherSuite,
+    size: u64,
+    leaves: &[Leaf],
+    retained: Option<&Retained>,
+    proof: &InclusionProof,
+    root: HashValue,
+) -> Result<()> {
+    let computed = evaluate(suite, size, leaves, retained, proof)?;
+    if computed == root {
+        Ok(())
+    } else {
+        Err(Error::RootMismatch)
+    }
 }
 
 /// Which leaves are proven and which subtrees the verifier retained.
@@ -602,7 +637,7 @@ enum Step {
 
 /// Recomputes the value of `start..start+len`, consuming proof elements in walk
 /// order. Returns the value and whether the node is a single leaf.
-fn evaluate(
+fn evaluate_subtree(
     suite: CipherSuite,
     plan: &Plan,
     leaves: &[Leaf],
@@ -632,8 +667,8 @@ fn evaluate(
         Step::Descend { check } => {
             let left_len = split(len);
             let right_len = len.saturating_sub(left_len);
-            let left = evaluate(suite, plan, leaves, start, left_len, supplied)?;
-            let right = evaluate(
+            let left = evaluate_subtree(suite, plan, leaves, start, left_len, supplied)?;
+            let right = evaluate_subtree(
                 suite,
                 plan,
                 leaves,
@@ -846,7 +881,7 @@ mod tests {
         assert_eq!(proof.elements[1], values[3]);
         assert_eq!(proof.elements[2], values[4]);
 
-        let got = verify(SUITE, 5, &[(2, values[2])], None, &proof).unwrap();
+        let got = evaluate(SUITE, 5, &[(2, values[2])], None, &proof).unwrap();
         assert_eq!(got, root(SUITE, &values).unwrap());
     }
 
@@ -858,15 +893,15 @@ mod tests {
             let expected = root(SUITE, &values).unwrap();
             for index in 0..size {
                 let proof = prove(SUITE, &values, &[index], None).unwrap();
-                let got = verify(
-                    SUITE,
-                    size,
-                    &[(index, values[index as usize])],
-                    None,
-                    &proof,
-                )
-                .unwrap();
+                let claimed = [(index, values[index as usize])];
+                let got = evaluate(SUITE, size, &claimed, None, &proof).unwrap();
                 assert_eq!(got, expected, "size {size}, leaf {index}");
+                // And the client-facing shape agrees, including on rejection.
+                verify(SUITE, size, &claimed, None, &proof, expected).unwrap();
+                assert_eq!(
+                    verify(SUITE, size, &claimed, None, &proof, HashValue::ZERO),
+                    Err(Error::RootMismatch)
+                );
             }
         }
     }
@@ -883,7 +918,7 @@ mod tests {
                 for b in a + 1..size {
                     let proof = prove(SUITE, &values, &[a, b], None).unwrap();
                     let claimed = vec![(a, values[a as usize]), (b, values[b as usize])];
-                    let got = verify(SUITE, size, &claimed, None, &proof).unwrap();
+                    let got = evaluate(SUITE, size, &claimed, None, &proof).unwrap();
                     assert_eq!(got, expected, "size {size}, leaves {a} and {b}");
                 }
             }
@@ -896,7 +931,7 @@ mod tests {
             );
             let claimed: Vec<Leaf> = all.iter().map(|i| (*i, values[*i as usize])).collect();
             assert_eq!(
-                verify(SUITE, size, &claimed, None, &proof).unwrap(),
+                evaluate(SUITE, size, &claimed, None, &proof).unwrap(),
                 expected
             );
         }
@@ -915,7 +950,7 @@ mod tests {
         assert_eq!(proof.elements[0], values[5]);
         assert_eq!(proof.elements[1], values[6]);
 
-        let got = verify(SUITE, 7, &[], Some(&retained), &proof).unwrap();
+        let got = evaluate(SUITE, 7, &[], Some(&retained), &proof).unwrap();
         assert_eq!(got, root(SUITE, &values).unwrap());
     }
 
@@ -929,7 +964,7 @@ mod tests {
             for old in 1..=new {
                 let retained = Retained::from_leaves(SUITE, old, &values).unwrap();
                 let proof = prove(SUITE, &values[..new as usize], &[], Some(&retained)).unwrap();
-                let got = verify(SUITE, new, &[], Some(&retained), &proof).unwrap();
+                let got = evaluate(SUITE, new, &[], Some(&retained), &proof).unwrap();
                 assert_eq!(got, expected, "{old} -> {new}");
             }
         }
@@ -948,7 +983,7 @@ mod tests {
         let claimed = vec![(1, values[1])];
         let expected = root(SUITE, &values).unwrap();
         assert_eq!(
-            verify(SUITE, 7, &claimed, Some(&honest), &proof).unwrap(),
+            evaluate(SUITE, 7, &claimed, Some(&honest), &proof).unwrap(),
             expected
         );
 
@@ -957,7 +992,7 @@ mod tests {
         let mut tampered = honest.clone();
         tampered.full_subtrees[0] = HashValue::from_bytes([0xff; 32]);
         assert_eq!(
-            verify(SUITE, 7, &claimed, Some(&tampered), &proof),
+            evaluate(SUITE, 7, &claimed, Some(&tampered), &proof),
             Err(Error::RetainedMismatch { start: 0, len: 4 })
         );
 
@@ -965,7 +1000,7 @@ mod tests {
         // corrupted value is used and simply produces a different root — which is
         // why the check above is the one that matters.
         let plain = prove(SUITE, &values, &[], Some(&tampered)).unwrap();
-        let other = verify(SUITE, 7, &[], Some(&tampered), &plain).unwrap();
+        let other = evaluate(SUITE, 7, &[], Some(&tampered), &plain).unwrap();
         assert_ne!(other, expected);
     }
 
@@ -981,7 +1016,7 @@ mod tests {
             let mut bytes = *broken.elements[i].as_bytes();
             bytes[0] ^= 0x01;
             broken.elements[i] = HashValue::from_bytes(bytes);
-            let got = verify(SUITE, 9, &[(3, values[3])], None, &broken).unwrap();
+            let got = evaluate(SUITE, 9, &[(3, values[3])], None, &broken).unwrap();
             assert_ne!(got, expected, "element {i}");
         }
     }
@@ -997,7 +1032,7 @@ mod tests {
         let mut short = proof.clone();
         short.elements.pop();
         assert_eq!(
-            verify(SUITE, 9, &[(3, values[3])], None, &short),
+            evaluate(SUITE, 9, &[(3, values[3])], None, &short),
             Err(Error::ProofShape {
                 expected: needed,
                 actual: needed - 1
@@ -1007,7 +1042,7 @@ mod tests {
         let mut long = proof.clone();
         long.elements.push(HashValue::ZERO);
         assert_eq!(
-            verify(SUITE, 9, &[(3, values[3])], None, &long),
+            evaluate(SUITE, 9, &[(3, values[3])], None, &long),
             Err(Error::ProofShape {
                 expected: needed,
                 actual: needed + 1

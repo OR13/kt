@@ -269,7 +269,7 @@ fn log_cases() -> Result<Vec<Case>, String> {
 
             // Our own verifier must accept what we just built, or there is no
             // point asking the peer.
-            let ours = log::verify(SUITE, size, &claimed, retained.as_ref(), &proof)
+            let ours = log::evaluate(SUITE, size, &claimed, retained.as_ref(), &proof)
                 .map_err(|err| format!("size {size}: our verifier rejected our proof: {err}"))?;
             if ours != root {
                 return Err(format!(
@@ -315,7 +315,7 @@ fn log_cases() -> Result<Vec<Case>, String> {
                     *slot = HashValue::from_bytes(bytes);
                 }
                 // Our verifier must not reach the honest root with this.
-                let ours = log::verify(SUITE, size, &claimed, retained.as_ref(), &broken);
+                let ours = log::evaluate(SUITE, size, &claimed, retained.as_ref(), &broken);
                 if ours == Ok(root) {
                     return Err(format!("{label}: tampering changed nothing"));
                 }

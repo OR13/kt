@@ -648,7 +648,7 @@ fn log_tree_suite(dir: &Path) -> Result<Suite, Error> {
             let verified = match kt_wire::codec::decode::<InclusionProof>(&peer_bytes) {
                 Err(err) => format!("decoding the peer's proof failed: {err}"),
                 Ok(proof) => render_result(
-                    log::verify(suite, size, &claimed, retained.as_ref(), &proof),
+                    log::evaluate(suite, size, &claimed, retained.as_ref(), &proof),
                     |root| hex::encode(root.as_bytes()),
                 ),
             };
