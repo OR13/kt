@@ -37,15 +37,9 @@
 
 extern crate alloc;
 
-/// Append-only log tree (`draft-ietf-keytrans-protocol-05` §3.2, §11.8, §12.1).
-pub mod log {
-    // TODO(interop tier 1, step 4).
-}
+pub mod log;
 
-/// Prefix tree over VRF outputs (`draft-ietf-keytrans-protocol-05` §3.3, §11.9, §12.2).
-pub mod prefix {
-    // TODO(interop tier 1, step 5).
-}
+pub mod prefix;
 
 /// Combined tree — log leaves committing to prefix roots
 /// (`draft-ietf-keytrans-protocol-05` §3.4, §12.3, Appendix C).

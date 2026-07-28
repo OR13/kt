@@ -11,17 +11,27 @@ use std::path::{Path, PathBuf};
 
 use kt_crypto::commitment::{self, Commitment};
 use kt_crypto::suite::CipherSuite;
-use kt_tree::{ibst, ladder};
+use kt_tree::{ibst, ladder, log, prefix};
 use kt_wire::codec::Decoder;
-use kt_wire::structs::{CommitmentValue, DeploymentMode, UpdateSuffix, UpdateValue};
+use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
+use kt_wire::structs::{
+    CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue,
+};
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
-    CommitmentExpect, CommitmentInput, IbstExpect, IbstInput, LadderExpect, LadderInput, VectorFile,
+    CommitmentExpect, CommitmentInput, IbstExpect, IbstInput, LadderExpect, LadderInput,
+    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, VectorFile,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 3] = ["commitment.json", "ibst.json", "binary-ladder.json"];
+pub const FILES: [&str; 5] = [
+    "commitment.json",
+    "ibst.json",
+    "binary-ladder.json",
+    "log-tree.json",
+    "prefix-tree.json",
+];
 
 /// Something wrong with a vector file itself, as opposed to a disagreement.
 ///
@@ -62,6 +72,17 @@ pub enum Error {
         /// The offending value.
         value: u16,
     },
+    /// A computation the vector implies could not be carried out at all — a tree
+    /// that will not build from the entries it lists, for instance. Distinct from
+    /// a disagreement: the file is not describing something this code can attempt.
+    Computation {
+        /// Which file.
+        file: String,
+        /// Which case.
+        case: String,
+        /// What went wrong.
+        detail: String,
+    },
     /// A `commitment.json` case was missing a field its kind requires.
     MissingField {
         /// Which file.
@@ -86,6 +107,9 @@ impl std::fmt::Display for Error {
                     f,
                     "{file}: cipher suite 0x{value:04x} is not in the §17.1 registry"
                 )
+            }
+            Self::Computation { file, case, detail } => {
+                write!(f, "{file}, case {case}: {detail}")
             }
             Self::MissingField { file, case, field } => {
                 write!(f, "{file}, case {case}: missing required field {field}")
@@ -116,6 +140,8 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         commitment_suite(dir)?,
         ibst_suite(dir)?,
         ladder_suite(dir)?,
+        log_tree_suite(dir)?,
+        prefix_tree_suite(dir)?,
     ])
 }
 
@@ -489,4 +515,367 @@ fn render_refusal<E>(result: Result<u64, E>) -> String {
         Ok(value) => value.to_string(),
         Err(_) => "refused".to_owned(),
     }
+}
+
+/// §3.2, §11.8, and §12.1: the log tree.
+fn log_tree_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "log-tree.json";
+    let file: VectorFile<LogTreeInput, LogTreeExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let mut checks = Vec::new();
+
+        // The leaf values: Hash(LogEntry) for each entry (§11.8).
+        let mut leaves = Vec::new();
+        let mut leaf_checks = Vec::new();
+        for (i, entry) in case.input.entries.iter().enumerate() {
+            let prefix_tree = hash_field(FILE, name, "entries[].prefix_tree", &entry.prefix_tree)?;
+            let value = log::leaf_value(
+                suite,
+                &LogEntry {
+                    timestamp: entry.timestamp,
+                    prefix_tree,
+                },
+            )
+            .map_err(|err| Error::Computation {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                detail: alloc_string(&err),
+            })?;
+            leaves.push(value);
+            let expected = case.expect.leaf_values.get(i).cloned().unwrap_or_default();
+            leaf_checks.push(Check::new(
+                format!("Hash(LogEntry) for entry {i}"),
+                expected,
+                hex::encode(value.as_bytes()),
+            ));
+        }
+        checks.push(Check::group("leaf values (§11.8)", leaf_checks));
+
+        // The root, and the full subtree heads a verifier retains (§3.2, §4.2).
+        checks.push(Check::new(
+            "root of the log tree (§3.2, §11.8)",
+            case.expect.root.clone(),
+            render_result(log::root(suite, &leaves), |value| {
+                hex::encode(value.as_bytes())
+            }),
+        ));
+
+        let size = leaves.len() as u64;
+        checks.push(Check::new(
+            "full subtree heads (§4.2)",
+            render_list(&case.expect.full_subtrees),
+            render_result(
+                log::Retained::from_leaves(suite, size, &leaves),
+                |retained| {
+                    render_list(
+                        &retained
+                            .full_subtrees
+                            .iter()
+                            .map(|value| hex::encode(value.as_bytes()))
+                            .collect::<Vec<_>>(),
+                    )
+                },
+            ),
+        ));
+
+        // Each batch proof: the same elements, the same wire bytes, and a
+        // verification that lands on the peer's root.
+        let mut proof_checks = Vec::new();
+        for (i, request) in case.input.requests.iter().enumerate() {
+            let Some(expected) = case.expect.proofs.get(i) else {
+                proof_checks.push(Check::new(
+                    format!("request {i}"),
+                    "a proof",
+                    "no proof in the vector",
+                ));
+                continue;
+            };
+            let retained = match request.retained_size {
+                None => None,
+                Some(retained_size) => Some(
+                    log::Retained::from_leaves(suite, retained_size, &leaves).map_err(|err| {
+                        Error::Computation {
+                            file: FILE.to_owned(),
+                            case: name.to_owned(),
+                            detail: alloc_string(&err),
+                        }
+                    })?,
+                ),
+            };
+
+            let label = describe_request(request);
+            let built = log::prove(suite, &leaves, &request.proven_leaves, retained.as_ref());
+            proof_checks.push(Check::new(
+                format!("{label}: proof elements"),
+                render_list(&expected.elements),
+                render_result(built.as_ref().map(|proof| &proof.elements), |elements| {
+                    render_list(
+                        &elements
+                            .iter()
+                            .map(|v| hex::encode(v.as_bytes()))
+                            .collect::<Vec<_>>(),
+                    )
+                }),
+            ));
+            proof_checks.push(Check::new(
+                format!("{label}: wire encoding (§12.1)"),
+                expected.proof.clone(),
+                match built.as_ref().map(kt_wire::codec::encode) {
+                    Ok(Ok(bytes)) => hex::encode(bytes),
+                    Ok(Err(err)) => format!("encoding failed: {err}"),
+                    Err(err) => format!("proving failed: {err}"),
+                },
+            ));
+
+            // Decode the peer's own proof bytes and verify them: this is the
+            // direction that matters for a client, since it is the peer's bytes a
+            // client would receive.
+            let peer_bytes = unhex(FILE, name, "expect.proofs[].proof", &expected.proof)?;
+            let claimed: Vec<log::Leaf> = request
+                .proven_leaves
+                .iter()
+                .filter_map(|index| {
+                    usize::try_from(*index)
+                        .ok()
+                        .and_then(|i| leaves.get(i))
+                        .map(|v| (*index, *v))
+                })
+                .collect();
+            let verified = match kt_wire::codec::decode::<InclusionProof>(&peer_bytes) {
+                Err(err) => format!("decoding the peer's proof failed: {err}"),
+                Ok(proof) => render_result(
+                    log::verify(suite, size, &claimed, retained.as_ref(), &proof),
+                    |root| hex::encode(root.as_bytes()),
+                ),
+            };
+            proof_checks.push(Check::new(
+                format!("{label}: verifying the peer's proof reaches the peer's root"),
+                case.expect.root.clone(),
+                verified,
+            ));
+        }
+        checks.push(Check::group("batch proofs (§12.1)", proof_checks));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "log of {} entries, {} proof requests",
+                case.input.entries.len(),
+                case.input.requests.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Log tree".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
+        cases,
+    })
+}
+
+/// §3.3, §11.9, and §12.2: the prefix tree.
+fn prefix_tree_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "prefix-tree.json";
+    let file: VectorFile<PrefixTreeInput, PrefixTreeExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+
+        // Build the tree from the same entries, in the same order.
+        let mut tree = prefix::PrefixTree::new();
+        for entry in &case.input.entries {
+            let leaf = PrefixLeaf {
+                vrf_output: hash_field(FILE, name, "entries[].vrf_output", &entry.vrf_output)?,
+                commitment: hash_field(FILE, name, "entries[].commitment", &entry.commitment)?,
+            };
+            tree.insert(leaf).map_err(|err| Error::Computation {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                detail: alloc_string(&err),
+            })?;
+        }
+
+        let mut searches = Vec::new();
+        for key in &case.input.searches {
+            searches.push(hash_field(FILE, name, "searches[]", key)?);
+        }
+
+        let mut checks = vec![Check::new(
+            "root of the prefix tree (§3.3, §11.9)",
+            case.expect.root.clone(),
+            hex::encode(tree.root(suite).as_bytes()),
+        )];
+
+        // The proof we build for the same batch must match the peer's, both as
+        // results and as bytes.
+        let built = tree.prove(suite, &searches);
+        checks.push(Check::new(
+            "search results (§12.2)",
+            render_prefix_results(&case.expect.results),
+            match &built {
+                Err(err) => format!("proving failed: {err}"),
+                Ok(proof) => render_results(&proof.results),
+            },
+        ));
+        checks.push(Check::new(
+            "copath elements (§12.2)",
+            render_list(&case.expect.elements),
+            match &built {
+                Err(err) => format!("proving failed: {err}"),
+                Ok(proof) => render_list(
+                    &proof
+                        .elements
+                        .iter()
+                        .map(|v| hex::encode(v.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "wire encoding (§12.2)",
+            case.expect.proof.clone(),
+            match built.as_ref().map(kt_wire::codec::encode) {
+                Ok(Ok(bytes)) => hex::encode(bytes),
+                Ok(Err(err)) => format!("encoding failed: {err}"),
+                Err(err) => format!("proving failed: {err}"),
+            },
+        ));
+
+        // And the peer's own proof bytes must verify against the peer's root.
+        let peer_bytes = unhex(FILE, name, "expect.proof", &case.expect.proof)?;
+        let entries: Vec<prefix::SearchEntry> = searches
+            .iter()
+            .zip(case.expect.results.iter())
+            .map(|(key, result)| {
+                if result.result_type == 1 {
+                    // An inclusion result needs the commitment the leaf holds; it
+                    // is the one the peer recorded for this search.
+                    let commitment = case
+                        .input
+                        .entries
+                        .iter()
+                        .find(|entry| entry.vrf_output == hex::encode(key.as_bytes()))
+                        .and_then(|entry| {
+                            HashValue::from_slice(&hex::decode(&entry.commitment).ok()?).ok()
+                        });
+                    match commitment {
+                        Some(value) => prefix::SearchEntry::included(*key, value),
+                        None => prefix::SearchEntry::absent(*key),
+                    }
+                } else {
+                    prefix::SearchEntry::absent(*key)
+                }
+            })
+            .collect();
+        let root = hash_field(FILE, name, "expect.root", &case.expect.root)?;
+        let verified = match kt_wire::codec::decode::<PrefixProof>(&peer_bytes) {
+            Err(err) => format!("decoding the peer's proof failed: {err}"),
+            Ok(proof) => match prefix::verify(suite, &entries, &proof, root) {
+                Ok(()) => "accepted".to_owned(),
+                Err(err) => format!("rejected: {err}"),
+            },
+        };
+        checks.push(Check::new(
+            "verifying the peer's proof against the peer's root",
+            "accepted",
+            verified,
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{} entries, {} searches",
+                case.input.entries.len(),
+                case.input.searches.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Prefix tree".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
+        cases,
+    })
+}
+
+/// A short label for a batch proof request.
+fn describe_request(request: &crate::vectors::LogProofRequest) -> String {
+    let leaves = if request.proven_leaves.is_empty() {
+        "no leaves".to_owned()
+    } else {
+        format!("leaves {}", render_list(&request.proven_leaves))
+    };
+    match request.retained_size {
+        None => leaves,
+        Some(size) => format!("{leaves}, retained {size}"),
+    }
+}
+
+fn render_results(results: &[kt_wire::proofs::PrefixSearchResult]) -> String {
+    let rendered: Vec<String> = results
+        .iter()
+        .map(|result| {
+            let mut out = format!("{}@{}", result.result_type().as_u8(), result.depth());
+            if let kt_wire::proofs::PrefixSearchResult::NonInclusionLeaf { leaf, .. } = result {
+                out.push_str(&format!(
+                    "({}…)",
+                    hex::encode(&leaf.vrf_output.as_bytes()[..4])
+                ));
+            }
+            out
+        })
+        .collect();
+    render_list(&rendered)
+}
+
+fn render_prefix_results(results: &[crate::vectors::PrefixResultExpect]) -> String {
+    let rendered: Vec<String> = results
+        .iter()
+        .map(|result| {
+            let mut out = format!("{}@{}", result.result_type, result.depth);
+            if let Some(leaf) = &result.leaf {
+                out.push_str(&format!("({}…)", &leaf.vrf_output[..8]));
+            }
+            out
+        })
+        .collect();
+    render_list(&rendered)
+}
+
+/// Decodes a hex field that must be a `HashValue`.
+fn hash_field(file: &str, case: &str, field: &str, value: &str) -> Result<HashValue, Error> {
+    let bytes = unhex(file, case, field, value)?;
+    HashValue::from_slice(&bytes).map_err(|_| Error::Hex {
+        file: file.to_owned(),
+        case: case.to_owned(),
+        field: field.to_owned(),
+    })
+}
+
+fn alloc_string(err: &impl core::fmt::Display) -> String {
+    format!("{err}")
 }

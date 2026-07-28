@@ -1,0 +1,3984 @@
+{
+  "primitive": "from-kt",
+  "draft": "draft-ietf-keytrans-protocol-05",
+  "generator": {
+    "impl": "kt",
+    "version": "0.0.0"
+  },
+  "notes": "Proofs built by the Rust implementation for the Go peer to verify. `expect` is `accept` when the peer must accept the proof and evaluate it to `root`, and `reject` when it must not: either its verifier errors, or it arrives at a different root. Every `reject` case is also rejected by this implementation's own verifier before being written here, so a case the peer accepts is a disagreement about what is valid rather than a broken fixture.",
+  "cases": [
+    {
+      "kind": "log-tree",
+      "name": "log-size-1-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 1,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [],
+      "root": "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-1-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 1,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [],
+      "root": "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-1-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 1,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [],
+      "root": "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-1-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 1,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [],
+      "root": "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 2,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-1-retained-none",
+      "expect": "accept",
+      "size": 2,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-1-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-1-retained-none",
+      "expect": "accept",
+      "size": 2,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-1-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-2-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 2,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 3,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-1-retained-none",
+      "expect": "accept",
+      "size": 3,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-1-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-2-retained-none",
+      "expect": "accept",
+      "size": 3,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-2-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-2",
+      "expect": "accept",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-none-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "0a03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-1-retained-2",
+      "expect": "accept",
+      "size": 3,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-3-leaves-1-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 3,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "37a7a19c1de20b7c6638e0542f2f8af64ba3fffac4cd6502eff3ff8260dd58dd"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-2-retained-none",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-2-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-3-retained-none",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-3-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-0-2-3-retained-none",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        0,
+        2,
+        3
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-0-2-3-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        0,
+        2,
+        3
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-2",
+      "expect": "accept",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "deb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-1-retained-2",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-1-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-3",
+      "expect": "accept",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-none-retained-3-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [],
+      "values": [],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "e221d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-1-retained-3",
+      "expect": "accept",
+      "size": 4,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-4-leaves-1-retained-3-tampered-element",
+      "expect": "reject",
+      "size": 4,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-2-retained-none",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-2-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-4-retained-none",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-4-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-0-2-4-retained-none",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        0,
+        2,
+        4
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-0-2-4-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        0,
+        2,
+        4
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-2",
+      "expect": "accept",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "deb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-1-retained-2",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-1-retained-2-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 2,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-4",
+      "expect": "accept",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-none-retained-4-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [],
+      "values": [],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "0222843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-2-retained-4",
+      "expect": "accept",
+      "size": 5,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-5-leaves-2-retained-4-tampered-element",
+      "expect": "reject",
+      "size": 5,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "root": "f95485da09a459bf7dac0ab8e13d753ae55ab035f95c177b7cfade568d2b1752"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-3-retained-none",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-3-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-6-retained-none",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        6
+      ],
+      "values": [
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-6-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        6
+      ],
+      "values": [
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-0-3-6-retained-none",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        0,
+        3,
+        6
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-0-3-6-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        0,
+        3,
+        6
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-3",
+      "expect": "accept",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-3-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "e221d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-1-retained-3",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-1-retained-3-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        1
+      ],
+      "values": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d"
+      ],
+      "retained_size": 3,
+      "retained": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "elements": [
+        "fd3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-6",
+      "expect": "accept",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 6,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "elements": [
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-none-retained-6-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [],
+      "values": [],
+      "retained_size": 6,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "elements": [
+        "fd874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-3-retained-6",
+      "expect": "accept",
+      "size": 7,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "retained_size": 6,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-7-leaves-3-retained-6-tampered-element",
+      "expect": "reject",
+      "size": 7,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "retained_size": 6,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "1a1e3c2fdb6956c38759496b8190ad649df7cd823c7673c69b25c906d74eefd0"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-4-retained-none",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-4-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-7-retained-none",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        7
+      ],
+      "values": [
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-7-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        7
+      ],
+      "values": [
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-0-4-7-retained-none",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        0,
+        4,
+        7
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-0-4-7-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        0,
+        4,
+        7
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-4",
+      "expect": "accept",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-4-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "58fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-2-retained-4",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-2-retained-4-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 4,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-7",
+      "expect": "accept",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 7,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-none-retained-7-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [],
+      "values": [],
+      "retained_size": 7,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "6c03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-3-retained-7",
+      "expect": "accept",
+      "size": 8,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "retained_size": 7,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-8-leaves-3-retained-7-tampered-element",
+      "expect": "reject",
+      "size": 8,
+      "entries": [
+        3
+      ],
+      "values": [
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129"
+      ],
+      "retained_size": 7,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50",
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "root": "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-5-retained-none",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        5
+      ],
+      "values": [
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-5-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        5
+      ],
+      "values": [
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-10-retained-none",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        10
+      ],
+      "values": [
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-10-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        10
+      ],
+      "values": [
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-0-5-10-retained-none",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        0,
+        5,
+        10
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-0-5-10-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        0,
+        5,
+        10
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-5",
+      "expect": "accept",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 5,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-5-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 5,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "6e05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-2-retained-5",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 5,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-2-retained-5-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        2
+      ],
+      "values": [
+        "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+      ],
+      "retained_size": 5,
+      "retained": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "elements": [
+        "470ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+        "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-10",
+      "expect": "accept",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 10,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "elements": [
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-none-retained-10-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [],
+      "values": [],
+      "retained_size": 10,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "elements": [
+        "41b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-5-retained-10",
+      "expect": "accept",
+      "size": 11,
+      "entries": [
+        5
+      ],
+      "values": [
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16"
+      ],
+      "retained_size": 10,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-11-leaves-5-retained-10-tampered-element",
+      "expect": "reject",
+      "size": 11,
+      "entries": [
+        5
+      ],
+      "values": [
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16"
+      ],
+      "retained_size": 10,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+      ],
+      "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-8-retained-none",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-8-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-15-retained-none",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        15
+      ],
+      "values": [
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-15-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        15
+      ],
+      "values": [
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-0-8-15-retained-none",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        0,
+        8,
+        15
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803",
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-0-8-15-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        0,
+        8,
+        15
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803",
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-8",
+      "expect": "accept",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-8-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "27b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-4-retained-8",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-4-retained-8-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-15",
+      "expect": "accept",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 15,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "elements": [
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-none-retained-15-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [],
+      "values": [],
+      "retained_size": 15,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "elements": [
+        "4bbc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-7-retained-15",
+      "expect": "accept",
+      "size": 16,
+      "entries": [
+        7
+      ],
+      "values": [
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "retained_size": 15,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9",
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-16-leaves-7-retained-15-tampered-element",
+      "expect": "reject",
+      "size": 16,
+      "entries": [
+        7
+      ],
+      "values": [
+        "6d03a78f9d54cf8db3aad04382e4f9908db54d3e5c2e3bf9e144eed3c31b656c"
+      ],
+      "retained_size": 15,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "09fe8d01b1f4aa073829c0257dd716637602b4ff3bfd79c3bfdb7027e7a3fa85",
+        "c235ba092a7133ff9acc7cef64b95e817c87d013108b2b08e7143644f6d30f47"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "24e6b6f95bf9d4c1b12105ccf73b4651a160c90f416dde4cbff7f615604ff65a",
+        "fc874b0761418adc00e775228ac6ac8ca3a71c8616f3ced3d620c7ae740efde9",
+        "4abc132177c61cf28b70f5416abdbb27a9acc424fcae04f99318615fd6931321"
+      ],
+      "root": "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-8-retained-none",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-8-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-16-retained-none",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-16-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "70f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-0-8-16-retained-none",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        0,
+        8,
+        16
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-0-8-16-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        0,
+        8,
+        16
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-8",
+      "expect": "accept",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-8-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "27b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-4-retained-8",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-4-retained-8-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        4
+      ],
+      "values": [
+        "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+      ],
+      "retained_size": 8,
+      "retained": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+      ],
+      "elements": [
+        "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+        "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+        "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-16",
+      "expect": "accept",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-none-retained-16-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [],
+      "values": [],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "24397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-8-retained-16",
+      "expect": "accept",
+      "size": 17,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-17-leaves-8-retained-16-tampered-element",
+      "expect": "reject",
+      "size": 17,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "root": "51c591652d67aa45f15910e41404506aaa496c93f4c4a09bd662784246b8ce8b"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-16-retained-none",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-16-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "elements": [
+        "70f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-32-retained-none",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        32
+      ],
+      "values": [
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "elements": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-32-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        32
+      ],
+      "values": [
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "elements": [
+        "d7a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-0-16-32-retained-none",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        0,
+        16,
+        32
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-0-16-32-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        0,
+        16,
+        32
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-16",
+      "expect": "accept",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-16-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "028c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-8-retained-16",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-8-retained-16-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        8
+      ],
+      "values": [
+        "51725873edfeece02c2758491f90cc9c11870a50c30cc035a4957295e6cdf803"
+      ],
+      "retained_size": 16,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "cc5937507ac5d4353dc1229dfe7f0a1268be45d94f1f5fa13127cf9c1dbc0a91",
+        "30a35018c03d059628f69479a28fea0b3e97236af2f99742c64b84524351e2e3",
+        "235f72c070b2ce0613ea80b9521da487a2c7b1f0306328e174785d55b36e0bff",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-32",
+      "expect": "accept",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 32,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "elements": [
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-none-retained-32-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [],
+      "values": [],
+      "retained_size": 32,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "elements": [
+        "4c3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-16-retained-32",
+      "expect": "accept",
+      "size": 33,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "retained_size": 32,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "elements": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-33-leaves-16-retained-32-tampered-element",
+      "expect": "reject",
+      "size": 33,
+      "entries": [
+        16
+      ],
+      "values": [
+        "25397793ec346527fa718b064d16d0bb05ba11c7ebf95cc82f2aea67f115f617"
+      ],
+      "retained_size": 32,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53"
+      ],
+      "elements": [
+        "70f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "dbf965d0965a734f7e3cd9c2ae5596341875994f68d0a1e8ded50380453e3803",
+        "44e700c1ec74dc1a8d6c878d30d7752479fff36c37341813dc5d5f957696da0e",
+        "09003868e44edc9df07ec92796d83f3c7c6b7f8b1ab95c6ffb3a3dbfeb9f11fc",
+        "111f9d1669a2127324f3fb3b4293d0d16c4da1941b1491412fbd5c471df2d64b",
+        "4d3ea048961d227d4e07010f40fde48baa69ba14f52c09fcf32ab0cf7aa7b7e2"
+      ],
+      "root": "56a0ea987e104793de359fc4e9dce3b363d65ea10233a3d86bfa4c78449ce2f7"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-0-retained-none",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-0-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        0
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-25-retained-none",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        25
+      ],
+      "values": [
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262"
+      ],
+      "elements": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-25-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        25
+      ],
+      "values": [
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262"
+      ],
+      "elements": [
+        "70f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-49-retained-none",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        49
+      ],
+      "values": [
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "elements": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-49-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        49
+      ],
+      "values": [
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "elements": [
+        "d7a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-0-25-49-retained-none",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        0,
+        25,
+        49
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-0-25-49-retained-none-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        0,
+        25,
+        49
+      ],
+      "values": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-1",
+      "expect": "accept",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fc7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-1-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 1,
+      "retained": [
+        "fc3dd2f2eed140d5a631a5df0e8e5d18a901f70d6e83c8f76784ee79eb7cbd03"
+      ],
+      "elements": [
+        "fd7ba5778ed59ee3a0b6d94abfbabb86a9c72dc1672d8601f37333dc5e1f599d",
+        "dfb3c040602195b97034da91747cbb5a7ac8bd88a23ed606aa2f04b5d5ba4370",
+        "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+        "26b38b55e3158c0cae5235659e776c28ca24b6a85a47d76427fc48abd035432c",
+        "038c7abc8afdf4657abbe19b83aeb51ecf34b2c907b5f460958644b26a338fba",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-25",
+      "expect": "accept",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 25,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "elements": [
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-25-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 25,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "elements": [
+        "a8a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-12-retained-25",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        12
+      ],
+      "values": [
+        "d88c169be57b71c02509f62587c7473896caa5ee92b57d2e3822779fe08e181e"
+      ],
+      "retained_size": 25,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "elements": [
+        "d1311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "26b8d3f2cc9e8ed643f43930fdda148c7a0ec5caa5b3650112767e7aca4aad1c",
+        "7b70779dfb1c7e1232624bfc16f388e83e88830e28c703ec576d9ec0028f9f35",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-12-retained-25-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        12
+      ],
+      "values": [
+        "d88c169be57b71c02509f62587c7473896caa5ee92b57d2e3822779fe08e181e"
+      ],
+      "retained_size": 25,
+      "retained": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "elements": [
+        "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51",
+        "f7053bed2d97e716313bde1fe35bd56134af3acc107b2c2444aa9ce18ecd71a6",
+        "26b8d3f2cc9e8ed643f43930fdda148c7a0ec5caa5b3650112767e7aca4aad1c",
+        "7b70779dfb1c7e1232624bfc16f388e83e88830e28c703ec576d9ec0028f9f35",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "8630beadffab2d96da32af61450a66da6e7bc264d209b410a3345b4f217e91b1"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-49",
+      "expect": "accept",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 49,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "elements": [
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-none-retained-49-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [],
+      "values": [],
+      "retained_size": 49,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "elements": [
+        "cf68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-24-retained-49",
+      "expect": "accept",
+      "size": 50,
+      "entries": [
+        24
+      ],
+      "values": [
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "retained_size": 49,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "elements": [
+        "71f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "log-tree",
+      "name": "log-size-50-leaves-24-retained-49-tampered-element",
+      "expect": "reject",
+      "size": 50,
+      "entries": [
+        24
+      ],
+      "values": [
+        "d660096bbccb3bb6efda05cd77772e35e412d8cf153c269019144f7dc9073188"
+      ],
+      "retained_size": 49,
+      "retained": [
+        "d6a160c9025353c6d27f636aea139539016f6a89464414f7b4aa039de5e2aa53",
+        "eba98e51569b1727dd8e9298e2a2885f382f1ef7de73ea86eda5aac2387465a0",
+        "978753b8efa737e1d88eaefff5ad5b6fd68b014392244e77034d1acdf801e6c6"
+      ],
+      "elements": [
+        "70f0ff59ce2867c4717a81ddc637e21a4eff27b099d3de6472dbeea96061a38e",
+        "c72ce6569cd6689e68e08cb77378d5f9dd156ba1a3ee5af795e181a92ab82b1b",
+        "a9a69cc77623cbaebce4f8dc0615367c24a79b2df18789e0c3e1d01e3fe17262",
+        "838fbe9391a8196ad896e0254280cb87a9823889717db0f4b78f095f929203da",
+        "3673fe19eed40b4a9f0e15ab7d503e2d25b69a7089356a82fcf114902cc13b46",
+        "ce68638d7bb460077dd9e52d8f940f0e86348fb5fa488c7bbdb0bf9e2ac76e7f"
+      ],
+      "root": "67681ff8f57aaeb95be91c9f199dc31faadd937e52c0ecfdb412db3b4030e336"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-small-mixed",
+      "expect": "accept",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030103010006d0f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea2086b7fe2f6d337ac1650c300fb7eb1c2268c02f5b899aa28a9355c2ff7a94257610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "root": "6d0aa8625aca5a3cc329b190752007790b5c8e14e907c7077f43d626727f12f7"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-small-tampered-element",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030103010006d1f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea2086b7fe2f6d337ac1650c300fb7eb1c2268c02f5b899aa28a9355c2ff7a94257610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "root": "6d0aa8625aca5a3cc329b190752007790b5c8e14e907c7077f43d626727f12f7"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-small-forged-inclusion",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "fc00000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "proof": "010101000183e13ec5caf53ba0ab3d6a3cb0c32533c16b2675caa71627202a1b90fc5317ab",
+      "root": "6d0aa8625aca5a3cc329b190752007790b5c8e14e907c7077f43d626727f12f7"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-medium-mixed",
+      "expect": "accept",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030103010006d0f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea208abcb35a759e821ce3a476dd46f4529f510143d0b9090929861dfda415e5fae6c7dd3da26fcc404271407b9f466a31d91380903c78a5b819f47ae56a2764006c6c9d133ec0e20102989b7eb4ec78fbd45f5e38fa756e17a4ef4b0dc90fd8efdaea72c4576a956b6717f758a751d07692944ac7cfa592a7c04617a6a69216cdd9c0000000000000000000000000000000000000000000000000000000000000000",
+      "root": "c9d566e45352d2a06273faa95216f91f1b3913b2adf63c01cc14abfa930b242f"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-medium-tampered-element",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030103010006d1f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea208abcb35a759e821ce3a476dd46f4529f510143d0b9090929861dfda415e5fae6c7dd3da26fcc404271407b9f466a31d91380903c78a5b819f47ae56a2764006c6c9d133ec0e20102989b7eb4ec78fbd45f5e38fa756e17a4ef4b0dc90fd8efdaea72c4576a956b6717f758a751d07692944ac7cfa592a7c04617a6a69216cdd9c0000000000000000000000000000000000000000000000000000000000000000",
+      "root": "c9d566e45352d2a06273faa95216f91f1b3913b2adf63c01cc14abfa930b242f"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-medium-forged-inclusion",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "fc00000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "proof": "0101010001890ab349a83ced16e50520e40d240f9fa4e553a76321982aa46048e58b270d4f",
+      "root": "c9d566e45352d2a06273faa95216f91f1b3913b2adf63c01cc14abfa930b242f"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-wide-mixed",
+      "expect": "accept",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030303030008d0f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea208abcb35a759e821ce3a476dd46f4529f510143d0b9090929861dfda415e5fae6c7dd3da26fcc404271407b9f466a31d91380903c78a5b819f47ae56a2764006c6c9d133ec0e20102989b7eb4ec78fbd45f5e38fa756e17a4ef4b0dc90fd8efdae88d0c6d1633c1f138db2798774529b7f4cb0c768bc069f0fa19a988f73c5c2699ad602afbe65c403672a4b942efe13b60288a9072de9349437ed493f0a7513314dc67eed468a5c07e7d07a3e0ac5e59b1440a2ce035aaf80f976e7aad06d115f469becd817e78ca6d6e92f1ac23c50eff885d31e4c52d0c9f6835d5ddc8d2271",
+      "root": "96e178ad15f5a9a01930835fa3dbaf5a7dc479bc7a66ca351a5dfae64e0a2114"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-wide-tampered-element",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "0000000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "vrf_output": "0100010000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        {
+          "vrf_output": "0200020000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0202020202020202020202020202020202020202020202020202020202020202"
+        },
+        {
+          "vrf_output": "fe000000000000000000000000000000000000000000000000000000000000fe"
+        },
+        {
+          "vrf_output": "fd000000000000000000000000000000000000000000000000000000000000fd"
+        }
+      ],
+      "proof": "05010801080108030303030008d1f8055821205f549e832dfa6d24f1b30c258ce5dcc8a6770b151faf7ecea208abcb35a759e821ce3a476dd46f4529f510143d0b9090929861dfda415e5fae6c7dd3da26fcc404271407b9f466a31d91380903c78a5b819f47ae56a2764006c6c9d133ec0e20102989b7eb4ec78fbd45f5e38fa756e17a4ef4b0dc90fd8efdae88d0c6d1633c1f138db2798774529b7f4cb0c768bc069f0fa19a988f73c5c2699ad602afbe65c403672a4b942efe13b60288a9072de9349437ed493f0a7513314dc67eed468a5c07e7d07a3e0ac5e59b1440a2ce035aaf80f976e7aad06d115f469becd817e78ca6d6e92f1ac23c50eff885d31e4c52d0c9f6835d5ddc8d2271",
+      "root": "96e178ad15f5a9a01930835fa3dbaf5a7dc479bc7a66ca351a5dfae64e0a2114"
+    },
+    {
+      "kind": "prefix-tree",
+      "name": "prefix-wide-forged-inclusion",
+      "expect": "reject",
+      "searches": [
+        {
+          "vrf_output": "fc00000000000000000000000000000000000000000000000000000000000000",
+          "commitment": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "proof": "010103000375bae3158ec337fd97a084fbc3145aaf8f12fe696220df4421a9e0b851cc4f094dc67eed468a5c07e7d07a3e0ac5e59b1440a2ce035aaf80f976e7aad06d115f469becd817e78ca6d6e92f1ac23c50eff885d31e4c52d0c9f6835d5ddc8d2271",
+      "root": "96e178ad15f5a9a01930835fa3dbaf5a7dc479bc7a66ca351a5dfae64e0a2114"
+    }
+  ]
+}

@@ -77,6 +77,8 @@ func main() {
 		{"commitment.json", commitmentVectors},
 		{"ibst.json", ibstVectors},
 		{"binary-ladder.json", ladderVectors},
+		{"log-tree.json", logTreeVectors},
+		{"prefix-tree.json", prefixTreeVectors},
 	}
 
 	for _, g := range generators {

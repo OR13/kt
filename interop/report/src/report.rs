@@ -361,10 +361,29 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::ladder",
             "binary-ladder.json",
         ),
+        verified(
+            "§3.2, §11.8, §12.1",
+            "Log tree: root, batch inclusion and consistency proofs",
+            "kt-tree::log",
+            "log-tree.json",
+        ),
+        verified(
+            "§3.3, §11.9, §12.2",
+            "Prefix tree: root, membership and non-membership proofs",
+            "kt-tree::prefix",
+            "prefix-tree.json",
+        ),
         Area {
             section: "§11.1, §17.1".to_owned(),
             name: "Cipher suite registry".to_owned(),
             module: Some("kt-crypto::suite".to_owned()),
+            coverage: Coverage::ImplementedUnverified,
+            evidence: None,
+        },
+        Area {
+            section: "§11.1".to_owned(),
+            name: "Cipher suite hash function".to_owned(),
+            module: Some("kt-crypto::hash".to_owned()),
             coverage: Coverage::ImplementedUnverified,
             evidence: None,
         },
@@ -376,8 +395,6 @@ pub fn coverage_table() -> Vec<Area> {
             evidence: None,
         },
         todo("§11.7", "VRF (ECVRF, both suites)"),
-        todo("§3.2, §11.8, §12.1", "Log tree and its proofs"),
-        todo("§3.3, §11.9, §12.2", "Prefix tree and its proofs"),
         todo("§3.4, §12.3", "Combined tree and CombinedTreeProof"),
         todo(
             "§11.2–§11.4",

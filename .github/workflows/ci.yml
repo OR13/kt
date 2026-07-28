@@ -60,5 +60,17 @@ jobs:
       - name: Regenerate vectors
         run: go run ./cmd/gen -out ../vectors
         working-directory: interop/go
+
+      # The other direction: proofs built by the Rust side, checked by katie's
+      # verifiers. This is what catches over-acceptance — a proof we accept and
+      # the peer rejects — which comparing recomputed values cannot see.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Emit kt-generated proofs
+        run: cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/from-kt.json
+      - name: The Go peer must agree about every one of them
+        run: go run ./cmd/verify -in ../vectors/from-kt.json
+        working-directory: interop/go
+
       - name: Vectors must be reproducible
         run: git diff --exit-code -- interop/vectors

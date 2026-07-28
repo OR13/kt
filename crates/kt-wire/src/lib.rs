@@ -34,6 +34,7 @@
 extern crate alloc;
 
 pub mod codec;
+pub mod proofs;
 pub mod structs;
 
 /// The draft revision this crate targets.
