@@ -95,13 +95,13 @@ disagrees:
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | signatures **agree** (§11.2–§11.4); combined tree todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
+| 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts and every encoding; three divergences recorded, see below |
 
-Steps 1 through 6 are done. `commitment.json`, `ibst.json`,
-`binary-ladder.json`, `vrf.json`, `log-tree.json`, and `prefix-tree.json` all pass
-from the Rust side — 3592 checks — and `from-kt.json` runs the other way: 201 proofs built
-by the Rust side, 101 of which katie must accept and 100 of which it must reject.
-"Agrees" here means a committed vector asserts it, not that the two
-implementations were eyeballed.
+Steps 1 through 6 are done, along with step 9 and the signature half of step 7.
+Fourteen vector files pass from the Rust side — 6255 checks across 660 cases — and
+`from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
+katie must accept and 100 of which it must reject. "Agrees" here means a committed
+vector asserts it, not that the two implementations were eyeballed.
 
 The reverse direction earned its keep immediately. It found that §12.1's proofs
 carry heads of **balanced** subtrees only: an implementation that hands over the
@@ -280,6 +280,64 @@ VRF outputs this is a `2^-255` coincidence, and a log cannot grind for it becaus
 must produce a valid VRF proof for whatever label-version pair it uses. Worth a
 sentence in the draft rather than a fix.
 
+**§15.2 makes some removals unauditable, and both implementations guess.** An
+auditor is sent an `AuditorUpdate` — leaves added, leaves removed, and one batch
+proof in the *previous* entry's prefix tree — and has to reconstruct the root the new
+entry claims (step 7). Applying a removal is not just clearing a node: §3.3's shape
+is canonical, so a parent left holding one leaf and one empty child collapses back
+into that leaf. Deciding whether to collapse requires knowing whether the removed
+leaf's sibling *is* a leaf. It usually cannot be known: §15.2 says `proof.results`
+holds one result per element of `added` then `removed`, so the proof describes
+exactly the keys being changed and nothing else — never the sibling of a removed
+leaf. Measured at pin `00da5254`, over a tree of three leaves with one removed,
+katie's `EvaluateBeforeAfter` returns `dfff45ee…` where its own `Tree.Mutate`
+produces `06f44480…`. Give the same removal a sibling that happens to be a *parent*
+and katie's answer is right — because assuming no collapse is the correct guess
+there — which is what makes this hard to notice. An auditor that signs a guessed
+root publishes an `AuditorTreeHead` over a root no user can reproduce from their own
+proofs, so every `FullTreeHead` carrying it fails. `kt-tree::prefix` returns the same
+root katie does, so the two interoperate, but reports it through
+`Mutation::assumed_no_collapse`, and `kt-tree::audit` surfaces that as
+`Accepted::root_determined` — which an auditor must check before signing. Pinned by
+`prefix-mutation.json`, whose `after` column is katie's own tree rather than its
+verifier's opinion. The fix belongs in the draft: the update needs to be able to name
+the sibling, or `removed` needs to carry it.
+
+**katie treats §11.9's all-zero copath element as an opaque node.** The same
+reconstruction, different cause, and here the two implementations differ. When a
+removal empties the last leaf under a parent whose other slot was supplied as an
+element equal to the all-zero stand-in, that element *does* identify the subtree as
+empty — a real node hash cannot be zero — so the parent collapses and, if it was the
+last one, the tree is empty. katie blocks the collapse on any element and returns a
+root its own tree does not have: for a two-leaf tree with both leaves removed, it
+gives `dc48a742…` where `Tree.Mutate` gives the all-zero root. `kt-tree::prefix`
+resolves the stand-in and reaches the tree's root. Pinned as a divergence in
+`prefix-mutation.json`.
+
+**katie cannot evaluate the replacement §15.2 explicitly permits.** Step 2 says "a
+VRF output in `added` is also allowed to be in `removed`", and step 3 exempts exactly
+those keys from the non-inclusion requirement — that pair of sentences is how a
+label's value is replaced in one entry. katie's `EvaluateBeforeAfter` concatenates
+`added` and `removed` and runs the combined list through the duplicate check a plain
+batch search needs, so it fails with "same vrf output present multiple times". Two
+consequences for anyone implementing this. The proof carries *two* results for the
+repeated key, one per request position, so a prover must answer repeats rather than
+reject them. And the "before" root has to be reconstructed with the commitment from
+`removed`, not `added`: the previous tree held the old value. The draft says so, in a
+way that is easy to miss — step 6 computes the previous root "with `proof` and the
+`PrefixLeaf` structures in `removed`". Pinned by `prefix-mutation.json`'s
+`replace-in-place` case, where the vector records katie's refusal.
+
+**§15.2 cannot audit a log entry that changes nothing.** Neither `added` nor
+`removed` has a lower bound, so an entry that adds and removes no prefix tree leaves
+is well formed — a log publishing on a fixed schedule with no updates to make would
+produce one. But then the proof has no results and no copath, and step 6 has no
+material to reconstruct the previous root from, so the auditor cannot confirm the
+update starts where it is. Both implementations reject it, independently and for the
+same underlying reason; `auditor-update.json`'s `change-nothing` case pins that.
+Whether the draft intends to forbid such an entry or to exempt it from step 6 is
+worth asking.
+
 **`opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
 and writes it to the HMAC first. Same bytes, different factoring — the vectors
@@ -335,3 +393,21 @@ go to [ietf-wg-keytrans/draft-protocol](https://github.com/ietf-wg-keytrans/draf
 Implementation disagreements go to the respective repository. Record every
 resolved ambiguity as a comment in the Rust code citing the issue, so the next
 reader does not re-derive it.
+
+Nothing has been filed yet — the disclosure email about the ladder hang went to katie's
+maintainer first, and the rest are held pending a decision on what to file where. The
+queue, in the order they seem worth raising:
+
+*Draft issues.* §15.2 step 7 cannot determine the root when a removal's sibling is
+uncovered — the substantive one, since it makes some updates unauditable as specified.
+§15.2 has no way to audit an entry that changes nothing. The `2^32-1` greatest version is
+unprovable. §12.2's `depth` cannot express 256, and leaves two things implicit about what
+it counts. §11.2's grouped `select` reads two ways, and the two Go implementations took
+one each.
+
+*katie issues.* The binary ladder hang at versions at or above `2^31-1` (already
+disclosed). `EvaluateBeforeAfter` treating §11.9's all-zero copath element as an opaque
+node. `EvaluateBeforeAfter` refusing the replacement §15.2 permits.
+
+Each is pinned by a committed vector, so a filing can point at reproducible bytes rather
+than at prose.

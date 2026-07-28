@@ -15,8 +15,8 @@
 //! §2.1.1 optional values, §2.1.2 variable-length vectors, and the fixed-size
 //! opaque types; then the structs: `TreeHead` (§11.2), `AuditorTreeHead`
 //! (§11.3), `FullTreeHead` (§11.4), `UpdateValue` (§11.5), `CommitmentValue`
-//! (§11.6), `VrfInput` (§11.7), the proof types (§12), and the
-//! request/response types (§13).
+//! (§11.6), `VrfInput` (§11.7), the proof types (§12), the request/response
+//! types (§13), and `AuditorUpdate` (§15.2).
 //!
 //! # Invariants
 //!
@@ -33,6 +33,7 @@
 
 extern crate alloc;
 
+pub mod audit;
 pub mod codec;
 pub mod heads;
 pub mod proofs;

@@ -469,7 +469,23 @@ pub fn coverage_table() -> Vec<Area> {
         todo("§9, §13.5", "Updating a label"),
         todo("§10, §13.6", "Walking distinguished heads, fork detection"),
         todo("§14", "Credentials"),
-        todo("§15.2", "Third-party auditing"),
+        verified(
+            "§15.2",
+            "AuditorUpdate, and the auditor's checks on one log entry",
+            "kt-wire::audit, kt-tree::audit",
+            &["auditor-update.json"],
+        ),
+        verified(
+            "§15.2, §3.3",
+            "Prefix tree root before and after an audited update",
+            "kt-tree::prefix",
+            &["prefix-mutation.json", "auditor-update.json"],
+        ),
+        todo(
+            "§15.2 steps 5, 7",
+            "Removal eligibility from distinguished entries, and the log tree root an \
+             AuditorTreeHead signs",
+        ),
         todo("live wire", "HTTP interop against a running Go peer"),
     ]
 }

@@ -32,11 +32,15 @@
 //!
 //! The trees themselves are still to come; the crate is `no_std` because none of
 //! this needs an operating system.
+//!
+//! [`audit`] sits a level above the trees: it is the §15.2 third-party auditor,
+//! which checks that one new log entry follows from the last one it accepted.
 
 #![no_std]
 
 extern crate alloc;
 
+pub mod audit;
 pub mod log;
 
 pub mod prefix;

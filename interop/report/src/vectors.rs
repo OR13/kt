@@ -256,6 +256,88 @@ pub struct PrefixTreeExpect {
     pub commitments: Vec<String>,
 }
 
+/// `prefix-mutation.json` input (§15.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MutationInput {
+    /// Entries the tree holds before the update, in insertion order.
+    pub entries: Vec<PrefixEntryInput>,
+    /// Leaves the update adds.
+    pub add: Vec<PrefixEntryInput>,
+    /// Leaves the update removes.
+    pub remove: Vec<PrefixEntryInput>,
+    /// Set where a removal empties a slot whose sibling is a bare copath hash, so
+    /// §3.3's collapse rests on a node type the proof does not reveal.
+    #[serde(default)]
+    pub sibling_uncovered: bool,
+}
+
+/// `prefix-mutation.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MutationExpect {
+    /// Root of the peer's own tree before the update, hex.
+    pub before: String,
+    /// Root of the peer's own tree after the update, hex.
+    pub after: String,
+    /// The wire-encoded batch `PrefixProof`, hex.
+    pub proof: String,
+    /// One result per key, additions then removals.
+    pub results: Vec<PrefixResultExpect>,
+    /// Copath values, hex.
+    pub elements: Vec<String>,
+    /// What the peer's own verifier reconstructs for the "before" root, hex; absent
+    /// where it declined the update.
+    #[serde(default)]
+    pub peer_before: Option<String>,
+    /// What the peer's own verifier reconstructs for the "after" root, hex; absent
+    /// where it declined the update.
+    #[serde(default)]
+    pub peer_after: Option<String>,
+    /// Why the peer declined, where it did.
+    #[serde(default)]
+    pub peer_error: Option<String>,
+}
+
+/// `auditor-update.json` input (§15.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditorInput {
+    /// Entries the previous log entry's prefix tree holds.
+    pub entries: Vec<PrefixEntryInput>,
+    /// Timestamp of the previous log entry.
+    pub previous_timestamp: u64,
+    /// Timestamp the update carries.
+    pub timestamp: u64,
+    /// Leaves the update adds.
+    pub added: Vec<PrefixEntryInput>,
+    /// Leaves the update removes.
+    pub removed: Vec<PrefixEntryInput>,
+    /// The prefix tree root the auditor holds, hex.
+    pub prefix_root: String,
+    /// Set where the update is the first the auditor has ever seen, so there is no
+    /// previous state to check against.
+    #[serde(default)]
+    pub first_entry: bool,
+}
+
+/// `auditor-update.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditorExpect {
+    /// The wire-encoded `AuditorUpdate`, hex.
+    pub encoding: String,
+    /// `"accepted"` or `"rejected"`.
+    pub verdict: String,
+    /// How the peer worded its refusal, where it refused.
+    #[serde(default)]
+    pub peer_detail: Option<String>,
+    /// Set where the peer's verdict rests on §15.2 step 5, which this implementation
+    /// does not check.
+    #[serde(default)]
+    pub peer_step_5: bool,
+}
+
 /// One `PrefixSearchResult` (§12.2).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
