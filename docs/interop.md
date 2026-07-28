@@ -89,16 +89,16 @@ disagrees:
 |---|---|---|---|---|
 | 1 | Commitment (§11.6) | `opening`, `label`, `version`, `update` → `commitment` | Pure HMAC-SHA256 over a `CommitmentValue` struct; no tree state. Doubles as the first `kt-wire` encoding test. | **agrees** |
 | 2 | Wire codec (§2.1, §11) | struct → hex bytes, both directions | Everything downstream is defined over these bytes. Include the optional-value and variable-length-vector edge cases. | **agrees** for `CommitmentValue`/`UpdateValue`; other structs pending |
-| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. | todo — next |
+| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. | **agrees** for Ed25519, against RFC 9381 *and* katie; P-256 todo |
 | 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | **agrees**, both directions |
 | 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | **agrees**, both directions |
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
 
-Steps 1, 2, 4, 5, and 6 are done. `commitment.json`, `ibst.json`,
-`binary-ladder.json`, `log-tree.json`, and `prefix-tree.json` all pass from the
-Rust side — 3540 checks — and `from-kt.json` runs the other way: 201 proofs built
+Steps 1 through 6 are done. `commitment.json`, `ibst.json`,
+`binary-ladder.json`, `vrf.json`, `log-tree.json`, and `prefix-tree.json` all pass
+from the Rust side — 3592 checks — and `from-kt.json` runs the other way: 201 proofs built
 by the Rust side, 101 of which katie must accept and 100 of which it must reject.
 "Agrees" here means a committed vector asserts it, not that the two
 implementations were eyeballed.
@@ -110,6 +110,21 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### A third kind of oracle: the specification itself
+
+The VRF is the first primitive where the *spec* ships test vectors. RFC 9381
+Appendix B gives three ECVRF-EDWARDS25519-SHA512-TAI examples, and
+`kt-crypto::vrf` runs them directly, so the ECVRF core is pinned against the
+standard rather than against another implementation. That is strictly better than a
+differential test: passing means this is ECVRF, not merely that two programs agree.
+
+`vrf.json` then covers what RFC 9381 does not, which is the whole KT wrapping:
+`alpha_string` is the presentation-language encoding of a `VrfInput` (§11.7), and
+the 64-byte `beta_string` is truncated to `VRF.Nh = 32` (§17.1). Two implementations
+can both pass Appendix B and still not interoperate if they disagree about either.
+Worth remembering when the next primitive with an RFC behind it comes along: use the
+RFC's vectors for the primitive and the peer's for the protocol's use of it.
 
 ### Findings from steps 1, 2, and 6
 

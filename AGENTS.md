@@ -63,7 +63,7 @@ Dependency direction is strictly bottom-up; `kt-wire` depends on no other in-tre
 
 ## Current state
 
-`docs/interop.md` Tier 1 steps 1, 2, 4, 5, and 6 are done and pinned against the
+`docs/interop.md` Tier 1 steps 1 through 6 are done and pinned against the
 Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 §11.6 commitment, the implicit binary search tree (§4.1), the binary ladders
 (§5), the log tree with its §12.1 batch proofs, and the prefix tree with its
@@ -71,10 +71,10 @@ Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 `from-kt.json` goes the other way: proofs we build, verified by katie via
 `interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
 
-`kt-tree::combined`, `kt-crypto::vrf`, `kt-crypto::signature`, and all of
-`kt-client` are still stubs. Next is the VRF (§11.7) — the last primitive before
-the combined tree, and the one that needs curve dependencies; RFC 9381 ships its
-own test vectors, which is a third oracle independent of any implementation.
+`kt-tree::combined`, `kt-crypto::signature`, and all of `kt-client` are still
+stubs, as is `ECVRF-P256-SHA256-TAI` for the P-256 suite. Next is the combined
+tree (§3.4, §12.3) and the tree head signatures (§11.2–§11.4), which together are
+the first point where a `FullTreeHead` can be verified end to end.
 
 Verified facts worth not rediscovering:
 
@@ -104,4 +104,14 @@ Verified facts worth not rediscovering:
   sibling that happens not to exist consumes one listed as all-zero.
 - `upstream/keytrans-verification` has no licence file, so it cannot be linked as
   an oracle — see `docs/licensing.md`. Its Gobra invariants may be restated as
-  property tests in your own words.
+  property tests in your own words. A licence request is open upstream:
+  felixlinker/keytrans-verification#32.
+- The VRF has two hash functions in play and they are different parameters: the
+  cipher suite's hash is SHA-256, the ECVRF ciphersuite's is SHA-512. Also, ECVRF's
+  `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike
+  every other integer in this protocol. RFC 9381's Appendix B vectors are in
+  `kt-crypto::vrf`'s tests and are what adjudicate both.
+- Curve arithmetic trips `clippy::arithmetic_side_effects`, which cannot tell an
+  operator overload on a group element from a machine integer. The allow is scoped
+  to the two functions that do group operations, with the reason spelled out — do
+  not widen it to the module.

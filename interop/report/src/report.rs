@@ -362,6 +362,12 @@ pub fn coverage_table() -> Vec<Area> {
             "binary-ladder.json",
         ),
         verified(
+            "§11.7",
+            "VRF: ECVRF-EDWARDS25519-SHA512-TAI",
+            "kt-crypto::vrf",
+            "vrf.json",
+        ),
+        verified(
             "§3.2, §11.8, §12.1",
             "Log tree: root, batch inclusion and consistency proofs",
             "kt-tree::log",
@@ -394,7 +400,13 @@ pub fn coverage_table() -> Vec<Area> {
             coverage: Coverage::ImplementedUnverified,
             evidence: None,
         },
-        todo("§11.7", "VRF (ECVRF, both suites)"),
+        Area {
+            section: "§11.7".to_owned(),
+            name: "VRF: ECVRF-P256-SHA256-TAI".to_owned(),
+            module: None,
+            coverage: Coverage::NotImplemented,
+            evidence: None,
+        },
         todo("§3.4, §12.3", "Combined tree and CombinedTreeProof"),
         todo(
             "§11.2–§11.4",

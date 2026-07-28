@@ -77,6 +77,7 @@ func main() {
 		{"commitment.json", commitmentVectors},
 		{"ibst.json", ibstVectors},
 		{"binary-ladder.json", ladderVectors},
+		{"vrf.json", vrfVectors},
 		{"log-tree.json", logTreeVectors},
 		{"prefix-tree.json", prefixTreeVectors},
 	}

@@ -115,6 +115,7 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 | Commitment, `HMAC(Kc, CommitmentValue)` (`kt-crypto::commitment`) | §11.6 | [`commitment.json`](interop/vectors/commitment.json) — 6 positive, 1 negative |
 | Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/ibst.json) — 38 log sizes |
 | Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/binary-ladder.json) — 76 cases |
+| VRF, ECVRF-EDWARDS25519-SHA512-TAI (`kt-crypto::vrf`) | §11.7 | [RFC 9381 App. B](https://www.rfc-editor.org/rfc/rfc9381.html) vectors **and** [`vrf.json`](interop/vectors/vrf.json) — 10 positive, 1 negative |
 | Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 
@@ -126,8 +127,17 @@ which must accept every honest one and reject every corrupted one. That directio
 what catches *over-acceptance*, and recomputing the peer's values cannot see it.
 CI regenerates everything and fails on any diff, so upstream drift is loud.
 
-Not implemented: the VRF (§11.7), the combined tree (§3.4, §12.3), signatures
-(§11.2–§11.4), and the client algorithms (§6–§10, §13).
+The VRF is worth a note: RFC 9381 ships its own test vectors, so the ECVRF core is
+pinned against the *specification* rather than against another implementation —
+the strongest oracle available. `vrf.json` then pins what RFC 9381 says nothing
+about, which is the KT wrapping: that `alpha_string` is the presentation-language
+encoding of a `VrfInput` (§11.7), and that the 64-byte output is truncated to 32
+(§17.1). Two conforming ECVRF implementations can still fail to interoperate on
+exactly those two decisions.
+
+Not implemented: `ECVRF-P256-SHA256-TAI` for the P-256 suite (the Ed25519 suite is
+the first target), the combined tree (§3.4, §12.3), signatures (§11.2–§11.4), and
+the client algorithms (§6–§10, §13).
 
 Interop work has already turned up two bugs in the Go peer and one gap in the
 draft — see the findings in [`docs/interop.md`](docs/interop.md).
