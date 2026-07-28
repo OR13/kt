@@ -76,6 +76,13 @@ Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 `from-kt.json` goes the other way: proofs we build, verified by katie via
 `interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
 
+When picking the next thing to pin: katie is the source of truth, so look for
+oracles it already exports rather than for the next draft section. `structs.Marshal`
+covers any §11/§13 structure; `tree/transparency/math` exports `UpdateView` (§4.2) and
+`InterpretSearchLadder` (§6.2), which are oracles for *inferences* and not just
+arithmetic; `tree/log` and `tree/prefix` build real trees over `db/memory`. What is
+left after that needs katie's client rather than its libraries.
+
 `kt-tree::combined` and all of `kt-client` are still stubs. Signatures (§11.2–§11.4)
 are done and pinned in all three deployment modes, so what remains before a
 `FullTreeHead` verifies against a real log is the combined tree (§3.4, §12.3) and

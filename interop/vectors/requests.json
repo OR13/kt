@@ -1,0 +1,309 @@
+{
+  "primitive": "requests",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.5, §13.1–§13.5",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "Request structures and response building blocks, each recorded as its encoded bytes. `kind` selects the structure. Several depend on context the bytes do not carry: a BinaryLadderStep's proof is VRF.Np = 80 bytes with no length prefix, and an UpdateInfo needs both Nc and the deployment mode. The response structures are not here because they embed a CombinedTreeProof, whose shape depends on the algorithm being executed.",
+  "cases": [
+    {
+      "name": "search-greatest-version-with-last",
+      "input": {
+        "kind": "search-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 50
+      },
+      "expect": {
+        "encoding": "01000000000000003211616c696365406578616d706c652e636f6d00"
+      }
+    },
+    {
+      "name": "search-greatest-version-first-time",
+      "input": {
+        "kind": "search-request",
+        "label": "616c696365406578616d706c652e636f6d"
+      },
+      "expect": {
+        "encoding": "0011616c696365406578616d706c652e636f6d00"
+      }
+    },
+    {
+      "name": "search-fixed-version",
+      "input": {
+        "kind": "search-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 50,
+        "version": 3
+      },
+      "expect": {
+        "encoding": "01000000000000003211616c696365406578616d706c652e636f6d0100000003"
+      }
+    },
+    {
+      "name": "search-fixed-version-zero",
+      "input": {
+        "kind": "search-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 1,
+        "version": 0
+      },
+      "expect": {
+        "encoding": "01000000000000000111616c696365406578616d706c652e636f6d0100000000"
+      }
+    },
+    {
+      "name": "search-fixed-version-max",
+      "input": {
+        "kind": "search-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 1,
+        "version": 4294967295
+      },
+      "expect": {
+        "encoding": "01000000000000000111616c696365406578616d706c652e636f6d01ffffffff"
+      }
+    },
+    {
+      "name": "binary-ladder-step-with-commitment",
+      "input": {
+        "commitment": "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "kind": "binary-ladder-step",
+        "proof": "f73cf4600d657de46b1c253865fb864c21c61d2f953e0de8783551a320a6ead8db24ada8c88dc61ef91918546bfbcf7a368978fa3fd0be323df12dd9e33158b6030f85a1626f67b9ce76824925638f00"
+      },
+      "expect": {
+        "encoding": "f73cf4600d657de46b1c253865fb864c21c61d2f953e0de8783551a320a6ead8db24ada8c88dc61ef91918546bfbcf7a368978fa3fd0be323df12dd9e33158b6030f85a1626f67b9ce76824925638f0001c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+      }
+    },
+    {
+      "name": "binary-ladder-step-without-commitment",
+      "input": {
+        "kind": "binary-ladder-step",
+        "proof": "f73cf4600d657de46b1c253865fb864c21c61d2f953e0de8783551a320a6ead8db24ada8c88dc61ef91918546bfbcf7a368978fa3fd0be323df12dd9e33158b6030f85a1626f67b9ce76824925638f00"
+      },
+      "expect": {
+        "encoding": "f73cf4600d657de46b1c253865fb864c21c61d2f953e0de8783551a320a6ead8db24ada8c88dc61ef91918546bfbcf7a368978fa3fd0be323df12dd9e33158b6030f85a1626f67b9ce76824925638f0000"
+      }
+    },
+    {
+      "name": "monitor-map-entry",
+      "input": {
+        "kind": "monitor-map-entry",
+        "position": 72623859790382856,
+        "version": 9
+      },
+      "expect": {
+        "encoding": "010203040506070800000009"
+      }
+    },
+    {
+      "name": "contact-monitor-three-entries",
+      "input": {
+        "entries": [
+          {
+            "position": 1,
+            "version": 1
+          },
+          {
+            "position": 5,
+            "version": 2
+          },
+          {
+            "position": 9,
+            "version": 3
+          }
+        ],
+        "kind": "contact-monitor-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 10
+      },
+      "expect": {
+        "encoding": "01000000000000000a11616c696365406578616d706c652e636f6d03000000000000000100000001000000000000000500000002000000000000000900000003"
+      }
+    },
+    {
+      "name": "contact-monitor-no-entries",
+      "input": {
+        "entries": [],
+        "kind": "contact-monitor-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 10
+      },
+      "expect": {
+        "encoding": "01000000000000000a11616c696365406578616d706c652e636f6d00"
+      }
+    },
+    {
+      "name": "contact-monitor-first-time",
+      "input": {
+        "entries": [
+          {
+            "position": 1,
+            "version": 1
+          },
+          {
+            "position": 5,
+            "version": 2
+          },
+          {
+            "position": 9,
+            "version": 3
+          }
+        ],
+        "kind": "contact-monitor-request",
+        "label": "616c696365406578616d706c652e636f6d"
+      },
+      "expect": {
+        "encoding": "0011616c696365406578616d706c652e636f6d03000000000000000100000001000000000000000500000002000000000000000900000003"
+      }
+    },
+    {
+      "name": "owner-init",
+      "input": {
+        "kind": "owner-init-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 64,
+        "start": 31
+      },
+      "expect": {
+        "encoding": "01000000000000004011616c696365406578616d706c652e636f6d000000000000001f"
+      }
+    },
+    {
+      "name": "owner-init-first-time",
+      "input": {
+        "kind": "owner-init-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "start": 0
+      },
+      "expect": {
+        "encoding": "0011616c696365406578616d706c652e636f6d0000000000000000"
+      }
+    },
+    {
+      "name": "owner-monitor-with-greatest-version",
+      "input": {
+        "entries": [
+          {
+            "position": 1,
+            "version": 1
+          }
+        ],
+        "greatest_version": 5,
+        "kind": "owner-monitor-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 64,
+        "start": 31
+      },
+      "expect": {
+        "encoding": "01000000000000004011616c696365406578616d706c652e636f6d01000000000000000100000001000000000000001f0100000005"
+      }
+    },
+    {
+      "name": "owner-monitor-without-greatest-version",
+      "input": {
+        "entries": [
+          {
+            "position": 1,
+            "version": 1
+          }
+        ],
+        "kind": "owner-monitor-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 64,
+        "start": 31
+      },
+      "expect": {
+        "encoding": "01000000000000004011616c696365406578616d706c652e636f6d01000000000000000100000001000000000000001f00"
+      }
+    },
+    {
+      "name": "label-value",
+      "input": {
+        "kind": "label-value",
+        "value": "6b65792d6d6174657269616c2d31"
+      },
+      "expect": {
+        "encoding": "0000000e6b65792d6d6174657269616c2d31"
+      }
+    },
+    {
+      "name": "label-value-empty",
+      "input": {
+        "kind": "label-value",
+        "value": ""
+      },
+      "expect": {
+        "encoding": "00000000"
+      }
+    },
+    {
+      "name": "update-info-contact-monitoring",
+      "input": {
+        "kind": "update-info",
+        "mode": 1,
+        "opening": "101112131415161718191a1b1c1d1e1f"
+      },
+      "expect": {
+        "encoding": "101112131415161718191a1b1c1d1e1f"
+      }
+    },
+    {
+      "name": "update-two-values",
+      "input": {
+        "greatest_version": 2,
+        "kind": "update-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 8,
+        "values": [
+          "6b65792d6d6174657269616c2d31",
+          "6b65792d6d6174657269616c2d32"
+        ]
+      },
+      "expect": {
+        "encoding": "01000000000000000811616c696365406578616d706c652e636f6d0100000002020000000e6b65792d6d6174657269616c2d310000000e6b65792d6d6174657269616c2d32"
+      }
+    },
+    {
+      "name": "update-no-values-asking-only",
+      "input": {
+        "greatest_version": 2,
+        "kind": "update-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 8,
+        "values": []
+      },
+      "expect": {
+        "encoding": "01000000000000000811616c696365406578616d706c652e636f6d010000000200"
+      }
+    },
+    {
+      "name": "update-first-version",
+      "input": {
+        "kind": "update-request",
+        "label": "616c696365406578616d706c652e636f6d",
+        "last": 8,
+        "values": [
+          "6b65792d6d6174657269616c2d31"
+        ]
+      },
+      "expect": {
+        "encoding": "01000000000000000811616c696365406578616d706c652e636f6d00010000000e6b65792d6d6174657269616c2d31"
+      }
+    },
+    {
+      "name": "update-tbs",
+      "input": {
+        "configuration": "0002020020e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb0020555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b38586090020fec1428673f6afe89264b3807344ae8b269d125a503855202687db5a7128579f0000000000002710000000000000271000000000240c840000",
+        "kind": "update-tbs",
+        "label": "616c696365406578616d706c652e636f6d",
+        "value": "6b65792d6d6174657269616c2d31",
+        "version": 4
+      },
+      "expect": {
+        "encoding": "0002020020e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb0020555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b38586090020fec1428673f6afe89264b3807344ae8b269d125a503855202687db5a7128579f0000000000002710000000000000271000000000240c84000011616c696365406578616d706c652e636f6d000000040000000e6b65792d6d6174657269616c2d31"
+      }
+    }
+  ]
+}

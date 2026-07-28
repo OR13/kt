@@ -395,6 +395,18 @@ pub fn coverage_table() -> Vec<Area> {
             &["log-tree.json", "tampered.json"],
         ),
         verified(
+            "§6.2",
+            "Search ladder interpretation: is the greatest version below, at, or above",
+            "kt-tree::ladder",
+            &["ladder-interpretation.json"],
+        ),
+        verified(
+            "§11.5, §13.1–§13.5",
+            "Request structures and response building blocks",
+            "kt-wire::requests",
+            &["requests.json"],
+        ),
+        verified(
             "§4.2",
             "Updating a view of the tree: which entries must be checked",
             "kt-tree::ibst",
