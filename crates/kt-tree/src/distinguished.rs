@@ -218,6 +218,137 @@ pub fn previous_rightmost(
         .rfind(|position| *position != last))
 }
 
+/// The rightmost distinguished entry, using only the timestamps along the frontier (§6.1).
+///
+/// [`rightmost`] runs §6.1's recursion, which visits every distinguished entry and so needs
+/// a timestamp for each. An auditor cannot supply that: it retains the frontier and nothing
+/// else. This reaches the same answer from the frontier alone, and the reason it can is a
+/// property of the recursion rather than a shortcut around it:
+///
+/// The set is **ancestor-closed** — `visit` reaches a node only from a distinguished parent,
+/// so every ancestor of a distinguished entry is distinguished. Therefore every distinguished
+/// entry greater than `x` lies in `x`'s right subtree, whose root is `x`'s right child: if
+/// any of them were distinguished, that child would be. So when the right child is not
+/// distinguished, `x` is the greatest, and otherwise the search continues there. The path
+/// that walk takes — the root, then right children — is exactly the frontier.
+///
+/// The brackets follow too. Going right inherits the right bracket unchanged all the way
+/// down, and the left bracket of each step is the previous node's timestamp, starting from
+/// §6.1's initial 0.
+///
+/// [`rightmost`] is the definition and this is the one an auditor can afford; a test asserts
+/// they agree across every size to 256 and a range of windows.
+///
+/// # Errors
+///
+/// As [`enumerate`], but asking only about frontier entries.
+pub fn rightmost_from_frontier(
+    size: u64,
+    window: u64,
+    timestamp: &impl Fn(u64) -> Option<u64>,
+) -> Result<Option<u64>> {
+    if size == 0 {
+        return Ok(None);
+    }
+    let last = size.saturating_sub(1);
+    let right = (last, lookup(timestamp, last)?);
+
+    // Only the root needs the initial left bracket of 0: from there on, each step's
+    // decision is whether the *right child* is distinguished, and that child's brackets are
+    // the current node's timestamp and the unchanged right bracket.
+    let mut current = ibst::root(size)?;
+    if !is_distinguished(window, (0, 0), right)? {
+        // The root is not distinguished, so by ancestor-closure nothing is.
+        return Ok(None);
+    }
+    loop {
+        let own = (current, lookup(timestamp, current)?);
+        let Ok(child) = ibst::right(current, size) else {
+            return Ok(Some(current));
+        };
+        if !is_distinguished(window, own, right)? {
+            return Ok(Some(current));
+        }
+        current = child;
+    }
+}
+
+/// [`previous_rightmost`], from the frontier of the *previous* tree plus the new entry.
+///
+/// This is the question §15.2 step 5 asks, and the shape of an auditor's state is why it
+/// needs its own function: the entries this consults are the frontier of the log as it was,
+/// which are exactly the entries an auditor retained, plus the one being added.
+///
+/// The derivation continues [`rightmost_from_frontier`]'s. If the greatest distinguished
+/// entry is not the log's last, it is also the greatest one left of the last. If it *is* the
+/// last, the answer is the greatest distinguished entry below it, and there are only two
+/// places to look: inside its left subtree, or at its parent. Its left subtree lies entirely
+/// between the parent and it — a frontier node's subtree starts just past its parent — so the
+/// subtree wins whenever anything in it is distinguished, which by ancestor-closure is
+/// exactly when its left child is. Otherwise the parent is the answer, and the parent is
+/// distinguished because ancestors always are.
+///
+/// # Errors
+///
+/// As [`enumerate`], but asking only about the retained frontier and the new entry.
+pub fn previous_rightmost_from_frontier(
+    size: u64,
+    window: u64,
+    timestamp: &impl Fn(u64) -> Option<u64>,
+) -> Result<Option<u64>> {
+    if size == 0 {
+        return Ok(None);
+    }
+    let last = size.saturating_sub(1);
+    let right = (last, lookup(timestamp, last)?);
+
+    // Walk the frontier, keeping the parent, so that the branch below has it to fall back on.
+    let mut current = ibst::root(size)?;
+    let mut parent: Option<(u64, u64)> = None;
+    if !is_distinguished(window, (0, 0), right)? {
+        return Ok(None);
+    }
+    let own = loop {
+        let own = (current, lookup(timestamp, current)?);
+        if current == last {
+            break own;
+        }
+        let Ok(child) = ibst::right(current, size) else {
+            // Not the last entry and no right child: `current` is the greatest, and it is
+            // already left of the last entry.
+            return Ok(Some(current));
+        };
+        if !is_distinguished(window, own, right)? {
+            return Ok(Some(current));
+        }
+        parent = Some(own);
+        current = child;
+    };
+
+    // The greatest is the last entry itself, so look below it.
+    if !ibst::is_leaf(last) {
+        let child = ibst::left(last)?;
+        let bracket = parent.unwrap_or((0, 0));
+        if is_distinguished(window, bracket, own)? {
+            // Its left subtree has distinguished entries; take the greatest, which is found
+            // by descending right while they stay distinguished. The right bracket inside
+            // this subtree is the last entry's own timestamp.
+            let mut cursor = child;
+            loop {
+                let Ok(next) = ibst::right(cursor, size) else {
+                    return Ok(Some(cursor));
+                };
+                let here = (cursor, lookup(timestamp, cursor)?);
+                if !is_distinguished(window, here, own)? {
+                    return Ok(Some(cursor));
+                }
+                cursor = next;
+            }
+        }
+    }
+    Ok(parent.map(|(position, _)| position))
+}
+
 /// The recent distinguished entries, right to left (§10.1).
 ///
 /// A user walking these gets common reference points with every other user, which is how a
@@ -441,6 +572,74 @@ mod tests {
             "adding one entry never created more than one distinguished entry, \
              so the distinction this function draws was never exercised"
         );
+    }
+
+    /// The frontier-only functions must agree with the definition everywhere, because an
+    /// auditor uses them to decide §15.2 step 5 and the definition is what the draft says.
+    /// Swept across every size to 256 and a spread of windows, in both timestamp shapes.
+    #[test]
+    fn the_frontier_walks_agree_with_the_definition() {
+        let step = 6_u64;
+        let bursty = |position: u64| {
+            if position < 40 {
+                position
+            } else {
+                40 + (position - 40) * 11 * step
+            }
+        };
+        for shape in 0..2 {
+            let at = move |position: u64| {
+                Some(if shape == 0 {
+                    position.saturating_mul(step)
+                } else {
+                    bursty(position)
+                })
+            };
+            for window in [0_u64, 1, step, 2 * step, 5 * step, 40 * step, u64::MAX] {
+                for size in 0..=256_u64 {
+                    assert_eq!(
+                        rightmost_from_frontier(size, window, &at).unwrap(),
+                        rightmost(size, window, &at).unwrap(),
+                        "rightmost: shape {shape}, window {window}, size {size}"
+                    );
+                    assert_eq!(
+                        previous_rightmost_from_frontier(size, window, &at).unwrap(),
+                        previous_rightmost(size, window, &at).unwrap(),
+                        "previous: shape {shape}, window {window}, size {size}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// And they must reach those answers from the frontier alone — the whole reason they
+    /// exist. Every position either function asks about has to be one an auditor retained:
+    /// the frontier of the log before the entry was added, plus the entry itself.
+    #[test]
+    fn the_frontier_walks_only_read_what_an_auditor_retains() {
+        let step = 6_u64;
+        for window in [1_u64, step, 4 * step, 40 * step] {
+            for size in 1..=256_u64 {
+                let retained: Vec<u64> = ibst::frontier(size.saturating_sub(1))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .chain(core::iter::once(size - 1))
+                    .collect();
+                let at = |position: u64| {
+                    retained
+                        .contains(&position)
+                        .then(|| position.saturating_mul(step))
+                };
+                assert!(
+                    rightmost_from_frontier(size, window, &at).is_ok(),
+                    "rightmost read outside the retained set at size {size}, window {window}"
+                );
+                assert!(
+                    previous_rightmost_from_frontier(size, window, &at).is_ok(),
+                    "previous read outside the retained set at size {size}, window {window}"
+                );
+            }
+        }
     }
 
     /// §10.1's walk visits distinguished entries right to left, and only distinguished

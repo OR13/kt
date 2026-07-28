@@ -1225,33 +1225,39 @@ fn auditor_suite(dir: &Path) -> Result<Suite, Error> {
         // make the check about English rather than about the protocol.
         let previous = (!case.input.first_entry)
             .then(|| {
-                // The auditor's log view is the one entry that produced the prefix root it
-                // holds — which is how the peer's own state was primed, so the step 7
-                // roots are comparable.
+                // The auditor's state as the peer's own auditor left it after priming:
+                // its log tree heads, the frontier timestamps that decide which entries are
+                // distinguished, and the step 5 record of insertions no distinguished entry
+                // has covered yet. Resuming from the peer's bookkeeping rather than
+                // reconstructing it is what makes the step 5 checks mean anything.
                 let prefix_root =
                     hash_field(FILE, name, "input.prefix_root", &case.input.prefix_root)?;
-                let mut view = log::Retained {
-                    size: 0,
-                    full_subtrees: Vec::new(),
-                };
-                let computed = log::leaf_value(
-                    suite,
-                    &kt_wire::structs::LogEntry {
-                        timestamp: case.input.previous_timestamp,
-                        prefix_tree: prefix_root,
-                    },
-                )
-                .map_err(|err| alloc_string(&err))
-                .and_then(|leaf| view.append(suite, leaf).map_err(|err| alloc_string(&err)));
-                computed.map_err(|detail| Error::Computation {
-                    file: FILE.to_owned(),
-                    case: name.to_owned(),
-                    detail,
-                })?;
+                let mut full_subtrees = Vec::new();
+                for head in &case.input.log_full_subtrees {
+                    full_subtrees.push(hash_field(FILE, name, "input.log_full_subtrees[]", head)?);
+                }
+                let mut inserted = Vec::new();
+                for entry in &case.input.inserted {
+                    inserted.push(audit::Inserted {
+                        position: entry.position,
+                        vrf_output: hash_field(
+                            FILE,
+                            name,
+                            "input.inserted[].vrf_output",
+                            &entry.vrf_output,
+                        )?,
+                    });
+                }
+
                 Ok::<_, Error>(audit::AuditorState {
                     timestamp: case.input.previous_timestamp,
                     prefix_root,
-                    log: view,
+                    log: log::Retained {
+                        size: case.input.log_size,
+                        full_subtrees,
+                    },
+                    timestamps: case.input.frontier_timestamps.clone(),
+                    inserted,
                 })
             })
             .transpose()?;
@@ -1259,18 +1265,12 @@ fn auditor_suite(dir: &Path) -> Result<Suite, Error> {
             .as_ref()
             .map_err(|err| format!("decoding failed: {err}"))
             .and_then(|update| {
-                audit::verify_update(suite, update, previous.as_ref())
+                audit::verify_update(suite, case.input.window, update, previous.as_ref())
                     .map_err(|err| format!("rejected: {err}"))
             });
         let mut what = "the auditor's verdict (§15.2 steps 1–7)".to_owned();
         if let Some(detail) = &case.expect.peer_detail {
             what.push_str(&format!(" — the peer's reason: {detail}"));
-        }
-        if case.expect.peer_step_5 {
-            what.push_str(
-                " — the peer also checks step 5's distinguished-entry eligibility, which \
-                 this implementation does not",
-            );
         }
         checks.push(Check::new(
             what,

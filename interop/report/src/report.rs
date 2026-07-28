@@ -476,7 +476,7 @@ pub fn coverage_table() -> Vec<Area> {
         todo("§14", "Credentials"),
         verified(
             "§15.2",
-            "AuditorUpdate, and the auditor's checks on one log entry",
+            "AuditorUpdate, and all of the auditor's checks on one log entry",
             "kt-wire::audit, kt-tree::audit",
             &["auditor-update.json"],
         ),
@@ -507,11 +507,6 @@ pub fn coverage_table() -> Vec<Area> {
             "Prefix tree root before and after an audited update",
             "kt-tree::prefix",
             &["prefix-mutation.json", "auditor-update.json"],
-        ),
-        todo(
-            "§15.2 step 5",
-            "Removal eligibility: that a removed leaf was published in a distinguished \
-             log entry first",
         ),
         todo("live wire", "HTTP interop against a running Go peer"),
     ]

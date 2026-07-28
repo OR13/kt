@@ -357,8 +357,19 @@ pub struct AppendExpect {
 pub struct AuditorInput {
     /// Entries the previous log entry's prefix tree holds.
     pub entries: Vec<PrefixEntryInput>,
+    /// The Reasonable Monitoring Window, which §15.2 step 5 needs (§6.1).
+    pub window: u64,
     /// Timestamp of the previous log entry.
     pub previous_timestamp: u64,
+    /// What the peer's auditor was still tracking for step 5 after priming: insertions no
+    /// distinguished log entry has covered yet.
+    pub inserted: Vec<InsertedInput>,
+    /// The peer auditor's log tree size before this update.
+    pub log_size: u64,
+    /// Its retained full subtree heads, hex.
+    pub log_full_subtrees: Vec<String>,
+    /// Its retained frontier timestamps, in frontier order.
+    pub frontier_timestamps: Vec<u64>,
     /// Timestamp the update carries.
     pub timestamp: u64,
     /// Leaves the update adds.
@@ -373,6 +384,16 @@ pub struct AuditorInput {
     pub first_entry: bool,
 }
 
+/// One recorded insertion (§15.2 step 5).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InsertedInput {
+    /// The log entry that inserted it.
+    pub position: u64,
+    /// The search key inserted, hex.
+    pub vrf_output: String,
+}
+
 /// `auditor-update.json` expectations.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -384,10 +405,6 @@ pub struct AuditorExpect {
     /// How the peer worded its refusal, where it refused.
     #[serde(default)]
     pub peer_detail: Option<String>,
-    /// Set where the peer's verdict rests on §15.2 step 5, which this implementation
-    /// does not check.
-    #[serde(default)]
-    pub peer_step_5: bool,
     /// The log tree size after the update, where it was accepted.
     #[serde(default)]
     pub tree_size: Option<u64>,
