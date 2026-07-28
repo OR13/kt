@@ -1,0 +1,117 @@
+{
+  "primitive": "commitment",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.6",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "commitment = HMAC-SHA256(Kc, opening || label || version || update). commitment_value is the serialized CommitmentValue per the draft, i.e. opening followed by the label/version/update encoding; the Rust wire codec should reproduce it byte for byte.",
+  "cases": [
+    {
+      "name": "empty-label-empty-value",
+      "input": {
+        "label": "",
+        "opening": "000102030405060708090a0b0c0d0e0f",
+        "update": {
+          "value": ""
+        },
+        "version": 0
+      },
+      "expect": {
+        "commitment": "1ca642a2380c1d7b8b9904be90f31b4f356390a133ae079d77a4b351bc20971e",
+        "commitment_value": "000102030405060708090a0b0c0d0e0f000000000000000000"
+      }
+    },
+    {
+      "name": "simple",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d31"
+        },
+        "version": 0
+      },
+      "expect": {
+        "commitment": "d59be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "commitment_value": "101112131415161718191a1b1c1d1e1f11616c696365406578616d706c652e636f6d000000000000000e6b65792d6d6174657269616c2d31"
+      }
+    },
+    {
+      "name": "version-one",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d32"
+        },
+        "version": 1
+      },
+      "expect": {
+        "commitment": "480bd9422e842df3ca3ff274488f393d4105a89da508df92b5a665a8d618f878",
+        "commitment_value": "101112131415161718191a1b1c1d1e1f11616c696365406578616d706c652e636f6d000000010000000e6b65792d6d6174657269616c2d32"
+      }
+    },
+    {
+      "name": "version-max",
+      "input": {
+        "label": "626f62406578616d706c652e636f6d",
+        "opening": "202122232425262728292a2b2c2d2e2f",
+        "update": {
+          "value": "6b"
+        },
+        "version": 4294967295
+      },
+      "expect": {
+        "commitment": "be1782f33de56f269ee994fc11171f309ae1d934b93297c496458225a38cd7bd",
+        "commitment_value": "202122232425262728292a2b2c2d2e2f0f626f62406578616d706c652e636f6dffffffff000000016b"
+      }
+    },
+    {
+      "name": "label-max-len",
+      "input": {
+        "label": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+        "opening": "303132333435363738393a3b3c3d3e3f",
+        "update": {
+          "value": "76"
+        },
+        "version": 7
+      },
+      "expect": {
+        "commitment": "a48889712624b1746c18d783407878b1d8637b4803748b99c6d5e2ddd9c2cc55",
+        "commitment_value": "303132333435363738393a3b3c3d3e3fff616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161000000070000000176"
+      }
+    },
+    {
+      "name": "value-with-nulls",
+      "input": {
+        "label": "6361726f6c",
+        "opening": "404142434445464748494a4b4c4d4e4f",
+        "update": {
+          "value": "000100ff"
+        },
+        "version": 3
+      },
+      "expect": {
+        "commitment": "69ff8afbb9edd644af83a239bdb71a98557ce4b8651fb764e638ddb415078d39",
+        "commitment_value": "404142434445464748494a4b4c4d4e4f056361726f6c0000000300000004000100ff"
+      }
+    },
+    {
+      "name": "wrong-opening-does-not-verify",
+      "input": {
+        "commitment": "d59be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "111112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d31"
+        },
+        "version": 0
+      },
+      "expect": {
+        "error": true
+      }
+    }
+  ]
+}

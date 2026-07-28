@@ -1,0 +1,27 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/OR13/kt"
+authors = ["Orie Steele <orie@or13.io>"]
+
+[workspace.dependencies]
+kt-wire = { path = "crates/kt-wire", version = "0.0.0" }
+kt-crypto = { path = "crates/kt-crypto", version = "0.0.0" }
+kt-tree = { path = "crates/kt-tree", version = "0.0.0" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"

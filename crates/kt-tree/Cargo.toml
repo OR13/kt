@@ -1,0 +1,16 @@
+[package]
+name = "kt-tree"
+description = "Log, prefix, and combined trees for IETF Key Transparency"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+kt-wire.workspace = true
+kt-crypto.workspace = true
+
+[lints]
+workspace = true

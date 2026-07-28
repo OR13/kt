@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  interop-vectors:
+    # Regenerate the committed vectors from the pinned Go peer. A diff means
+    # either an upstream bump changed behavior or someone hand-edited a vector —
+    # both should fail loudly rather than drift.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: interop/go/go.sum
+      - name: Go peer's own test suite
+        run: go test ./tree/... ./crypto/...
+        working-directory: upstream/katie
+      - run: go vet ./...
+        working-directory: interop/go
+      - name: Regenerate vectors
+        run: go run ./cmd/gen -out ../vectors
+        working-directory: interop/go
+      - name: Vectors must be reproducible
+        run: git diff --exit-code -- interop/vectors

@@ -1,0 +1,150 @@
+# Interop plan
+
+The point of this repository is not "a Rust KT implementation." It is "a Rust KT
+implementation that provably agrees with the Go ones, byte for byte." That
+requires a harness, and the harness constrains the design — so it is planned
+first.
+
+## What we are interoperating with
+
+**`upstream/katie`** ([Bren2010/katie](https://github.com/Bren2010/katie), pinned at
+`00da5254`) is the primary peer. Its library layers map cleanly onto ours:
+
+| katie package | our crate | draft |
+|---|---|---|
+| `crypto/suites` | `kt-crypto::suite` | §11.1, §17.1 |
+| `crypto/commitments` | `kt-crypto::commitment` | §11.6 |
+| `crypto/vrf/{edwards25519,p256}` | `kt-crypto::vrf` | §11.7 |
+| `tree/log`, `tree/log/math` | `kt-tree::log` | §3.2, §11.8, §12.1 |
+| `tree/prefix` | `kt-tree::prefix` | §3.3, §11.9, §12.2 |
+| `tree/transparency/math` (ladders, tracker) | `kt-tree::ladder`, `kt-tree::ibst` | §4.1, §5, App. A/B |
+| `tree/transparency/structs` | `kt-wire` | §2.1, §11-§13 |
+| `tree/transparency/algorithms` | `kt-client` | §6-§10, §13 |
+| `tree/transparency/auditor` | `kt-client::auditor` | §15.2 |
+
+**`upstream/keytrans-verification`** ([felixlinker](https://github.com/felixlinker/keytrans-verification),
+pinned at `a2c77bff`) is a second, independent Go client whose `pkg/` mirrors the
+same primitives and is **Gobra-verified**. Two independent Go implementations to
+agree with is strictly better than one: where katie and keytrans-verification
+disagree, the draft is ambiguous and that is worth an upstream issue.
+
+Its Gobra specifications are also a source of properties to test, not just
+values: preconditions and postconditions on `pkg/trees`, `pkg/proofs`,
+`pkg/search` restate the draft's invariants precisely. Restate them as Rust
+`proptest` properties (in your own words — see [`licensing.md`](licensing.md)).
+
+## Known blocker: katie has no runnable server
+
+Every file in `upstream/katie/cmd/katie-server/` carries `//go:build ignore`, and
+its HTTP dependencies (`gorilla/mux`, Prometheus) are absent from `go.mod`. The
+library builds and its tests pass; **the server does not exist as a buildable
+artifact.** Verified at pin `00da5254`:
+
+```sh
+go -C upstream/katie build ./...          # succeeds — because cmd/ is all ignored
+go -C upstream/katie test ./tree/... ./crypto/...   # all pass
+```
+
+So live-wire interop over `/v1/meta`, `/v1/consistency/{older}/{newer}`,
+`/v1/account/{account}` (the routes `main.go` registers) is **not** available
+out of the box. Consequences:
+
+- Tier 1 (vectors, below) is the only interop path that works today. Build it first.
+- Tier 2 requires either reviving the server behind a local build tag, or writing
+  our own thin Go HTTP shim over `tree/transparency` + `wire.Interface`. Prefer
+  the shim: it does not require patching a submodule, and `wire.Interface` is
+  explicitly documented upstream as the wire-compatibility seam.
+- Worth an upstream question either way — the server may simply be mid-refactor.
+
+## Tier 1 — differential test vectors
+
+Data, not linkage. A Go generator emits JSON; Rust tests assert equality; then the
+directions reverse so neither implementation is permanently the oracle.
+
+```text
+interop/
+  go/            separate Go module (AGPL-3.0, links katie) — emits vectors
+  vectors/       committed JSON, each file stamped with the upstream SHA
+  README.md      the vector format contract
+```
+
+Both directions matter:
+
+1. **Go → Rust.** Go generates inputs + outputs; Rust recomputes and asserts
+   byte equality. Catches our misreadings of the draft.
+2. **Rust → Go.** Rust generates; the Go harness verifies. Catches cases where we
+   are self-consistently wrong, and cases where we accept proofs Go rejects —
+   the security-relevant direction, since a client that over-accepts is broken in
+   a way that equality-of-happy-path never reveals.
+
+Negative vectors are as important as positive ones: a tampered proof that Go
+rejects must be rejected by Rust too, and vice versa.
+
+### Order of attack
+
+Bottom-up, because every later layer's vectors are meaningless if the layer below
+disagrees:
+
+| # | Primitive | Vector content | Why first |
+|---|---|---|---|
+| 1 | Commitment (§11.6) | `opening`, `label`, `version`, `update` → `commitment` | Pure HMAC-SHA256 over a `CommitmentValue` struct; no tree state. Doubles as the first `kt-wire` encoding test. |
+| 2 | Wire codec (§2.1, §11) | struct → hex bytes, both directions | Everything downstream is defined over these bytes. Include the optional-value and variable-length-vector edge cases. |
+| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. |
+| 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. |
+| 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. |
+| 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. |
+| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. |
+| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. |
+
+Steps 1, 2, and 6 are self-contained enough to be done in any order and are the
+right first commits.
+
+### Vector format contract
+
+One JSON file per primitive. Every file records provenance so a vector can be
+regenerated and a mismatch can be blamed:
+
+```json
+{
+  "primitive": "commitment",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.6",
+  "generator": { "impl": "katie", "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc" },
+  "cipher_suite": 2,
+  "cases": [
+    {
+      "name": "empty-label",
+      "input": { "opening": "hex…", "label": "hex…", "version": 0, "update": "hex…" },
+      "expect": { "commitment": "hex…" }
+    }
+  ]
+}
+```
+
+Rules: all byte strings hex-encoded lowercase; `cipher_suite` is the IANA
+`CipherSuite` value (`1` = P-256, `2` = Ed25519); every case has a stable `name`
+usable as a test identifier; negative cases carry `"expect": {"error": true}`
+rather than an error string, since error text is implementation-specific.
+
+## Tier 2 — live wire
+
+Once Tier 1 is green through step 7:
+
+1. Stand up a Go HTTP shim over katie's `wire.Interface` (see blocker above).
+2. Drive it with `kt-client`: search, contact-monitor, owner-init, owner-monitor,
+   update. Assert the Rust client verifies every proof.
+3. Reverse it: serve from Rust, drive with katie's Go client
+   (`tree/transparency/client.go`) and with `keytrans-verification`'s client.
+4. Fork detection (§10.2, and §14.2.1 for provisional credentials) is the interesting adversarial case — have the
+   Rust server deliberately equivocate and confirm the Go clients catch it.
+
+CI runs Tier 1 on every push (Go and Rust toolchains, vectors regenerated and
+diffed so a silent upstream drift fails loudly). Tier 2 runs on demand until it
+is stable.
+
+## Reporting upstream
+
+Interop work finds spec bugs; that is the most valuable output here. Draft issues
+go to [ietf-wg-keytrans/draft-protocol](https://github.com/ietf-wg-keytrans/draft-protocol/issues).
+Implementation disagreements go to the respective repository. Record every
+resolved ambiguity as a comment in the Rust code citing the issue, so the next
+reader does not re-derive it.

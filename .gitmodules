@@ -1,0 +1,12 @@
+[submodule "upstream/draft-protocol"]
+	path = upstream/draft-protocol
+	url = https://github.com/ietf-wg-keytrans/draft-protocol.git
+[submodule "upstream/draft-arch"]
+	path = upstream/draft-arch
+	url = https://github.com/ietf-wg-keytrans/draft-arch.git
+[submodule "upstream/katie"]
+	path = upstream/katie
+	url = https://github.com/Bren2010/katie.git
+[submodule "upstream/keytrans-verification"]
+	path = upstream/keytrans-verification
+	url = https://github.com/felixlinker/keytrans-verification.git

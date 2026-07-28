@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# Go interop harness build output
+/interop/go/bin/
+/interop/go/*.test
+
+# local scratch — never committed
+/.scratch/
