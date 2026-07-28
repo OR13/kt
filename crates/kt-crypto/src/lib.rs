@@ -16,25 +16,27 @@
 //!
 //! `KT_128_SHA256_Ed25519` is implemented first: both Go peers support it and it
 //! has fewer point-encoding traps than P-256.
+//!
+//! # Status
+//!
+//! [`commitment`] (§11.6) is implemented and pinned against the Go peer by
+//! `interop/vectors/commitment.json`. [`vrf`] and [`signature`] are not
+//! implemented yet.
+//!
+//! `UpdateValue` (§11.5) lives in `kt-wire` with the other protocol structs;
+//! nothing about it is cryptographic beyond being the thing a commitment
+//! commits to.
 
-/// Cipher suite definitions and the primitives they select
-/// (`draft-ietf-keytrans-protocol-05` §11.1, §17.1).
-pub mod suite {
-    /// Size in bytes of a commitment opening (`Nc`) for both registered suites.
-    pub const NC: usize = 16;
+#![no_std]
 
-    /// The fixed commitment key `Kc` shared by both registered suites (§17.1).
-    pub const KC: [u8; NC] = [
-        0xd8, 0x21, 0xf8, 0x79, 0x0d, 0x97, 0x70, 0x97, 0x96, 0xb4, 0xd7, 0x90, 0x33, 0x57, 0xc3,
-        0xf5,
-    ];
-}
+extern crate alloc;
 
-/// Commitments — `HMAC(Kc, CommitmentValue)`
-/// (`draft-ietf-keytrans-protocol-05` §11.6).
-pub mod commitment {
-    // TODO(interop tier 1, step 1): commit / verify over a wire CommitmentValue.
-}
+use core::fmt;
+
+use kt_wire::codec;
+
+pub mod commitment;
+pub mod suite;
 
 /// Verifiable Random Function over `VrfInput{label, version}`
 /// (`draft-ietf-keytrans-protocol-05` §11.7).
@@ -48,7 +50,69 @@ pub mod signature {
     // TODO(interop tier 1, step 7).
 }
 
-/// Update value format (`draft-ietf-keytrans-protocol-05` §11.5).
-pub mod update_value {
-    // TODO(interop tier 1, step 1): needed by the commitment vectors.
+/// A cryptographic computation failed, or was asked to operate on ill-formed
+/// input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Error {
+    /// A value could not be encoded or decoded in the presentation language.
+    Wire(codec::Error),
+    /// A commitment opening was not `Nc` bytes (§11.6).
+    OpeningLength {
+        /// `Nc` for the suite in use.
+        expected: usize,
+        /// Length actually supplied.
+        actual: usize,
+    },
+    /// A commitment was not `Hash.Nh` bytes.
+    CommitmentLength {
+        /// `Hash.Nh` for the suite in use.
+        expected: usize,
+        /// Length actually supplied.
+        actual: usize,
+    },
+    /// A commitment did not open to the value it was checked against (§11.6).
+    ///
+    /// Carries no detail on purpose: which byte differed is not something a
+    /// verifier should hand back to whoever supplied the commitment.
+    CommitmentMismatch,
+    /// The suite's `Kc` was rejected as an HMAC key.
+    ///
+    /// Unreachable for the suites in §17.1 — HMAC accepts keys of any length —
+    /// and present so that no code path has to `unwrap`.
+    CommitmentKeyLength,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Wire(err) => write!(f, "wire encoding: {err}"),
+            Self::OpeningLength { expected, actual } => {
+                write!(
+                    f,
+                    "commitment opening must be {expected} bytes, got {actual}"
+                )
+            }
+            Self::CommitmentLength { expected, actual } => {
+                write!(f, "commitment must be {expected} bytes, got {actual}")
+            }
+            Self::CommitmentMismatch => f.write_str("commitment does not open to this value"),
+            Self::CommitmentKeyLength => f.write_str("cipher suite Kc rejected as an HMAC key"),
+        }
+    }
+}
+
+impl core::error::Error for Error {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Wire(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<codec::Error> for Error {
+    fn from(err: codec::Error) -> Self {
+        Self::Wire(err)
+    }
 }
