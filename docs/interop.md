@@ -93,13 +93,13 @@ disagrees:
 | 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | **agrees**, both directions |
 | 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | **agrees**, both directions |
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
-| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | signatures **agree** (§11.2–§11.4); combined tree todo |
-| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
-| 9a | Distinguished entries (§6.1) | size, window, timestamps → the distinguished set | Decides which entries every user must inspect; pure integer and timestamp math, so cheap and high-yield. | **agrees** across 42 shapes |
+| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | **agrees**: signatures and `FullTreeHead` bytes in all three modes; combined tree todo |
+| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | §6.1's distinguished entries **agree** across 42 shapes; the rest todo |
 | 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts, every encoding, and every log root; three divergences recorded, see below |
 
-Steps 1 through 6 are done, along with step 9 and the signature half of step 7.
-Fourteen vector files pass from the Rust side — 6255 checks across 660 cases — and
+Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
+step 8.
+Sixteen vector files pass from the Rust side — 6572 checks across 766 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
