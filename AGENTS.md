@@ -127,10 +127,14 @@ Verified facts worth not rediscovering:
   terminal node, so for `nonInclusionParent` it is the *absent child slot's* depth,
   one below the parent; and that slot consumes no proof element, while a copath
   sibling that happens not to exist consumes one listed as all-zero.
-- `upstream/keytrans-verification` has no licence file, so it cannot be linked as
-  an oracle — see `docs/licensing.md`. Its Gobra invariants may be restated as
-  property tests in your own words. A licence request is open upstream:
-  felixlinker/keytrans-verification#32.
+- `upstream/keytrans-verification` is not an oracle, and this is settled rather than
+  pending. Its author answered the licence request
+  (felixlinker/keytrans-verification#32): a permissive licence is not available
+  because the repository depends on AGPL katie, it uses katie for the VRF so it is
+  not independent, and its Gobra proofs are for memory safety — in his words they
+  "certainly don't prove anything about corresponding to the spec correctly". Read
+  it to see how a second author read an ambiguous passage (that is how `DRAFT-07`
+  was found); do not link, vendor, or treat its invariants as conformance evidence.
 - The VRF has two hash functions in play and they are different parameters: the
   cipher suite's hash is SHA-256, the ECVRF ciphersuite's is SHA-512. Also, ECVRF's
   `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike

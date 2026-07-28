@@ -17,7 +17,14 @@ their output bytes, file bugs against them — but do not translate them.
 |---|---|---|
 | `upstream/draft-protocol`, `upstream/draft-arch` | IETF Trust; code components under the [BSD license in the TLP](https://trustee.ietf.org/documents/trust-legal-provisions/) | Implement freely. Pseudocode and TLS-presentation-language structs from the drafts may be transcribed — that is what they are for. Quote prose sparingly and attribute it. |
 | `upstream/katie` | **AGPL-3.0** | Run it. Diff against its output. Read it to *understand* the spec. Do **not** copy code, and do **not** port a function line-by-line into Rust — a translation is a derivative work, and AGPL-3.0 would then apply to this whole repository. |
-| `upstream/keytrans-verification` | **no license file** — all rights reserved by default | Same as above, and stricter: absent a license there is no grant to copy at all. Read it for the Gobra invariants; restate those invariants in your own words as Rust test assertions. |
+| `upstream/keytrans-verification` | **no license file** — all rights reserved by default | Same as above, and stricter: absent a license there is no grant to copy at all. Read it to understand the protocol; do not link, vendor, or derive from it. |
+
+A permissive licence was requested for `keytrans-verification`
+([issue 32](https://github.com/felixlinker/keytrans-verification/issues/32)) and is
+not available: the repository depends on AGPL-licensed katie, so its author cannot
+relicense it permissively even though he would like to. The boundary here therefore
+stays where it is — read, do not link — and it is not a temporary state waiting on
+an answer.
 
 Submodules are references, not copies: this repository records a URL and a
 commit SHA, and ships none of that code. That is deliberate — a vendored

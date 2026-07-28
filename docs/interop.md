@@ -23,15 +23,28 @@ first.
 | `tree/transparency/auditor` | `kt-client::auditor` | §15.2 |
 
 **`upstream/keytrans-verification`** ([felixlinker](https://github.com/felixlinker/keytrans-verification),
-pinned at `a2c77bff`) is a second, independent Go client whose `pkg/` mirrors the
-same primitives and is **Gobra-verified**. Two independent Go implementations to
-agree with is strictly better than one: where katie and keytrans-verification
-disagree, the draft is ambiguous and that is worth an upstream issue.
+pinned at `a2c77bff`) is a second Go client whose `pkg/` covers some of the same
+primitives. It is **not** a second oracle, and the reasons come from its
+maintainer rather than from us — see
+[issue 32](https://github.com/felixlinker/keytrans-verification/issues/32):
 
-Its Gobra specifications are also a source of properties to test, not just
-values: preconditions and postconditions on `pkg/trees`, `pkg/proofs`,
-`pkg/search` restate the draft's invariants precisely. Restate them as Rust
-`proptest` properties (in your own words — see [`licensing.md`](licensing.md)).
+- It is not independent of katie. It uses katie for the VRF, so agreement there
+  is one implementation agreeing with itself, and the licence question has no
+  permissive answer for the same reason: a repository that depends on AGPL code
+  cannot be released under MIT even where its author would like to.
+- Its Gobra proofs are for **memory safety only**. The maintainer's words: they
+  "certainly don't prove anything about corresponding to the spec correctly". So
+  they are not evidence about which implementation is right when two disagree,
+  which is what this document previously claimed they were.
+
+What it remains useful for is reading: a second author's reading of an ambiguous
+passage is evidence that the passage is ambiguous, which is exactly how `DRAFT-07`
+below was found. That is an observation about what its source says, not a value to
+test against, and it needs no licence.
+
+katie is therefore the single oracle. Where that is a weakness it is stated as
+one: a finding that rests on katie alone cannot distinguish "the draft means this"
+from "katie does this", and the register marks those.
 
 ## Known blocker: katie has no runnable server
 
@@ -95,11 +108,11 @@ disagrees:
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | **agrees**: signatures and `FullTreeHead` bytes in all three modes; combined tree todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | §6.1's distinguished entries **agree** across 42 shapes; the rest todo |
-| 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts, every encoding, and every log root; three divergences recorded, see below |
+| 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 14 verdicts across steps 1–7, every encoding, and every log root; three divergences recorded, see below |
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Sixteen vector files pass from the Rust side — 6572 checks across 766 cases — and
+Sixteen vector files pass from the Rust side — 6577 checks across 768 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -111,6 +124,38 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### The one check that is about the log's past
+
+§15.2 step 5 is unlike every other check an auditor performs: it is not about the update in
+front of it. A removed leaf must have "been published in at least one distinguished log entry
+before removal", which is a claim about history — and it is the rule that makes removals safe
+at all, because without it a log could insert a value and take it away again before the label
+owner it belongs to had any chance to see it.
+
+Deriving it needs nothing but §6.1. A leaf inserted at entry `p` sits in the prefix tree of
+every entry from `p` until it is removed, so it has been published in a distinguished entry
+exactly when one exists at or after `p`; "before removal" restricts that to entries strictly
+left of the one doing the removing, which is `previous_rightmost`. The auditor therefore
+carries two things more: the timestamps along its log tree frontier, without which it cannot
+tell which entries are distinguished, and the positions of insertions that no distinguished
+entry has covered yet. That second list stays short for a reason worth noticing — §6.1's
+distinguished entries are *stable*, so once an insertion is covered it is covered forever and
+can be forgotten. An untracked leaf is eligible by construction.
+
+This is also where the frontier walks come in. §6.1's recursion visits every distinguished
+entry and needs a timestamp for each; an auditor has only the frontier. The walks derive the
+same answers from the frontier alone, out of the same ancestor-closure property, and a test
+asserts they agree with the recursion across every size to 256 and seven windows — plus that
+they never read a position outside what an auditor retained.
+
+`auditor-update.json` exercises the rule by priming katie's own auditor with a chain of three
+entries a minute apart. With a week-long window the third is not distinguished, so a leaf
+inserted there may not be removed and both implementations refuse; remove the leaf inserted
+first, which a distinguished entry did publish, and both accept. The cases record the peer
+auditor's state — heads, frontier timestamps, and the step 5 record — so this side resumes
+from katie's bookkeeping rather than from a reconstruction of it. In those cases katie's own
+record has pruned all but one insertion, which is the one the refusal is about.
 
 ### A shortcut that turns out to be the specification
 
@@ -198,10 +243,12 @@ issue: either the procedure needs to fall back to the frontier when the direct p
 filters away, or §4.2 needs to say why the rightmost timestamp does not have to be
 checked in that case.
 
-### The two Go implementations disagree about §11.2
+### DRAFT-07: the two Go implementations disagree about §11.2
 
-The most consequential finding so far, and the one that needed both peers to see.
-§11.2 writes `Configuration`'s mode-dependent part as grouped cases:
+The one finding that needed a second implementation to see — and, given what
+`keytrans-verification` turned out to be, the only thing that second implementation
+was ever going to give us. §11.2 writes `Configuration`'s mode-dependent part as
+grouped cases:
 
 ```tls-presentation
 select (Configuration.mode) {
@@ -464,6 +511,7 @@ reproducible bytes whenever the decision changes.
 | `DRAFT-04` | §15.2 step 7 cannot determine the root when a removal's sibling is uncovered | draft | `prefix-mutation.json`, `auditor-update.json` | tracked locally |
 | `DRAFT-05` | §15.2 cannot audit a log entry that changes nothing | draft | `auditor-update.json` `change-nothing` | tracked locally |
 | `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::leaves_right_edge_unchecked` | tracked locally |
+| `DRAFT-07` | §11.2's grouped `select` reads two ways; the two Go implementations took one each, and no signature cross-verifies in contactMonitoring | draft | `tree-head.json`, including a negative case carrying a signature valid under the other reading | tracked locally |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
 | `NOTE-02` | katie's monitoring ladder predates draft-05's deduplication parameter | katie | `binary-ladder.json` empty-set cases only | no action |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |

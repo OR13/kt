@@ -27,13 +27,25 @@
 // rejection comes out of its copath accounting and this implementation's out of step 6;
 // the verdict is the same either way, which is what the vector pins.
 //
-// `remove-one-leaf` is the interesting accept. Step 5 requires that a removed leaf "was
-// published in at least one distinguished log entry before removal" — a check over
-// history the auditor accumulates rather than anything in the update. katie implements it
-// and accepts here; this implementation does not implement it at all, so its accept is
-// weaker than katie's and says so. Note also that this is a removal whose sibling the
-// proof does not cover, so the root both auditors would sign is one neither can derive:
-// see prefix-mutation.json and docs/interop.md.
+// The `remove-a-leaf-*-distinguished-entry-published` pair is what step 5 is for. Step 5
+// requires that a removed leaf "was published in at least one distinguished log entry
+// before removal", which is a statement about the log's past rather than about the update,
+// so it cannot be exercised without a history: the cases prime the auditor with three
+// entries a minute apart, and with a week-long window the third is not distinguished. A
+// leaf inserted there has never been published in a distinguished entry, and both
+// implementations refuse to let the log remove it. Remove the leaf inserted first instead,
+// which a distinguished entry did publish, and both accept.
+//
+// That is also why each case records the peer auditor's own state — `log_size`,
+// `log_full_subtrees`, `frontier_timestamps`, and `inserted` — rather than a
+// reconstruction of it. `inserted` is the step 5 record, and it is short because katie
+// prunes it: an insertion a distinguished entry has covered can never become ineligible
+// again, so it is forgotten. In the three-entry cases only the leaf inserted at entry 2
+// survives, which is the one the refusal is about.
+//
+// Note also that these removals uncover a sibling the proof does not identify, so the root
+// both auditors would sign is one neither can derive: see prefix-mutation.json and the
+// DRAFT-04 finding in docs/interop.md.
 package main
 
 import (
@@ -151,13 +163,15 @@ func auditorVectors(sha string) (*File, error) {
 			return nil, fmt.Errorf("case %q: katie left %d bytes unread", spec.name, reread.Len())
 		}
 
-		verdict, detail, accepted, err := auditorVerdict(config, auditorKey, spec, before, update)
+		verdict, detail, accepted, primed, err := auditorVerdict(
+			config, auditorKey, spec, before, update)
 		if err != nil {
 			return nil, fmt.Errorf("case %q: %w", spec.name, err)
 		}
 
 		input := map[string]any{
 			"entries":            prefixEntriesJSON(spec.entries),
+			"window":             config.ReasonableMonitoringWindow,
 			"previous_timestamp": spec.previousTimestamp,
 			"timestamp":          spec.timestamp,
 			"added":              prefixEntriesJSON(update.Added),
@@ -167,6 +181,32 @@ func auditorVectors(sha string) (*File, error) {
 		if spec.firstEntry {
 			input["first_entry"] = true
 		}
+		// The auditor's whole state as the peer built it, so the Rust side resumes from
+		// the peer's own bookkeeping rather than from a reconstruction of it. `inserted` is
+		// what §15.2 step 5 turns on — a removal is allowed only once a distinguished log
+		// entry has published the leaf, and this is the record that decides it — and
+		// `frontier_timestamps` is what decides which entries are distinguished at all.
+		inserted := make([]map[string]any, 0)
+		frontierTimestamps := make([]uint64, 0)
+		fullSubtrees := make([]string, 0)
+		var logSize uint64
+		if primed != nil {
+			logSize = primed.TreeHead.TreeSize
+			for _, ins := range primed.Inserted {
+				inserted = append(inserted, map[string]any{
+					"position":   ins.Pos,
+					"vrf_output": hex.EncodeToString(ins.VrfOutput),
+				})
+			}
+			frontierTimestamps = append(frontierTimestamps, primed.Timestamps...)
+			for _, head := range primed.FullSubtrees {
+				fullSubtrees = append(fullSubtrees, hex.EncodeToString(head))
+			}
+		}
+		input["inserted"] = inserted
+		input["frontier_timestamps"] = frontierTimestamps
+		input["log_full_subtrees"] = fullSubtrees
+		input["log_size"] = logSize
 		expect := map[string]any{
 			"encoding": hex.EncodeToString(buf.Bytes()),
 			"verdict":  verdict,
@@ -182,9 +222,6 @@ func auditorVectors(sha string) (*File, error) {
 			// hashing a tree, and worth pinning as such.
 			expect["tree_size"] = accepted.TreeSize
 			expect["log_root"] = hex.EncodeToString(accepted.LogRoot)
-		}
-		if spec.peerStep5 {
-			expect["peer_step_5"] = true
 		}
 
 		f.Cases = append(f.Cases, Case{Name: spec.name, Input: input, Expect: expect})
@@ -207,32 +244,37 @@ func auditorVerdict(
 	spec auditorCase,
 	before []byte,
 	update *structs.AuditorUpdate,
-) (string, string, *acceptedState, error) {
+) (verdict string, detail string, accepted *acceptedState, primed *auditor.AuditorState, err error) {
 	store := memory.NewAuditorStore()
 	a, err := auditor.NewAuditor(config, auditorKey, store)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("constructing the auditor: %w", err)
+		return "", "", nil, nil, fmt.Errorf("constructing the auditor: %w", err)
 	}
 
 	// Every case but the first-entry one needs the auditor to already hold the tree the
-	// update starts from. The only way in is to process an update that produces it, so
-	// prime with one that adds the same entries to an empty tree.
+	// update starts from. The only way in is to process updates that produce it, so the
+	// auditor is primed by replaying the case's history — one update per log entry,
+	// inserting into the tree as it stood at the time.
 	if !spec.firstEntry {
-		sorted := sortedEntries(spec.entries)
-		proof, err := emptyTreeProof(config.Suite, sorted)
-		if err != nil {
-			return "", "", nil, fmt.Errorf("proving against an empty tree: %w", err)
-		}
-		priming := &structs.AuditorUpdate{
-			Timestamp: spec.previousTimestamp,
-			Added:     sorted,
-			Proof:     *proof,
-		}
-		if err := a.Process(priming); err != nil {
-			return "", "", nil, fmt.Errorf("priming the auditor: %w", err)
-		}
-		if _, err := a.Commit(); err != nil {
-			return "", "", nil, fmt.Errorf("committing the primed state: %w", err)
+		var held []prefix.Entry
+		for i, step := range spec.priming() {
+			sorted := sortedEntries(step.added)
+			proof, err := treeProof(config.Suite, held, sorted)
+			if err != nil {
+				return "", "", nil, nil, fmt.Errorf("priming step %d: proving: %w", i, err)
+			}
+			priming := &structs.AuditorUpdate{
+				Timestamp: step.timestamp,
+				Added:     sorted,
+				Proof:     *proof,
+			}
+			if err := a.Process(priming); err != nil {
+				return "", "", nil, nil, fmt.Errorf("priming step %d: %w", i, err)
+			}
+			if _, err := a.Commit(); err != nil {
+				return "", "", nil, nil, fmt.Errorf("priming step %d: committing: %w", i, err)
+			}
+			held = append(held, sorted...)
 		}
 
 		// Read the committed state back out to confirm the auditor now holds the tree
@@ -240,32 +282,42 @@ func auditorVerdict(
 		// would be checking nothing.
 		state, err := committedState(config, store)
 		if err != nil {
-			return "", "", nil, fmt.Errorf("reading the primed state: %w", err)
+			return "", "", nil, nil, fmt.Errorf("reading the primed state: %w", err)
 		}
 		if !bytes.Equal(state.PrefixTree, before) {
-			return "", "", nil, fmt.Errorf(
+			return "", "", nil, nil, fmt.Errorf(
 				"priming produced prefix root %x, the case expects %x", state.PrefixTree, before)
 		}
+		primed = state
 	}
 
 	if err := a.Process(update); err != nil {
-		return "rejected", err.Error(), nil, nil
+		return "rejected", err.Error(), nil, primed, nil
 	}
 	if _, err := a.Commit(); err != nil {
-		return "", "", nil, fmt.Errorf("committing the accepted update: %w", err)
+		return "", "", nil, nil, fmt.Errorf("committing the accepted update: %w", err)
 	}
 	state, err := committedState(config, store)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("reading the accepted state: %w", err)
+		return "", "", nil, nil, fmt.Errorf("reading the accepted state: %w", err)
 	}
 	root, err := log.Root(config.Suite, state.TreeHead.TreeSize, state.FullSubtrees)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("rooting the log tree: %w", err)
+		return "", "", nil, nil, fmt.Errorf("rooting the log tree: %w", err)
 	}
 	return "accepted", "", &acceptedState{
 		TreeSize: state.TreeHead.TreeSize,
 		LogRoot:  root,
-	}, nil
+	}, primed, nil
+}
+
+// priming returns the chain of updates that brings the auditor to the case's starting
+// state: the case's own history, or a single update inserting every entry if it has none.
+func (c auditorCase) priming() []historyStep {
+	if len(c.history) > 0 {
+		return c.history
+	}
+	return []historyStep{{timestamp: c.previousTimestamp, added: c.entries}}
 }
 
 // committedState reads back what the auditor persisted, which is the only way to see the
@@ -278,11 +330,23 @@ func committedState(config *structs.PublicConfig, store *memory.AuditorStore) (*
 	return auditor.NewAuditorState(config.Suite, bytes.NewBuffer(raw))
 }
 
+// historyStep is one update used to bring the auditor to the state a case starts from.
+type historyStep struct {
+	timestamp uint64
+	added     []prefix.Entry
+}
+
 type auditorCase struct {
 	name    string
 	entries []prefix.Entry
 	added   []prefix.Entry
 	removed []prefix.Entry
+
+	// history primes the auditor with a chain of updates rather than one. §15.2 step 5
+	// cannot be exercised without it: a leaf is only ineligible for removal when it was
+	// inserted after the last distinguished log entry, which takes at least three entries
+	// to arrange. When empty, the priming is a single update inserting `entries`.
+	history []historyStep
 
 	previousTimestamp uint64
 	timestamp         uint64
@@ -290,9 +354,6 @@ type auditorCase struct {
 	// firstEntry runs the update against an auditor with no state at all, where there is
 	// no timestamp to be after and no root to match.
 	firstEntry bool
-	// peerStep5 marks a case where katie's verdict rests on step 5's
-	// distinguished-entry history, which this implementation does not check.
-	peerStep5 bool
 	// mangle breaks the update after it is built, for the structural checks.
 	mangle func(*structs.AuditorUpdate)
 }
@@ -398,14 +459,45 @@ func auditorCases() []auditorCase {
 			firstEntry:        true,
 		},
 		{
-			// Accepted by both, but katie's accept is the stronger one: it has checked
-			// step 5's eligibility and this implementation has not.
+			// §15.2 step 5's refusal. Three priming entries a minute apart: with a
+			// week-long window, entry 2 is not distinguished, so a leaf inserted there has
+			// never been published in a distinguished entry and may not be removed. This is
+			// the case the rule exists for — without it a log could insert a value and take
+			// it away again before any label owner had a chance to see it.
+			name:    "remove-a-leaf-no-distinguished-entry-published",
+			entries: []prefix.Entry{a, b, c},
+			history: []historyStep{
+				{timestamp: previous, added: []prefix.Entry{a}},
+				{timestamp: previous + 60_000, added: []prefix.Entry{b}},
+				{timestamp: previous + 120_000, added: []prefix.Entry{c}},
+			},
+			removed:           []prefix.Entry{c},
+			previousTimestamp: previous + 120_000,
+			timestamp:         previous + 180_000,
+		},
+		{
+			// The same history, removing the leaf inserted first — which a distinguished
+			// entry has published, so it may go.
+			name:    "remove-a-leaf-a-distinguished-entry-published",
+			entries: []prefix.Entry{a, b, c},
+			history: []historyStep{
+				{timestamp: previous, added: []prefix.Entry{a}},
+				{timestamp: previous + 60_000, added: []prefix.Entry{b}},
+				{timestamp: previous + 120_000, added: []prefix.Entry{c}},
+			},
+			removed:           []prefix.Entry{a},
+			previousTimestamp: previous + 120_000,
+			timestamp:         previous + 180_000,
+		},
+		{
+			// Accepted by both. Its single priming entry leaves nothing tracked for step
+			// 5 — a distinguished entry covered every insertion — so eligibility is
+			// decided by the pruning rule rather than by a lookup.
 			name:              "remove-one-leaf",
 			entries:           []prefix.Entry{a, b, c, d},
 			removed:           []prefix.Entry{a},
 			previousTimestamp: previous,
 			timestamp:         now,
-			peerStep5:         true,
 		},
 	}
 }
@@ -420,6 +512,32 @@ func sortedEntries(entries []prefix.Entry) []prefix.Entry {
 		}
 	}
 	return out
+}
+
+// treeProof is the batch proof a tree holding `held` gives for the keys of `searched`,
+// which is what the log sends alongside an update that inserts them.
+func treeProof(
+	cs suites.CipherSuite, held, searched []prefix.Entry,
+) (*prefix.PrefixProof, error) {
+	if len(held) == 0 {
+		return emptyTreeProof(cs, searched)
+	}
+	tree := prefix.NewTree(cs, memory.NewPrefixStore())
+	if _, _, _, err := tree.Mutate(0, held, nil); err != nil {
+		return nil, err
+	}
+	keys := make([][]byte, 0, len(searched))
+	for _, e := range searched {
+		keys = append(keys, e.VrfOutput)
+	}
+	if len(keys) == 0 {
+		return &prefix.PrefixProof{}, nil
+	}
+	results, err := tree.Search([]prefix.PrefixSearch{{Version: 1, VrfOutputs: keys}})
+	if err != nil {
+		return nil, err
+	}
+	return &results[0].Proof, nil
 }
 
 // emptyTreeProof is the batch proof an empty prefix tree gives for `entries`, which is

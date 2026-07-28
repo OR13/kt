@@ -16,9 +16,8 @@ disagreement is a bug report, either against this code or against the draft.
    VRF outputs, same commitments, same TLS-presentation-language encodings, same
    proofs. A Rust client must verify proofs from a Go server, and a Go client
    must verify proofs from a Rust server.
-3. **Verifiable** — stay aligned with
-   [`felixlinker/keytrans-verification`](https://github.com/felixlinker/keytrans-verification),
-   the Gobra security proof of the client. Its invariants are free test oracles.
+3. **Honest about its evidence** — every interop claim is a committed vector that CI
+   regenerates, and a gap that is not pinned by one is recorded as a gap.
 
 ## Upstreams
 
@@ -30,7 +29,7 @@ interop peers, never copied into `crates/` (see [`docs/licensing.md`](docs/licen
 | `upstream/draft-protocol` | [ietf-wg-keytrans/draft-protocol](https://github.com/ietf-wg-keytrans/draft-protocol) | `draft-ietf-keytrans-protocol` — the normative wire protocol | IETF Trust (BSD for code) |
 | `upstream/draft-arch` | [ietf-wg-keytrans/draft-arch](https://github.com/ietf-wg-keytrans/draft-arch) | `draft-ietf-keytrans-architecture` — deployment models, threat model | IETF Trust (BSD for code) |
 | `upstream/katie` | [Bren2010/katie](https://github.com/Bren2010/katie) | Go transparency log — trees, crypto, client, auditor; the primary interop peer. Library only at this pin; its server is build-ignored | **AGPL-3.0** |
-| `upstream/keytrans-verification` | [felixlinker/keytrans-verification](https://github.com/felixlinker/keytrans-verification) | Gobra-verified Go client; the formal-proof reference | unlicensed (all rights reserved) |
+| `upstream/keytrans-verification` | [felixlinker/keytrans-verification](https://github.com/felixlinker/keytrans-verification) | A second Go client, read for its reading of ambiguous passages. Not an oracle: it uses katie for the VRF, and its Gobra proofs cover memory safety rather than conformance | unlicensed (all rights reserved) |
 
 ```sh
 git clone --recurse-submodules https://github.com/OR13/kt.git
@@ -124,7 +123,7 @@ Implemented and verified against the Go peer, byte for byte:
 | Search ladder interpretation (`kt-tree::ladder`) | §6.2 | [`ladder-interpretation.json`](interop/vectors/ladder-interpretation.json) — 211 target/greatest pairs |
 | §13 request structures + response building blocks (`kt-wire::requests`) | §11.5, §13.1–§13.5 | [`requests.json`](interop/vectors/requests.json) — 22 structures |
 | Prefix tree root before and after an audited update (`kt-tree::prefix`) | §15.2, §3.3 | [`prefix-mutation.json`](interop/vectors/prefix-mutation.json) — 8 update shapes |
-| `AuditorUpdate` + the auditor's checks on one entry (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 12 cases through katie's own auditor |
+| `AuditorUpdate` + every auditor check on one entry, steps 1–7 (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 14 cases through katie's own auditor |
 | Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
 | Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/distinguished.json) — 42 size/window/timestamp shapes |
 
@@ -194,7 +193,7 @@ against regression, not a target: what it mostly bought was covering every error
 type's `Display` — the text a verifier emits when it rejects something — which turned
 up one real inconsistency, a wrapped error that did not chain to its cause.
 
-Interop work has turned up three bugs in the Go peer and six gaps or ambiguities in
+Interop work has turned up three bugs in the Go peer and seven gaps or ambiguities in
 the draft. Each is written up and given a stable identifier in
 [`docs/interop.md`](docs/interop.md), whose findings register is the tracker — nothing is
 filed upstream, by decision, and every entry is pinned by a committed vector so a filing

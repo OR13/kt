@@ -27,10 +27,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000014000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000001020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10100019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -58,10 +67,19 @@
             "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "eb5ceabfe81210020d8a3a4afac6665bf871e00b37f272b24a927f9e6be1be20"
+        ],
+        "log_size": 1,
         "prefix_root": "1635d4cb735a16759a1a26fcda0c309ea0577aae20128a59075f6fea73dfb360",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000024000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b28000000000000000000000000000000000000000000000000000000000000003c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3000002020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a100020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1000000",
@@ -84,10 +102,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000000000000000",
@@ -114,10 +141,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000000000
+        "timestamp": 1700000000000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe5680000014000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000001020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10100019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -145,10 +181,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000060000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "6cd5856c56f4568342ac28d023fc2fef46952858d028788f627a8d9c0b25525e"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000060000,
         "removed": [],
-        "timestamp": 1700000000000
+        "timestamp": 1700000000000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe5680000014000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000001020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10100019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -175,10 +220,19 @@
             "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "eb5ceabfe81210020d8a3a4afac6665bf871e00b37f272b24a927f9e6be1be20"
+        ],
+        "log_size": 1,
         "prefix_root": "1635d4cb735a16759a1a26fcda0c309ea0577aae20128a59075f6fea73dfb360",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000028000000000000000000000000000000000000000000000000000000000000003c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c34000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000002020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a100020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1000000",
@@ -205,10 +259,19 @@
             "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "eb5ceabfe81210020d8a3a4afac6665bf871e00b37f272b24a927f9e6be1be20"
+        ],
+        "log_size": 1,
         "prefix_root": "1635d4cb735a16759a1a26fcda0c309ea0577aae20128a59075f6fea73dfb360",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000024000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b24000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000002020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a100020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1000000",
@@ -235,10 +298,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000010000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1000001010100019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -260,6 +332,14 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [
@@ -268,7 +348,8 @@
             "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe65260000000014000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b201020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10100019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -295,10 +376,19 @@
             "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "4927f72ca7b4db1f411954178f7d72c076ac1ea057b950e2c77791e70e8e0438"
+        ],
+        "log_size": 1,
         "prefix_root": "efeadac7a5373bb0fa58244d27ccbd75c01e5b59c94bcb1626359a19441defa3",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000014000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b200000000019c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
@@ -321,15 +411,121 @@
         ],
         "entries": [],
         "first_entry": true,
+        "frontier_timestamps": [],
+        "inserted": [],
+        "log_full_subtrees": [],
+        "log_size": 0,
         "prefix_root": "0000000000000000000000000000000000000000000000000000000000000000",
         "previous_timestamp": 1700000000000,
         "removed": [],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe6526000020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a14000000000000000000000000000000000000000000000000000000000000002b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000002030003000000",
         "log_root": "2a596ab32c93b7b02ca64b796480dcd22e956e18b727afbfaa46ea77e16854a7",
         "tree_size": 1,
+        "verdict": "accepted"
+      }
+    },
+    {
+      "name": "remove-a-leaf-no-distinguished-entry-published",
+      "input": {
+        "added": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
+          }
+        ],
+        "frontier_timestamps": [
+          1700000060000,
+          1700000120000
+        ],
+        "inserted": [
+          {
+            "position": 2,
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
+          }
+        ],
+        "log_full_subtrees": [
+          "e375b45509381f62870d756ee3629d99bf9541fde5f4b12c8011361048c4748a",
+          "d603520497b67fd055ad7819608b79aa9b21bcbd57411c81f3c03832fe218079"
+        ],
+        "log_size": 3,
+        "prefix_root": "a01458d082e12d5ade831508f7cc5e7a982cf83c57f1d87e12a0a6c3ba12c152",
+        "previous_timestamp": 1700000120000,
+        "removed": [
+          {
+            "commitment": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
+          }
+        ],
+        "timestamp": 1700000180000,
+        "window": 604800000
+      },
+      "expect": {
+        "encoding": "0000018bcfe82720000000018000000000000000000000000000000000000000000000000000000000000003c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3010101000119cf37f03cd682a70acc255986a9b8ecad28b9955ebc9f4e65cf099002349be8",
+        "peer_detail": "prefix tree leaf is not eligible for removal",
+        "verdict": "rejected"
+      }
+    },
+    {
+      "name": "remove-a-leaf-a-distinguished-entry-published",
+      "input": {
+        "added": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
+          }
+        ],
+        "frontier_timestamps": [
+          1700000060000,
+          1700000120000
+        ],
+        "inserted": [
+          {
+            "position": 2,
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000003"
+          }
+        ],
+        "log_full_subtrees": [
+          "e375b45509381f62870d756ee3629d99bf9541fde5f4b12c8011361048c4748a",
+          "d603520497b67fd055ad7819608b79aa9b21bcbd57411c81f3c03832fe218079"
+        ],
+        "log_size": 3,
+        "prefix_root": "a01458d082e12d5ade831508f7cc5e7a982cf83c57f1d87e12a0a6c3ba12c152",
+        "previous_timestamp": 1700000120000,
+        "removed": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ],
+        "timestamp": 1700000180000,
+        "window": 604800000
+      },
+      "expect": {
+        "encoding": "0000018bcfe82720000000010000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10101020002c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd9c1390b810b1ca0a2e2cfe96ab119f139c42475d0b4587d41682a7aa20917821",
+        "log_root": "cce6cc34462e33baeaa0a756aac24aadcaee20c53acb9d225ef72bb33fd43660",
+        "tree_size": 4,
         "verdict": "accepted"
       }
     },
@@ -355,6 +551,14 @@
             "vrf_output": "c000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
+        "frontier_timestamps": [
+          1700000000000
+        ],
+        "inserted": [],
+        "log_full_subtrees": [
+          "b6f53e0e159c1b51b31e51f65704448a2ea07511989fe53ed4a4a18bd645eebc"
+        ],
+        "log_size": 1,
         "prefix_root": "12934ebea21d3194e7a0d02281b89422efc3d9c4bb748754996a12434ab1a6cb",
         "previous_timestamp": 1700000000000,
         "removed": [
@@ -363,12 +567,12 @@
             "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
           }
         ],
-        "timestamp": 1700000060000
+        "timestamp": 1700000060000,
+        "window": 604800000
       },
       "expect": {
         "encoding": "0000018bcfe65260000000010000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10101020002c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5ddb652e128af70d2f459a4c0943352447b115c7e4a1ede795a39d899d44d93d2c2",
         "log_root": "b3181395e48e9433e5ef09f7f23dae8528f8f0af882f26dcefe9c063f10d213d",
-        "peer_step_5": true,
         "tree_size": 2,
         "verdict": "accepted"
       }
