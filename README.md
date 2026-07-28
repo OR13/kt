@@ -119,6 +119,7 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 | Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 | `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — all three deployment modes |
+| Updating a view of the tree (`kt-tree::ibst`) | §4.2 | [`update-view.json`](interop/vectors/update-view.json) — 190 size/advertised pairs |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
@@ -169,7 +170,8 @@ verify. This implementation follows the prose and katie, and
 way, a test starts failing rather than a document going stale.
 
 Not implemented: the combined tree (§3.4, §12.3) and the client algorithms
-(§6–§10, §13).
+(§6–§10, §13). §12.3's `CombinedTreeProof` is defined in terms of the order those
+algorithms request data in, so it cannot be implemented before them.
 
 Deliberately out of scope: the `KT_128_SHA256_P256` suite. `KT_128_SHA256_Ed25519`
 is supported by both Go peers, and one suite implemented properly is worth more here
