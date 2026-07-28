@@ -629,3 +629,32 @@ pub struct InterpretationExpect {
     /// -1 if the greatest version is below the target, 0 if equal, 1 if above.
     pub verdict: i8,
 }
+
+/// `log-math.json` input: log tree structure in the peer's flat node indices.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum LogMathInput {
+    /// The heads a verifier retains for a tree of this size (§4.2).
+    FullSubtrees {
+        /// The tree size.
+        size: u64,
+    },
+    /// The nodes a batch proof carries, in order (§12.1).
+    BatchCopath {
+        /// The tree size.
+        size: u64,
+        /// The leaves being proven.
+        leaves: Vec<u64>,
+        /// A retained view's size, if any.
+        #[serde(default)]
+        retained_size: Option<u64>,
+    },
+}
+
+/// `log-math.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogMathExpect {
+    /// Flat node indices, in order.
+    pub indices: Vec<u64>,
+}

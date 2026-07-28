@@ -116,7 +116,7 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 | Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/ibst.json) — 38 log sizes |
 | Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/binary-ladder.json) — 76 cases |
 | VRF, ECVRF-EDWARDS25519-SHA512-TAI (`kt-crypto::vrf`) | §11.7 | [RFC 9381 App. B](https://www.rfc-editor.org/rfc/rfc9381.html) vectors **and** [`vrf.json`](interop/vectors/vrf.json) — 10 positive, 1 negative |
-| Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
+| Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs; [`log-math.json`](interop/vectors/log-math.json) — 1679 decompositions |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 | `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — all three deployment modes |
 | Updating a view of the tree (`kt-tree::ibst`) | §4.2 | [`update-view.json`](interop/vectors/update-view.json) — 190 size/advertised pairs |

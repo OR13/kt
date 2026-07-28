@@ -5,6 +5,7 @@
 //! panics or asserts: a disagreement becomes a [`Check`] with `Verdict::Fail`,
 //! carrying both values, and it is the caller's job to fail the build over it.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,19 +31,21 @@ use kt_wire::structs::{
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
     CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
-    InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogTreeExpect,
-    LogTreeInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect,
-    TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
+    InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
+    LogMathInput, LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect,
+    RequestInput, TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile,
+    VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 11] = [
+pub const FILES: [&str; 12] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
     "ladder-interpretation.json",
     "update-view.json",
     "vrf.json",
+    "log-math.json",
     "log-tree.json",
     "prefix-tree.json",
     "tree-head.json",
@@ -160,6 +163,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         interpretation_suite(dir)?,
         update_view_suite(dir)?,
         vrf_suite(dir)?,
+        log_math_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
         head_suite(dir)?,
@@ -1886,4 +1890,118 @@ fn interpretation_suite(dir: &Path) -> Result<Suite, Error> {
         cipher_suite: None,
         cases,
     })
+}
+
+/// §3.2, §4.2, §12.1 in the peer's flat node addressing.
+///
+/// `log-tree.json` pins the proof bytes; this pins the decomposition behind them. Two
+/// implementations can agree on every proof we happen to generate while taking the
+/// tree apart differently, and only comparing the node indices rules that out.
+///
+/// The file holds well over a thousand cases, which is the right number for CI and the
+/// wrong number for a page a person reads. So they are grouped by tree size: one
+/// rendered case per size, with every individual comparison as a sub-check. Nothing is
+/// dropped — `report.json` carries them all — but the page does not gain a thousand
+/// rows whose interest is collective rather than individual. The same treatment the
+/// implicit binary search tree's per-node checks already get.
+fn log_math_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "log-math.json";
+    let file: VectorFile<LogMathInput, LogMathExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    // Group by tree size, preserving the order the cases appear in.
+    let mut sizes: Vec<u64> = Vec::new();
+    let mut grouped: BTreeMap<u64, Vec<Check>> = BTreeMap::new();
+
+    for case in &file.cases {
+        let expected = render_list(&case.expect.indices);
+        let (size, what, got) = match &case.input {
+            LogMathInput::FullSubtrees { size } => (
+                *size,
+                "full subtree heads, as node indices (§4.2)".to_owned(),
+                render_result(log::full_subtree_indices(*size), |indices| {
+                    render_list(&indices)
+                }),
+            ),
+            LogMathInput::BatchCopath {
+                size,
+                leaves,
+                retained_size,
+            } => {
+                // Only which nodes the walk emits matters here, not their values, so
+                // any leaf values will do.
+                let values: Vec<HashValue> = (0..*size)
+                    .map(|i| {
+                        HashValue::from_bytes([u8::try_from(i % 256).unwrap_or(0); HashValue::SIZE])
+                    })
+                    .collect();
+                let retained = match retained_size {
+                    None => None,
+                    Some(previous) => Some(
+                        log::Retained::from_leaves(suite, *previous, &values).map_err(|err| {
+                            Error::Computation {
+                                file: FILE.to_owned(),
+                                case: case.name.clone(),
+                                detail: alloc_display(&err),
+                            }
+                        })?,
+                    ),
+                };
+                let label = match retained_size {
+                    None => format!("leaves {}", render_list(leaves)),
+                    Some(previous) => {
+                        format!("leaves {}, retained {previous}", render_list(leaves))
+                    }
+                };
+                (
+                    *size,
+                    format!("batch proof nodes for {label} (§12.1)"),
+                    render_result(
+                        log::proof_node_indices(*size, leaves, retained.as_ref()),
+                        |indices| render_list(&indices),
+                    ),
+                )
+            }
+        };
+
+        if !grouped.contains_key(&size) {
+            sizes.push(size);
+        }
+        grouped
+            .entry(size)
+            .or_default()
+            .push(Check::new(what, expected, got));
+    }
+
+    let mut cases = Vec::new();
+    for size in sizes {
+        let checks = grouped.remove(&size).unwrap_or_default();
+        let count = checks.len();
+        cases.push(Case {
+            name: format!("size-{size}"),
+            negative: false,
+            input: format!("log of {size} entries, {count} decompositions"),
+            checks: vec![Check::group(
+                format!("node indices for a log of {size} entries (§3.2, §4.2, §12.1)"),
+                checks,
+            )],
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Log tree structure".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
+        cases,
+    })
+}
+
+fn alloc_display(err: &impl core::fmt::Display) -> String {
+    format!("{err}")
 }

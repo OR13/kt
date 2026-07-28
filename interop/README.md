@@ -151,6 +151,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `ibst.json` | implicit binary search tree | §4.1, Appendix A | 38 log sizes |
 | `binary-ladder.json` | binary ladder | §5, Appendix B | 76 across base, search, monitoring |
 | `vrf.json` | VRF | §11.7 | 10 positive, 1 negative |
+| `log-math.json` | log tree structure, in node indices | §3.2, §4.2, §12.1 | 1679 decompositions |
 | `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
 | `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
@@ -159,6 +160,41 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
 | `from-kt.json` | must accept / must reject, in reverse | as above | 201, half negative |
+
+## Two kinds of agreement
+
+`log-tree.json` and `log-math.json` cover the same section from different angles, and
+the difference is worth keeping in mind when adding vectors.
+
+`log-tree.json` pins **outputs**: the proof bytes katie serves for a given request. It
+is the stronger claim about what goes on the wire, and it is what a client actually
+consumes.
+
+`log-math.json` pins **structure**: the flat node indices a batch proof carries, from
+katie's `BatchCopath`. It exists because agreement on outputs is compatible with
+disagreement on method — two implementations can decompose a tree differently and still
+produce identical proofs for every size that happens to be tested, then diverge on one
+that was not. Comparing the decomposition directly closes that gap, across far more
+combinations than there are proofs in `log-tree.json`.
+
+It also crosses an addressing boundary deliberately. The Rust side works in leaf
+ranges; katie works in flat node indices, where leaf `i` is node `2i`. A balanced
+subtree over `[start, start+len)` is node `2*start + len - 1`, and because a §12.1 proof
+only ever carries balanced subtree heads, that translation is total on exactly the
+values that matter. A range that failed to map would itself be the bug.
+
+## When a suite has a thousand cases
+
+`log-math.json` has 1679 and `update-view.json` has 190, which is the right number for
+CI and the wrong number for a page a person reads. Suites like that are **grouped** in
+the report: one rendered case per tree size, with each individual comparison as a
+sub-check. Every check still runs and still appears in `report.json`; the page just does
+not gain a thousand rows whose interest is collective rather than individual.
+
+The rule of thumb: group when the cases are a sweep over one parameter and a reader
+would want the sweep's verdict rather than each element's. Do not group when each case
+is a distinct scenario someone might look up by name — the commitment, VRF, tree head,
+and must-reject suites stay one row per case for that reason.
 
 ## Choosing what to pin next
 

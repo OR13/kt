@@ -76,6 +76,19 @@ Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 `from-kt.json` goes the other way: proofs we build, verified by katie via
 `interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
 
+Two kinds of agreement are worth distinguishing when adding vectors. Pinning *outputs*
+(proof bytes) is the stronger claim about the wire; pinning *structure* (which nodes a
+proof carries) catches an implementation that decomposes a tree differently and happens
+to agree on the cases tested. `log-tree.json` does the first, `log-math.json` the
+second. Leaf ranges map to katie's flat node indices as `2*start + len - 1` for a
+balanced subtree, which is total on §12.1 proof elements because those are always
+balanced.
+
+A suite that sweeps one parameter over hundreds of cases is *grouped* in the report —
+one rendered case per size, comparisons as sub-checks — so the page stays readable while
+`report.json` keeps everything. Suites where each case is a scenario someone would look
+up by name stay one row per case.
+
 When picking the next thing to pin: katie is the source of truth, so look for
 oracles it already exports rather than for the next draft section. `structs.Marshal`
 covers any §11/§13 structure; `tree/transparency/math` exports `UpdateView` (§4.2) and
