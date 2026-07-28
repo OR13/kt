@@ -7,6 +7,34 @@ contract for the artifacts in here.
 ```text
 go/        separate Go module — links katie, emits vectors. AGPL-3.0.
 vectors/   committed JSON test vectors. Data, not code.
+report/    Rust crate — checks the vectors, and renders the evidence page.
+```
+
+## The evidence page
+
+[`or13.github.io/kt`](https://or13.github.io/kt/) publishes the results, and
+[`report.json`](https://or13.github.io/kt/report.json) is the same thing
+machine-readable. Both are rebuilt on every push to `main`.
+
+`report/` is what makes that page trustworthy rather than decorative:
+
+- `kt_interop::check` loads the vectors and compares every case, returning
+  results instead of panicking.
+- `report/tests/vectors.rs` fails the build if any comparison disagrees, and also
+  asserts that the vectors still contain their negative and refusal cases — a file
+  that quietly lost them would keep passing while testing much less.
+- `kt-interop-report` renders those same results as HTML and JSON, and **exits
+  non-zero if anything disagrees**, so a red result cannot be deployed as a green
+  page.
+
+One code path, three consumers. The page is the output of `cargo test`, not a
+description of it, which is what `AGENTS.md` rule 4 requires: no interop claim
+without a vector or a live test behind it.
+
+```sh
+cargo test --workspace          # the suite
+cargo run -p kt-interop --bin kt-interop-report -- \
+  --vectors interop/vectors --out site   # the page, into ./site
 ```
 
 ## Why `go/` is its own module, and AGPL-3.0

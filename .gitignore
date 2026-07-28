@@ -8,3 +8,8 @@ Cargo.lock.orig
 
 # local scratch — never committed
 /.scratch/
+
+# Generated evidence page. Built by CI and deployed to GitHub Pages, never
+# committed: a checked-in copy would be a second source of truth for results that
+# are only meaningful as the output of a test run.
+/site/

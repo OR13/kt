@@ -104,12 +104,21 @@ dependencies = [
 name = "kt-crypto"
 version = "0.0.0"
 dependencies = [
- "hex",
  "hmac",
+ "kt-wire",
+ "sha2",
+]
+
+[[package]]
+name = "kt-interop"
+version = "0.0.0"
+dependencies = [
+ "hex",
+ "kt-crypto",
+ "kt-tree",
  "kt-wire",
  "serde",
  "serde_json",
- "sha2",
 ]
 
 [[package]]
@@ -118,8 +127,6 @@ version = "0.0.0"
 dependencies = [
  "kt-crypto",
  "kt-wire",
- "serde",
- "serde_json",
 ]
 
 [[package]]

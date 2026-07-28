@@ -1,0 +1,74 @@
+name: pages
+
+# Publishes the interop evidence page at https://or13.github.io/kt/.
+#
+# The page is the output of the test run, not a description of it: the report
+# generator exits non-zero if any check disagrees with the Go peer, so a red
+# result cannot be deployed as a green page. The vectors are regenerated from the
+# pinned peer first, so the page's provenance claims are checked rather than
+# asserted.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one halfway: a partially replaced
+# site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: interop/go/go.sum
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Vectors must be reproducible from the pinned peer
+        run: |
+          go run ./cmd/gen -out ../vectors
+        working-directory: interop/go
+      - run: git diff --exit-code -- interop/vectors
+
+      - name: Tests must pass before anything is published
+        run: cargo test --workspace
+
+      - name: Build the evidence page
+        run: |
+          cargo run -p kt-interop --bin kt-interop-report -- \
+            --vectors interop/vectors \
+            --out site \
+            --commit "${{ github.sha }}" \
+            --commit-url "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --rustc "$(rustc --version)" \
+            --go "$(go version)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

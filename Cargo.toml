@@ -1,5 +1,7 @@
 [workspace]
-members = ["crates/*"]
+# interop/report is test infrastructure, not part of the library: it is the only
+# member that knows about interop/vectors, and it is not published.
+members = ["crates/*", "interop/report"]
 resolver = "3"
 
 [workspace.package]
