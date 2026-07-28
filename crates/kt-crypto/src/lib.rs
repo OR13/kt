@@ -39,11 +39,7 @@ pub mod commitment;
 pub mod hash;
 pub mod suite;
 
-/// Verifiable Random Function over `VrfInput{label, version}`
-/// (`draft-ietf-keytrans-protocol-05` §11.7).
-pub mod vrf {
-    // TODO(interop tier 1, step 3): ECVRF for both registered suites.
-}
+pub mod vrf;
 
 /// Tree head, auditor tree head, and full tree head signatures
 /// (`draft-ietf-keytrans-protocol-05` §11.2, §11.3, §11.4).

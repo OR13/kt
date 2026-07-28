@@ -11,24 +11,27 @@ use std::path::{Path, PathBuf};
 
 use kt_crypto::commitment::{self, Commitment};
 use kt_crypto::suite::CipherSuite;
+use kt_crypto::vrf;
 use kt_tree::{ibst, ladder, log, prefix};
 use kt_wire::codec::Decoder;
 use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
 use kt_wire::structs::{
-    CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue,
+    CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue, VrfInput,
 };
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
     CommitmentExpect, CommitmentInput, IbstExpect, IbstInput, LadderExpect, LadderInput,
-    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, VectorFile,
+    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, VectorFile, VrfCaseInput,
+    VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 5] = [
+pub const FILES: [&str; 6] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
+    "vrf.json",
     "log-tree.json",
     "prefix-tree.json",
 ];
@@ -140,6 +143,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         commitment_suite(dir)?,
         ibst_suite(dir)?,
         ladder_suite(dir)?,
+        vrf_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
     ])
@@ -878,4 +882,168 @@ fn hash_field(file: &str, case: &str, field: &str, value: &str) -> Result<HashVa
 
 fn alloc_string(err: &impl core::fmt::Display) -> String {
     format!("{err}")
+}
+
+/// §11.7: the VRF, and the KT wrapping around RFC 9381's ECVRF.
+fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "vrf.json";
+    let file: VectorFile<VrfCaseInput, VrfExpect> = load(dir, FILE)?;
+
+    let code = file.cipher_suite.unwrap_or_default();
+    let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
+        file: FILE.to_owned(),
+        value: code,
+    })?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let seed: [u8; vrf::SECRET_KEY_SIZE] =
+            unhex(FILE, name, "private_key", &case.input.private_key)?
+                .try_into()
+                .map_err(|_| Error::Hex {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    field: "private_key".to_owned(),
+                })?;
+        let secret = vrf::SecretKey::from_seed(seed);
+        let label = unhex(FILE, name, "label", &case.input.label)?;
+        let input = VrfInput::new(label, case.input.version);
+
+        let mut checks = vec![Check::new(
+            "public key derived from the seed (RFC 8032 §5.1.5)",
+            case.input.public_key.clone(),
+            hex::encode(secret.public_key().as_bytes()),
+        )];
+
+        if case.expect.error {
+            // A negative case: the proof it carries is for a different
+            // label-version pair and must not verify for this one.
+            let raw = case
+                .input
+                .proof
+                .as_deref()
+                .ok_or_else(|| Error::MissingField {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    field: "input.proof".to_owned(),
+                })?;
+            let bytes = unhex(FILE, name, "input.proof", raw)?;
+            let got = match vrf::Proof::from_slice(&bytes) {
+                Err(err) => format!("unusable proof: {err}"),
+                Ok(proof) => match secret.public_key().verify(suite, &input, &proof) {
+                    Err(_) => "rejected".to_owned(),
+                    Ok(_) => "accepted".to_owned(),
+                },
+            };
+            checks.push(Check::new(
+                "verify() rejects a proof for another label-version pair (§11.7)",
+                "rejected",
+                got,
+            ));
+        } else {
+            let expected_input =
+                case.expect
+                    .vrf_input
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.vrf_input".to_owned(),
+                    })?;
+            let expected_output =
+                case.expect
+                    .output
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.output".to_owned(),
+                    })?;
+            let expected_proof =
+                case.expect
+                    .proof
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.proof".to_owned(),
+                    })?;
+
+            // alpha_string is the encoded VrfInput. RFC 9381 says nothing about
+            // this; §11.7 does, and it is where two conforming ECVRF
+            // implementations can still disagree.
+            checks.push(Check::new(
+                "VrfInput encoding is alpha_string (§2.1, §11.7)",
+                expected_input,
+                render_result(kt_wire::codec::encode(&input), hex::encode),
+            ));
+
+            let produced = secret.evaluate(suite, &input);
+            checks.push(Check::new(
+                "VRF proof, VRF.Np = 80 bytes (§11.7, RFC 9381 §5.1)",
+                expected_proof,
+                match &produced {
+                    Ok((_, proof)) => hex::encode(proof.as_bytes()),
+                    Err(err) => format!("failed: {err}"),
+                },
+            ));
+            checks.push(Check::new(
+                "VRF output, truncated to VRF.Nh = 32 bytes (§17.1)",
+                expected_output,
+                match &produced {
+                    Ok((output, _)) => hex::encode(output.as_bytes()),
+                    Err(err) => format!("failed: {err}"),
+                },
+            ));
+
+            // And the peer's own proof must verify and yield the peer's output —
+            // the direction a client actually runs.
+            let bytes = unhex(FILE, name, "expect.proof", expected_proof)?;
+            let public = vrf::PublicKey::from_slice(&unhex(
+                FILE,
+                name,
+                "public_key",
+                &case.input.public_key,
+            )?);
+            let verified = match (public, vrf::Proof::from_slice(&bytes)) {
+                (Err(err), _) => format!("unusable public key: {err}"),
+                (_, Err(err)) => format!("unusable proof: {err}"),
+                (Ok(public), Ok(proof)) => {
+                    render_result(public.verify(suite, &input, &proof), |output| {
+                        hex::encode(output.as_bytes())
+                    })
+                }
+            };
+            checks.push(Check::new(
+                "verifying the peer's proof yields the peer's search key (§11.7)",
+                expected_output,
+                verified,
+            ));
+        }
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: case.expect.error,
+            input: format!(
+                "label {} bytes, version {}",
+                case.input.label.len() / 2,
+                case.input.version
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "VRF".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
 }

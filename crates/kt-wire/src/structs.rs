@@ -326,6 +326,63 @@ impl Encode for CommitmentValue {
     }
 }
 
+/// The VRF's input for a label-version pair (§11.7 `VrfInput`).
+///
+/// ```tls-presentation
+/// struct {
+///   opaque label<0..2^8-1>;
+///   uint32 version;
+/// } VrfInput;
+/// ```
+///
+/// The VRF output over this structure is the label-version pair's search key in
+/// the prefix tree, which is what keeps labels private: the tree is indexed by
+/// something only the log can compute, and a user who is shown a search key learns
+/// nothing about the label unless they already know it.
+///
+/// The encoding is the whole point of the type. `label` carries a length prefix, so
+/// `("ab", 1)` and `("a", …)` cannot collide the way a bare concatenation would.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct VrfInput {
+    /// The label, e.g. a username.
+    pub label: Vec<u8>,
+    /// The version of that label.
+    pub version: u32,
+}
+
+impl VrfInput {
+    /// `opaque label<0..2^8-1>`.
+    pub const LABEL: VectorSpec = VectorSpec::new((1 << 8) - 1);
+
+    /// A `VrfInput` for `label` at `version`.
+    #[must_use]
+    pub fn new(label: impl Into<Vec<u8>>, version: u32) -> Self {
+        Self {
+            label: label.into(),
+            version,
+        }
+    }
+}
+
+impl Encode for VrfInput {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.opaque_vector(Self::LABEL, &self.label)?;
+        enc.u32(self.version);
+        Ok(())
+    }
+}
+
+impl Decode for VrfInput {
+    fn decode(dec: &mut Decoder<'_>) -> Result<Self> {
+        let label = dec.opaque_vector(Self::LABEL)?;
+        let version = dec.u32()?;
+        Ok(Self {
+            label: label.to_vec(),
+            version,
+        })
+    }
+}
+
 /// A leaf of the log tree (§11.8 `LogEntry`).
 ///
 /// ```tls-presentation

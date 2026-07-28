@@ -1,0 +1,165 @@
+{
+  "primitive": "vrf",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.7",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "ECVRF-EDWARDS25519-SHA512-TAI (RFC 9381) over the presentation-language encoding of a VrfInput, with the output truncated to VRF.Nh = 32 bytes per §17.1. `vrf_input` is that encoding, which is what alpha_string must be; `output` is the prefix tree search key for the label-version pair; `proof` is VRF.Np = 80 bytes. The RFC's own Appendix B vectors pin the ECVRF core and are run directly by the Rust side; these pin the KT wrapping around it. The negative case is a proof for one label-version pair checked against another, which must not verify.",
+  "cases": [
+    {
+      "name": "empty-label-version-0",
+      "input": {
+        "label": "",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "output": "68e41c4842588636ccbec5d7fb7b2fa7a5a80f50bcd9380b6845601c92511a75",
+        "proof": "5d60ea6b32e37c0c17c0db8be2be17d2ff6d7a73a59c936364c6efbd4c53beca0f72bc5a8774043ce4845e2b3d2329f812bb68227fff369befd8393b158cad982a46f6cfc89cdaabae087a558d61770e",
+        "vrf_input": "0000000000"
+      }
+    },
+    {
+      "name": "simple",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "output": "a0ed13f449810f5a5dfecb58c287f3fbe1f78bf70460c790a4f8d04616d07265",
+        "proof": "ced7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c1e775f9cff0173344e4e19fc301c504f3dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "vrf_input": "11616c696365406578616d706c652e636f6d00000000"
+      }
+    },
+    {
+      "name": "version-1",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 1
+      },
+      "expect": {
+        "output": "2b9527bc6c8f593ed334fa9827263db867a92b265373192f7a92c87b93086cab",
+        "proof": "15f37fbdac790c1db7bb81b217a570c223d19a605e3254b5f9efe3c4210021c2d1660a6b0d77a1eda77580711ad1c125d1f9159a6e645b06d9f2008d05d80f191b45196d45b0a6c75660a352e4159301",
+        "vrf_input": "11616c696365406578616d706c652e636f6d00000001"
+      }
+    },
+    {
+      "name": "version-2",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 2
+      },
+      "expect": {
+        "output": "d41133edf52862910e01cc6bbc889cb325e9c365e42020a2ab778f47fc8b9736",
+        "proof": "0cc0b270ae0972346c28bd45dc4fea92a5940ae69e60f191e8ee18db0ee028f8ab4a7e009b9e699f9c44dc00fa0995a1597277add494563956dd639894ba950df5b72afd800c0f77859576e91776410f",
+        "vrf_input": "11616c696365406578616d706c652e636f6d00000002"
+      }
+    },
+    {
+      "name": "version-max",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 4294967295
+      },
+      "expect": {
+        "output": "ac4cf914054dad97c5f1b73a1252efacd3a214823f7bf95c4579899598197ba5",
+        "proof": "f544bbc548e86ba0af637cf0b0c558ec61fa8beae12343a3fcec0192218f0fdec481c52522a69ba815de73540b9a8f1b0c511fee31eeefa060731839400adf717c55538193e22780e60ccaae96f0f005",
+        "vrf_input": "11616c696365406578616d706c652e636f6dffffffff"
+      }
+    },
+    {
+      "name": "other-label-same-version",
+      "input": {
+        "label": "626f62406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "output": "47f86687b9b6bc7baa46c76baccaeafab521aa1cb5716907e34318ec55af9b41",
+        "proof": "0adf701cbcaebea36d56b107df988427bebb498e1682812381e2bbc444e68d13e4ffc8537f5c2cd77079b994fff2ee87e94ac6ed3ab4ba1bc2d57fa0b4af973933d66796a4d7fd815d62724e3134e004",
+        "vrf_input": "0f626f62406578616d706c652e636f6d00000000"
+      }
+    },
+    {
+      "name": "label-a",
+      "input": {
+        "label": "61",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 1644167168
+      },
+      "expect": {
+        "output": "cff879645fc043ddcef04bfaae0a531713fc06200f493c5524042d6ea765eb2c",
+        "proof": "3c761d3e059a863d3b8f7ca090977f5f2805a05b00ac4bd3a5deb5c9be5b6fa62023277653f427f7ac78085859f60c07d1b210b4b75f4cfb6dd1ab6dabe4bf7179be059769b1e2d3dbe5df797d6a9e0f",
+        "vrf_input": "016162000000"
+      }
+    },
+    {
+      "name": "label-ab",
+      "input": {
+        "label": "6162",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "output": "cf0e6ce9cbb206b3c55dac85332d68ff723f31f1856332dafb4003cad6b837e7",
+        "proof": "41817558737906e1b0e3a7cac280e1b2e97891ecffc914da3002def6e6de216459b33e4dee419b49d1f3f4180fdb65e963dd66523804da0db153c5b67be8c534e565cd4f499fc4d7f70b679a546e920d",
+        "vrf_input": "02616200000000"
+      }
+    },
+    {
+      "name": "label-max-len",
+      "input": {
+        "label": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 7
+      },
+      "expect": {
+        "output": "dce7050aef83b4246b23f1998d23c665843fb551586219361b378e7a5cf317c2",
+        "proof": "cc8c045e0e5b773870e880137b4e84a3b926768971a77775ce42be7647c7cbc32362ef5a542a30f06d6c27c106a100c3de41e80b8268913ca9c3e68021ac3acbb8ba3cf2d97716696df012cf933b6a04",
+        "vrf_input": "ff61616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616100000007"
+      }
+    },
+    {
+      "name": "label-with-nulls",
+      "input": {
+        "label": "000100ff",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 3
+      },
+      "expect": {
+        "output": "6775e7a07a79cd986d87238a743c3d40df82c4143c6ad8b688b81211b2312c24",
+        "proof": "1f19ad43c440cdfc9da0f5b351970a3ca1fe64166c4c9ff91cade9ecd68d842369432dd81964d1055fc1db21a10778f9d2fa165c2fb22cf7509874ac9c49b24714b74a006638b31d7108165601a36e0e",
+        "vrf_input": "04000100ff00000003"
+      }
+    },
+    {
+      "name": "proof-for-another-version-does-not-verify",
+      "input": {
+        "label": "616c696365406578616d706c652e636f6d",
+        "private_key": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "proof": "ced7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c1e775f9cff0173344e4e19fc301c504f3dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 1
+      },
+      "expect": {
+        "error": true
+      }
+    }
+  ]
+}

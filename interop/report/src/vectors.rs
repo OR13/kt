@@ -268,3 +268,38 @@ pub struct PrefixResultExpect {
     #[serde(default)]
     pub leaf: Option<PrefixEntryInput>,
 }
+
+/// `vrf.json` input (§11.7).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VrfCaseInput {
+    /// The VRF secret key seed, hex.
+    pub private_key: String,
+    /// The matching public key, hex.
+    pub public_key: String,
+    /// The label, hex.
+    pub label: String,
+    /// The version.
+    pub version: u32,
+    /// On negative cases, a proof that must not verify for this pair.
+    #[serde(default)]
+    pub proof: Option<String>,
+}
+
+/// `vrf.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VrfExpect {
+    /// The encoded `VrfInput` that is `alpha_string`, hex.
+    #[serde(default)]
+    pub vrf_input: Option<String>,
+    /// The 32-byte output, i.e. the search key, hex.
+    #[serde(default)]
+    pub output: Option<String>,
+    /// The 80-byte proof, hex.
+    #[serde(default)]
+    pub proof: Option<String>,
+    /// Set on cases that must be rejected.
+    #[serde(default)]
+    pub error: bool,
+}
