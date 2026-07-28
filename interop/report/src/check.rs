@@ -1895,6 +1895,47 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
             },
         ));
 
+        // §11.4's FullTreeHead, decoded from the peer's bytes and re-encoded. Both shapes
+        // are here because the interesting one is not `updated` but the pair: `same` is a
+        // single octet, `updated` continues, and under thirdPartyAuditing it continues
+        // further still. Nothing in the bytes says which — the mode does — so a decoder
+        // that takes the mode from the wrong place stays silent until it reads the next
+        // structure out of the middle of this one.
+        for (label, expected) in [
+            ("same", &case.expect.full_tree_head_same),
+            ("updated", &case.expect.full_tree_head_updated),
+        ] {
+            let bytes = unhex(FILE, name, "expect.full_tree_head", expected)?;
+            let mut dec = Decoder::new(&bytes);
+            let parsed = FullTreeHead::decode_with_mode(&mut dec, mode);
+            checks.push(Check::new(
+                format!("FullTreeHead `{label}` round-trips through the mode (§11.4)"),
+                expected.clone(),
+                match &parsed {
+                    Err(err) => format!("decode failed: {err}"),
+                    Ok(head) => render_result(kt_wire::codec::encode(head), hex::encode),
+                },
+            ));
+
+            // And what the mode decided, stated rather than implied by a byte count: the
+            // §11.2 reading recorded here puts leaf_public_key only in one mode, and this
+            // is the other field the same select governs.
+            let carries_auditor = matches!(
+                &parsed,
+                Ok(FullTreeHead::Updated {
+                    auditor_tree_head: Some(_),
+                    ..
+                })
+            );
+            let expected_auditor =
+                label == "updated" && mode == kt_wire::structs::DeploymentMode::ThirdPartyAuditing;
+            checks.push(Check::new(
+                format!("`{label}` carries an auditor head only under thirdPartyAuditing (§11.4)"),
+                expected_auditor.to_string(),
+                carries_auditor.to_string(),
+            ));
+        }
+
         // The auditor's head, where the mode has one (§11.3).
         if let (Some(expected_tbs), Some(expected_head), Some(timestamp)) = (
             case.expect.auditor_tree_head_tbs.as_deref(),

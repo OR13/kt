@@ -145,6 +145,19 @@ func headVectors(sha string) (*File, error) {
 				"signature":     hex.EncodeToString(signature),
 			}
 
+			// §11.4's FullTreeHead, in both shapes. `same` is a single octet — the user
+			// keeps the head it already advertised — while `updated` carries a TreeHead
+			// and then, only under thirdPartyAuditing, an AuditorTreeHead. The deployment
+			// mode therefore decides how many bytes follow, and a decoder that guesses
+			// wrong reads the next structure out of the middle of this one.
+			fullSame := &bytes.Buffer{}
+			if err := (&structs.FullTreeHead{}).Marshal(fullSame); err != nil {
+				return nil, fmt.Errorf("mode %s: marshalling the same-head case: %w", m.name, err)
+			}
+			full := &structs.FullTreeHead{
+				TreeHead: &structs.TreeHead{TreeSize: size, Signature: signature},
+			}
+
 			input := map[string]any{
 				"mode":                         uint8(m.mode),
 				"signature_public_key":         hex.EncodeToString(public.SignatureKey.Bytes()),
@@ -186,7 +199,36 @@ func headVectors(sha string) (*File, error) {
 				input["auditor_timestamp"] = timestamp
 				expect["auditor_tree_head_tbs"] = hex.EncodeToString(auditorTbs.Bytes())
 				expect["auditor_tree_head"] = hex.EncodeToString(auditorHead.Bytes())
+
+				full.AuditorTreeHead = &structs.AuditorTreeHead{
+					Timestamp: timestamp,
+					TreeSize:  size,
+					Signature: auditorSig,
+				}
 			}
+
+			// Now that the auditor head exists where the mode calls for one, encode the
+			// updated-head case — and read both shapes back through katie's own parser, so
+			// the vector cannot pin bytes katie would not itself accept.
+			fullUpdated := &bytes.Buffer{}
+			if err := full.Marshal(fullUpdated); err != nil {
+				return nil, fmt.Errorf("mode %s: marshalling the updated head: %w", m.name, err)
+			}
+			for _, shape := range []struct {
+				label string
+				raw   []byte
+			}{{"same", fullSame.Bytes()}, {"updated", fullUpdated.Bytes()}} {
+				read := bytes.NewBuffer(shape.raw)
+				if _, err := structs.NewFullTreeHead(public, read); err != nil {
+					return nil, fmt.Errorf(
+						"mode %s: katie cannot parse its own %s head: %w", m.name, shape.label, err)
+				} else if read.Len() != 0 {
+					return nil, fmt.Errorf(
+						"mode %s: %d bytes left after the %s head", m.name, read.Len(), shape.label)
+				}
+			}
+			expect["full_tree_head_same"] = hex.EncodeToString(fullSame.Bytes())
+			expect["full_tree_head_updated"] = hex.EncodeToString(fullUpdated.Bytes())
 
 			f.Cases = append(f.Cases, Case{
 				Name:   fmt.Sprintf("%s-size-%d", m.name, size),

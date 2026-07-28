@@ -160,7 +160,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `distinguished.json` | distinguished log entries | §6.1 | 42 size/window/timestamp shapes |
-| `tree-head.json` | configuration + signatures | §11.2–§11.4 | 9, all three modes |
+| `tree-head.json` | configuration, signatures, and `FullTreeHead` bytes | §11.2–§11.4 | 9, all three modes |
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
 | `from-kt.json` | must accept / must reject, in reverse | as above | 209, roughly half negative |
