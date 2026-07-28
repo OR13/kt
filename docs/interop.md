@@ -89,17 +89,27 @@ disagrees:
 |---|---|---|---|---|
 | 1 | Commitment (§11.6) | `opening`, `label`, `version`, `update` → `commitment` | Pure HMAC-SHA256 over a `CommitmentValue` struct; no tree state. Doubles as the first `kt-wire` encoding test. | **agrees** |
 | 2 | Wire codec (§2.1, §11) | struct → hex bytes, both directions | Everything downstream is defined over these bytes. Include the optional-value and variable-length-vector edge cases. | **agrees** for `CommitmentValue`/`UpdateValue`; other structs pending |
-| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. | todo |
-| 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | todo |
-| 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | todo |
+| 3 | VRF (§11.7) | key, `VrfInput{label, version}` → proof, output | Must match ECVRF exactly; katie has both suites and its own tests. | todo — next |
+| 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | **agrees**, both directions |
+| 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | **agrees**, both directions |
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
 
-Steps 1, 2, and 6 were the right first commits, and are done:
-`interop/vectors/commitment.json`, `ibst.json`, and `binary-ladder.json` all pass
-from the Rust side. "Agrees" here means a committed vector asserts it, not that
-the two implementations were eyeballed.
+Steps 1, 2, 4, 5, and 6 are done. `commitment.json`, `ibst.json`,
+`binary-ladder.json`, `log-tree.json`, and `prefix-tree.json` all pass from the
+Rust side — 3540 checks — and `from-kt.json` runs the other way: 201 proofs built
+by the Rust side, 101 of which katie must accept and 100 of which it must reject.
+"Agrees" here means a committed vector asserts it, not that the two
+implementations were eyeballed.
+
+The reverse direction earned its keep immediately. It found that §12.1's proofs
+carry heads of **balanced** subtrees only: an implementation that hands over the
+head of an unbalanced node — the right subtree of a seven-leaf log, or the root of
+any log whose size is not a power of two — builds proofs that verify against
+themselves and disagree with the peer everywhere. Recomputing katie's values would
+have caught it too, but only once proofs were being compared; nothing in the
+hashing rules of §11.8 says it.
 
 ### Findings from steps 1, 2, and 6
 
@@ -143,6 +153,18 @@ Appendix B's `monitoring_binary_ladder(t, left_inclusion)` drops lookups already
 proven to the left; katie's `MonitoringBinaryLadder(t)` takes only `t`. Monitoring
 vectors are therefore emitted with an empty set only, and the deduplication is
 covered by Rust-side tests. Not a disagreement, just a pin that is behind.
+
+**§12.2 leaves two things implicit about prefix proofs.** First, what `depth`
+counts for a `nonInclusionParent` result: §12.2 calls the terminal node "a parent
+node that lacks the desired child" and says `depth` is "the depth of the terminal
+node", and those give numbers one apart. katie counts the bits consumed to reach
+the *absent child slot*, which is one below the parent, and which makes `depth`
+mean the same thing for all three result types. Second, whether that absent slot
+consumes an element of `elements`: it does not — the result type already says it is
+empty — while a copath sibling that happens not to exist does consume one, listed
+as all-zero per §12.2's own sentence. Both readings are now pinned by
+`prefix-tree.json`; both are worth an upstream question, since a second
+implementation reading them the other way would be silently incompatible.
 
 **`opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct

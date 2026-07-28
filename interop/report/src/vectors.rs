@@ -163,3 +163,108 @@ pub struct LadderExpect {
     /// The versions looked up, in order.
     pub versions: Vec<u32>,
 }
+
+/// `log-tree.json` input (§3.2, §11.8, §12.1).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogTreeInput {
+    /// The log's entries, in order.
+    pub entries: Vec<LogEntryInput>,
+    /// The batch proofs to ask for, paired positionally with
+    /// [`LogTreeExpect::proofs`].
+    pub requests: Vec<LogProofRequest>,
+}
+
+/// One `LogEntry` (§11.8).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogEntryInput {
+    /// Milliseconds since the Unix epoch.
+    pub timestamp: u64,
+    /// The prefix tree root as of this entry, hex.
+    pub prefix_tree: String,
+}
+
+/// One batch proof request.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogProofRequest {
+    /// Leaf indices to prove included.
+    pub proven_leaves: Vec<u64>,
+    /// A smaller tree the verifier already observed, if any.
+    #[serde(default)]
+    pub retained_size: Option<u64>,
+}
+
+/// `log-tree.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogTreeExpect {
+    /// `Hash(LogEntry)` for each entry, hex.
+    pub leaf_values: Vec<String>,
+    /// The tree root, hex.
+    pub root: String,
+    /// Full subtree heads for this size, left to right, hex.
+    pub full_subtrees: Vec<String>,
+    /// The proofs, paired positionally with the requests.
+    pub proofs: Vec<LogProofExpect>,
+}
+
+/// One proof the peer produced.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogProofExpect {
+    /// The wire-encoded `InclusionProof`, hex.
+    pub proof: String,
+    /// Its elements, hex.
+    pub elements: Vec<String>,
+}
+
+/// `prefix-tree.json` input (§3.3, §11.9, §12.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefixTreeInput {
+    /// Entries to insert, in order.
+    pub entries: Vec<PrefixEntryInput>,
+    /// Search keys to look up as one batch, hex.
+    pub searches: Vec<String>,
+}
+
+/// One prefix tree entry.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefixEntryInput {
+    /// The search key, hex.
+    pub vrf_output: String,
+    /// The commitment, hex.
+    pub commitment: String,
+}
+
+/// `prefix-tree.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefixTreeExpect {
+    /// The tree root, hex.
+    pub root: String,
+    /// The wire-encoded `PrefixProof`, hex.
+    pub proof: String,
+    /// One result per search.
+    pub results: Vec<PrefixResultExpect>,
+    /// Copath values, hex.
+    pub elements: Vec<String>,
+    /// Commitments the peer found, in request order, hex.
+    pub commitments: Vec<String>,
+}
+
+/// One `PrefixSearchResult` (§12.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefixResultExpect {
+    /// 1 = inclusion, 2 = nonInclusionLeaf, 3 = nonInclusionParent.
+    pub result_type: u8,
+    /// Bits consumed to reach the terminal node.
+    pub depth: u8,
+    /// The leaf found instead, for `nonInclusionLeaf`.
+    #[serde(default)]
+    pub leaf: Option<PrefixEntryInput>,
+}

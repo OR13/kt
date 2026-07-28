@@ -67,6 +67,13 @@ pub enum Error {
         /// The offending value.
         value: u64,
     },
+    /// A fixed-size hash was the wrong length.
+    HashLength {
+        /// `Hash.Nh` for the suite in use.
+        expected: usize,
+        /// Length actually supplied.
+        actual: usize,
+    },
     /// A length or count did not fit in this platform's `usize`.
     ///
     /// Only reachable on 32-bit targets, where a `2^32-1` length prefix can
@@ -97,6 +104,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidEnum { name, value } => {
                 write!(f, "{value} is not a valid {name}")
+            }
+            Self::HashLength { expected, actual } => {
+                write!(f, "hash must be {expected} bytes, got {actual}")
             }
             Self::LengthOverflow { value } => {
                 write!(f, "length {value} does not fit in usize on this platform")

@@ -425,6 +425,20 @@ fn reuse_section(report: &Report) -> String {
       refuse</em>: the input has no answer, and producing one is a failure.</li>
 </ul>
 <p>
+  <strong>Both directions.</strong> Everything on this page is Go &rarr; Rust: the
+  peer computed a value and this implementation recomputed it. The other direction
+  runs in CI rather than here, because the peer is the one deciding and its verdict
+  is not ours to render: <code>kt-interop-emit</code> writes proofs built by this
+  implementation, half of them deliberately corrupted, and
+  <a href="{repo}/blob/main/interop/go/cmd/verify/main.go"><code>interop/go/cmd/verify</code></a>
+  runs each one through katie&rsquo;s own verifiers &mdash; every honest proof must
+  be accepted and evaluate to the root we claim, every corrupted one must be
+  rejected. That is the direction that catches <em>over-acceptance</em>, where a
+  client believes a proof the peer would refuse, and comparing recomputed values
+  cannot see it. The fixtures are
+  <a href="{repo}/blob/main/interop/vectors/from-kt.json"><code>from-kt.json</code></a>.
+</p>
+<p>
   This page's own results are also available as
   <a href="report.json"><code>report.json</code></a>, with every sub-check
   included, in case you would rather diff than read.

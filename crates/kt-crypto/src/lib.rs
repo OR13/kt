@@ -36,6 +36,7 @@ use core::fmt;
 use kt_wire::codec;
 
 pub mod commitment;
+pub mod hash;
 pub mod suite;
 
 /// Verifiable Random Function over `VrfInput{label, version}`

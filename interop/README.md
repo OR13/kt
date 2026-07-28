@@ -5,9 +5,34 @@ The plan lives in [`../docs/interop.md`](../docs/interop.md); this file is the
 contract for the artifacts in here.
 
 ```text
-go/        separate Go module — links katie, emits vectors. AGPL-3.0.
+go/        separate Go module — links katie. AGPL-3.0.
+           cmd/gen     emits vectors for the Rust side to check   (Go -> Rust)
+           cmd/verify  checks proofs the Rust side built           (Rust -> Go)
 vectors/   committed JSON test vectors. Data, not code.
-report/    Rust crate — checks the vectors, and renders the evidence page.
+report/    Rust crate — checks the vectors, emits proofs, renders the evidence page.
+```
+
+## Both directions
+
+`docs/interop.md` asks for two directions, and both now run:
+
+| Direction | Producer | Checker | Files |
+|---|---|---|---|
+| Go → Rust | `interop/go/cmd/gen` | `cargo test` via `kt_interop::check` | `vectors/{commitment,ibst,binary-ladder,log-tree,prefix-tree}.json` |
+| Rust → Go | `kt-interop-emit` | `interop/go/cmd/verify` | `vectors/from-kt.json` |
+
+The second is not symmetry for its own sake. Recomputing the peer's values cannot
+catch an implementation that is self-consistently wrong, and it cannot catch
+**over-acceptance** — a verifier that accepts a proof the peer would reject, which
+is precisely how a broken client gets exploited. So half of `from-kt.json` is
+deliberately corrupted proofs that katie must reject, including a forged inclusion
+result. Our own verifier is asserted to reject each one before it is written, so a
+case katie accepts is a real disagreement about validity rather than a broken
+fixture.
+
+```sh
+cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/from-kt.json
+cd interop/go && go run ./cmd/verify -in ../vectors/from-kt.json
 ```
 
 ## The evidence page

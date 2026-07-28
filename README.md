@@ -110,17 +110,24 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 
 | Implemented | Draft | Verified by |
 |---|---|---|
-| Presentation-language codec (`kt-wire::codec`) | §2.1 | [`commitment.json`](interop/vectors/commitment.json), for the structs it covers |
+| Presentation-language codec (`kt-wire::codec`) | §2.1 | every vector file below |
 | `UpdateValue`, `CommitmentValue` (`kt-wire::structs`) | §11.5, §11.6 | [`commitment.json`](interop/vectors/commitment.json) |
 | Commitment, `HMAC(Kc, CommitmentValue)` (`kt-crypto::commitment`) | §11.6 | [`commitment.json`](interop/vectors/commitment.json) — 6 positive, 1 negative |
 | Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/ibst.json) — 38 log sizes |
 | Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/binary-ladder.json) — 76 cases |
+| Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
+| Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 
-All vectors are generated from the pinned katie by `interop/go/cmd/gen`; CI
-regenerates them and fails on any diff, so upstream drift is loud.
+**Both directions.** The vectors above are generated from the pinned katie by
+`interop/go/cmd/gen` and checked by `cargo test`. The reverse also runs:
+`kt-interop-emit` builds proofs from this implementation — half of them corrupted
+on purpose — and `interop/go/cmd/verify` puts each through katie's own verifiers,
+which must accept every honest one and reject every corrupted one. That direction is
+what catches *over-acceptance*, and recomputing the peer's values cannot see it.
+CI regenerates everything and fails on any diff, so upstream drift is loud.
 
-Not implemented: the VRF (§11.7), the three trees and their proofs (§3, §11.8–§11.9,
-§12), signatures (§11.2–§11.4), and the client algorithms (§6–§10, §13).
+Not implemented: the VRF (§11.7), the combined tree (§3.4, §12.3), signatures
+(§11.2–§11.4), and the client algorithms (§6–§10, §13).
 
 Interop work has already turned up two bugs in the Go peer and one gap in the
 draft — see the findings in [`docs/interop.md`](docs/interop.md).

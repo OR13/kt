@@ -1,12 +1,78 @@
 //! Protocol structs (`draft-ietf-keytrans-protocol-05` §11, §12, §13).
 //!
-//! Only the structs the commitment computation needs are here so far:
-//! `DeploymentMode` (§11.2), `UpdateValue` with its `UpdateSuffix` (§11.5), and
-//! `CommitmentValue` (§11.6). The rest arrive with the layers that consume them.
+//! Present so far: [`HashValue`] (§12.1), [`DeploymentMode`] (§11.2),
+//! [`UpdateValue`] with its [`UpdateSuffix`] (§11.5), [`CommitmentValue`]
+//! (§11.6), and [`LogEntry`] (§11.8). The proof types of §12 are in
+//! [`crate::proofs`]. The rest arrive with the layers that consume them.
 
 use alloc::vec::Vec;
 
 use crate::codec::{Decode, Decoder, Encode, Encoder, Error, Result, VectorSpec};
+
+/// A hash-function output: `opaque HashValue[Hash.Nh]` (§12.1).
+///
+/// Fixed at 32 bytes because `Hash.Nh` is 32 for both cipher suites in the §17.1
+/// registry. A future suite with a different output length would need this type
+/// parameterized; until one exists, a fixed-size array is what makes a
+/// wrong-length hash unrepresentable rather than a runtime error.
+///
+/// [`HashValue::ZERO`] is not merely a default: §11.9 specifies an all-zero
+/// string of length `Hash.Nh` as the stand-in for a prefix-tree child that does
+/// not exist, and §12.2 uses the same value in a proof's `elements`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct HashValue([u8; HashValue::SIZE]);
+
+impl HashValue {
+    /// `Hash.Nh` for both registered cipher suites.
+    pub const SIZE: usize = 32;
+
+    /// The all-zero hash: the stand-in for a missing prefix-tree child (§11.9).
+    pub const ZERO: Self = Self([0; Self::SIZE]);
+
+    /// Wraps exactly `Nh` bytes.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; Self::SIZE]) -> Self {
+        Self(bytes)
+    }
+
+    /// Wraps a slice that must be exactly `Nh` bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::HashLength`] if `bytes` is the wrong length.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let array = <[u8; Self::SIZE]>::try_from(bytes).map_err(|_| Error::HashLength {
+            expected: Self::SIZE,
+            actual: bytes.len(),
+        })?;
+        Ok(Self(array))
+    }
+
+    /// The bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; Self::SIZE] {
+        &self.0
+    }
+
+    /// Whether this is the all-zero stand-in value (§11.9).
+    #[must_use]
+    pub fn is_zero(&self) -> bool {
+        self.0 == Self::ZERO.0
+    }
+}
+
+impl Encode for HashValue {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.opaque_fixed(&self.0);
+        Ok(())
+    }
+}
+
+impl Decode for HashValue {
+    fn decode(dec: &mut Decoder<'_>) -> Result<Self> {
+        Self::from_slice(dec.opaque_fixed(Self::SIZE)?)
+    }
+}
 
 /// How the Transparency Log is deployed (§11.2 `DeploymentMode`).
 ///
@@ -257,6 +323,45 @@ impl Encode for CommitmentValue {
         enc.opaque_vector(Self::LABEL, &self.label)?;
         enc.u32(self.version);
         self.update.encode(enc)
+    }
+}
+
+/// A leaf of the log tree (§11.8 `LogEntry`).
+///
+/// ```tls-presentation
+/// struct {
+///   uint64 timestamp;
+///   opaque prefix_tree[Hash.Nh];
+/// } LogEntry;
+/// ```
+///
+/// The leaf's value in the log tree is the hash of this structure — see
+/// `kt_tree::log`. `timestamp` is milliseconds since the Unix epoch, and it is
+/// what the implicit binary search tree's monotonicity checks are about (§4.1);
+/// `prefix_tree` is the prefix-tree root after the entry's modifications.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct LogEntry {
+    /// Milliseconds since the Unix epoch.
+    pub timestamp: u64,
+    /// The prefix tree root as of this entry.
+    pub prefix_tree: HashValue,
+}
+
+impl Encode for LogEntry {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.u64(self.timestamp);
+        self.prefix_tree.encode(enc)
+    }
+}
+
+impl Decode for LogEntry {
+    fn decode(dec: &mut Decoder<'_>) -> Result<Self> {
+        let timestamp = dec.u64()?;
+        let prefix_tree = HashValue::decode(dec)?;
+        Ok(Self {
+            timestamp,
+            prefix_tree,
+        })
     }
 }
 

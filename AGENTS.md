@@ -63,16 +63,18 @@ Dependency direction is strictly bottom-up; `kt-wire` depends on no other in-tre
 
 ## Current state
 
-`docs/interop.md` Tier 1 steps 1, 2, and 6 are done and pinned against the Go
-peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the §11.6
-commitment, the implicit binary search tree (§4.1), and the binary ladders (§5).
-Three vector files — `commitment.json`, `ibst.json`, `binary-ladder.json` — are
-generated from the pinned katie, and CI fails if regeneration produces a diff.
+`docs/interop.md` Tier 1 steps 1, 2, 4, 5, and 6 are done and pinned against the
+Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
+§11.6 commitment, the implicit binary search tree (§4.1), the binary ladders
+(§5), the log tree with its §12.1 batch proofs, and the prefix tree with its
+§12.2 proofs. Five vector files are generated from the pinned katie, and
+`from-kt.json` goes the other way: proofs we build, verified by katie via
+`interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
 
-`kt-tree::log`, `kt-tree::prefix`, `kt-tree::combined`, `kt-crypto::vrf`,
-`kt-crypto::signature`, and all of `kt-client` are still stubs. Next up is the
-VRF (§11.7), then the log tree, then the prefix tree — bottom-up, because a
-vector for a layer whose foundation disagrees proves nothing.
+`kt-tree::combined`, `kt-crypto::vrf`, `kt-crypto::signature`, and all of
+`kt-client` are still stubs. Next is the VRF (§11.7) — the last primitive before
+the combined tree, and the one that needs curve dependencies; RFC 9381 ships its
+own test vectors, which is a third oracle independent of any implementation.
 
 Verified facts worth not rediscovering:
 
@@ -91,3 +93,15 @@ Verified facts worth not rediscovering:
 - Appendix A and B are Python: unbounded integers, exceptions for missing cases.
   The Rust equivalents take `u64` indices and `u32` versions and return `Result`.
   Every such deviation is documented at the function that makes it.
+- §12.1's proof carries heads of **balanced** subtrees only. A node whose leaf
+  count is not a power of two cannot be handed over as one value; it decomposes
+  into its balanced pieces. Getting this wrong produces proofs that verify against
+  themselves and disagree with the peer on every non-power-of-two tree.
+- §12.2 leaves two things implicit, both resolved the way katie resolves them and
+  both pinned by `prefix-tree.json`: `depth` counts the bits consumed to reach the
+  terminal node, so for `nonInclusionParent` it is the *absent child slot's* depth,
+  one below the parent; and that slot consumes no proof element, while a copath
+  sibling that happens not to exist consumes one listed as all-zero.
+- `upstream/keytrans-verification` has no licence file, so it cannot be linked as
+  an oracle — see `docs/licensing.md`. Its Gobra invariants may be restated as
+  property tests in your own words.
