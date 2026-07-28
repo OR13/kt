@@ -82,6 +82,8 @@ func main() {
 		{"log-tree.json", logTreeVectors},
 		{"prefix-tree.json", prefixTreeVectors},
 		{"tree-head.json", headVectors},
+		{"requests.json", requestVectors},
+		{"ladder-interpretation.json", ladderInterpretationVectors},
 		{"tampered.json", tamperedVectors},
 	}
 

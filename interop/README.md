@@ -153,8 +153,29 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `vrf.json` | VRF | §11.7 | 10 positive, 1 negative |
 | `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
 | `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
-| `tampered.json` | **must reject** | §11.6, §11.7, §12.1, §12.2 | 18, all negative |
+| `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
+| `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
+| `tree-head.json` | configuration + signatures | §11.2–§11.4 | 9, all three modes |
+| `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
+| `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
 | `from-kt.json` | must accept / must reject, in reverse | as above | 201, half negative |
+
+## Choosing what to pin next
+
+katie is the source of truth here, so the question that drives new vectors is "what
+does katie expose that we have not diffed against yet?" rather than "what section
+comes next in the draft". Its pure functions and `structs.Marshal` are the cheapest
+and sharpest oracles — no database, no ordering assumptions, one answer per input:
+
+- `structs.Marshal` on any §11/§13 structure gives bytes to reproduce.
+- `tree/transparency/math` exports `UpdateView` and `InterpretSearchLadder`, so §4.2
+  and §6.2 have oracles for their *inferences*, not just their arithmetic.
+- `tree/log` and `tree/prefix` build real trees over in-memory stores, so roots and
+  proofs come from the code path a running log serves from.
+
+What is left needs katie's client, not its libraries: the §6–§10 algorithms and the
+`CombinedTreeProof` they define, which have no per-input answer to diff — only
+transcripts.
 
 ## Asking a verifier to say no
 

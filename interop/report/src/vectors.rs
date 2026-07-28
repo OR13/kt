@@ -486,3 +486,146 @@ pub struct UpdateViewExpect {
     #[serde(default)]
     pub right_edge_unchecked: Option<bool>,
 }
+
+/// `requests.json` input: which §13 structure, and its fields.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum RequestInput {
+    /// §13.1 `SearchRequest`.
+    SearchRequest {
+        /// The tree size last observed.
+        #[serde(default)]
+        last: Option<u64>,
+        /// The label, hex.
+        label: String,
+        /// The exact version wanted, absent for the greatest.
+        #[serde(default)]
+        version: Option<u32>,
+    },
+    /// §13.1 `BinaryLadderStep`.
+    BinaryLadderStep {
+        /// The VRF proof, hex.
+        proof: String,
+        /// The commitment, absent when the version does not exist, hex.
+        #[serde(default)]
+        commitment: Option<String>,
+    },
+    /// §13.2 `MonitorMapEntry`.
+    MonitorMapEntry {
+        /// The log entry position.
+        position: u64,
+        /// The version at that position.
+        version: u32,
+    },
+    /// §13.2 `ContactMonitorRequest`.
+    ContactMonitorRequest {
+        /// The tree size last observed.
+        #[serde(default)]
+        last: Option<u64>,
+        /// The label, hex.
+        label: String,
+        /// The monitoring state.
+        entries: Vec<MonitorEntryInput>,
+    },
+    /// §13.3 `OwnerInitRequest`.
+    OwnerInitRequest {
+        /// The tree size last observed.
+        #[serde(default)]
+        last: Option<u64>,
+        /// The label, hex.
+        label: String,
+        /// The distinguished entry to start from.
+        start: u64,
+    },
+    /// §13.4 `OwnerMonitorRequest`.
+    OwnerMonitorRequest {
+        /// The tree size last observed.
+        #[serde(default)]
+        last: Option<u64>,
+        /// The label, hex.
+        label: String,
+        /// The monitoring state.
+        entries: Vec<MonitorEntryInput>,
+        /// The rightmost distinguished entry.
+        start: u64,
+        /// The greatest version known.
+        #[serde(default)]
+        greatest_version: Option<u32>,
+    },
+    /// §13.5 `LabelValue`.
+    LabelValue {
+        /// The value, hex.
+        value: String,
+    },
+    /// §13.5 `UpdateInfo`.
+    UpdateInfo {
+        /// The commitment opening, hex.
+        opening: String,
+        /// The `DeploymentMode` registry value.
+        mode: u8,
+    },
+    /// §13.5 `UpdateRequest`.
+    UpdateRequest {
+        /// The tree size last observed.
+        #[serde(default)]
+        last: Option<u64>,
+        /// The label, hex.
+        label: String,
+        /// The greatest version known.
+        #[serde(default)]
+        greatest_version: Option<u32>,
+        /// The values to publish, hex.
+        values: Vec<String>,
+    },
+    /// §11.5 `UpdateTBS`.
+    UpdateTbs {
+        /// The encoded `Configuration` this TBS begins with, hex.
+        configuration: String,
+        /// The label, hex.
+        label: String,
+        /// The version.
+        version: u32,
+        /// The value, hex.
+        value: String,
+    },
+}
+
+/// One `MonitorMapEntry` in a request.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MonitorEntryInput {
+    /// The log entry position.
+    pub position: u64,
+    /// The version at that position.
+    pub version: u32,
+}
+
+/// `requests.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestExpect {
+    /// The encoded structure, hex.
+    pub encoding: String,
+}
+
+/// `ladder-interpretation.json` input (§6.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterpretationInput {
+    /// The version being searched for.
+    pub target: u32,
+    /// The greatest version that exists in the log entry.
+    pub greatest: u32,
+    /// The ladder's versions, in order.
+    pub ladder: Vec<u32>,
+    /// Whether each lookup was an inclusion, in ladder order.
+    pub results: Vec<bool>,
+}
+
+/// `ladder-interpretation.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterpretationExpect {
+    /// -1 if the greatest version is below the target, 0 if equal, 1 if above.
+    pub verdict: i8,
+}

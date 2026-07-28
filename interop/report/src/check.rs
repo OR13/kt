@@ -19,27 +19,34 @@ use kt_wire::heads::{
     TreeHeadTBS,
 };
 use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
+use kt_wire::requests::{
+    BinaryLadderStep, ContactMonitorRequest, LabelValue, MonitorMapEntry, OwnerInitRequest,
+    OwnerMonitorRequest, SearchRequest, UpdateInfo, UpdateRequest, UpdateTBS,
+};
 use kt_wire::structs::{
     CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue, VrfInput,
 };
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
-    CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput, LadderExpect,
-    LadderInput, LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, TamperedExpect,
+    CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
+    InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogTreeExpect,
+    LogTreeInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect,
     TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 9] = [
+pub const FILES: [&str; 11] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
+    "ladder-interpretation.json",
     "update-view.json",
     "vrf.json",
     "log-tree.json",
     "prefix-tree.json",
     "tree-head.json",
+    "requests.json",
     "tampered.json",
 ];
 
@@ -150,11 +157,13 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         commitment_suite(dir)?,
         ibst_suite(dir)?,
         ladder_suite(dir)?,
+        interpretation_suite(dir)?,
         update_view_suite(dir)?,
         vrf_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
         head_suite(dir)?,
+        request_suite(dir)?,
         tampered_suite(dir)?,
     ])
 }
@@ -1546,6 +1555,328 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
     Ok(Suite {
         primitive: file.primitive,
         title: "Updating a view".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
+        cases,
+    })
+}
+
+/// §11.5 and §13.1–§13.5: the request structures and the response building blocks.
+///
+/// Each case is one structure's encoding, and each also decodes back — the round trip
+/// is where a presence octet read in the wrong place shows up, since a wrong reading
+/// usually still produces *some* value.
+fn request_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "requests.json";
+    let file: VectorFile<RequestInput, RequestExpect> = load(dir, FILE)?;
+
+    let code = file.cipher_suite.unwrap_or_default();
+    let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
+        file: FILE.to_owned(),
+        value: code,
+    })?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let expected = case.expect.encoding.clone();
+
+        // Every arm produces the encoding plus a round-trip verdict, so that a
+        // decoder which merely happens to produce *a* value is not mistaken for one
+        // that reads the same fields.
+        let (what, encoded, round_trip) = match &case.input {
+            RequestInput::SearchRequest {
+                last,
+                label,
+                version,
+            } => {
+                let request = SearchRequest {
+                    last: *last,
+                    label: unhex(FILE, name, "label", label)?,
+                    version: *version,
+                };
+                let encoded = kt_wire::codec::encode(&request);
+                let round_trip = round_trips::<SearchRequest>(&expected, &request, FILE, name)?;
+                ("SearchRequest (§13.1)", encoded, round_trip)
+            }
+            RequestInput::BinaryLadderStep { proof, commitment } => {
+                let step = BinaryLadderStep {
+                    proof: unhex(FILE, name, "proof", proof)?,
+                    commitment: match commitment {
+                        None => None,
+                        Some(value) => Some(hash_field(FILE, name, "commitment", value)?),
+                    },
+                };
+                let encoded = kt_wire::codec::encode(&step);
+                // Decoding needs VRF.Np from the suite, which the bytes do not carry.
+                let bytes = unhex(FILE, name, "expect.encoding", &expected)?;
+                let mut dec = Decoder::new(&bytes);
+                let proof_size = step.proof.len();
+                let round_trip =
+                    match BinaryLadderStep::decode_with_proof_size(&mut dec, proof_size) {
+                        Err(err) => format!("decode failed: {err}"),
+                        Ok(back) => match dec.finish() {
+                            Err(err) => format!("trailing bytes: {err}"),
+                            Ok(()) if back == step => "round-trips".to_owned(),
+                            Ok(()) => "decoded to a different value".to_owned(),
+                        },
+                    };
+                ("BinaryLadderStep (§13.1)", encoded, round_trip)
+            }
+            RequestInput::MonitorMapEntry { position, version } => {
+                let entry = MonitorMapEntry {
+                    position: *position,
+                    version: *version,
+                };
+                let encoded = kt_wire::codec::encode(&entry);
+                let round_trip = round_trips::<MonitorMapEntry>(&expected, &entry, FILE, name)?;
+                ("MonitorMapEntry (§13.2)", encoded, round_trip)
+            }
+            RequestInput::ContactMonitorRequest {
+                last,
+                label,
+                entries,
+            } => {
+                let request = ContactMonitorRequest {
+                    last: *last,
+                    label: unhex(FILE, name, "label", label)?,
+                    entries: entries
+                        .iter()
+                        .map(|e| MonitorMapEntry {
+                            position: e.position,
+                            version: e.version,
+                        })
+                        .collect(),
+                };
+                let encoded = kt_wire::codec::encode(&request);
+                let round_trip =
+                    round_trips::<ContactMonitorRequest>(&expected, &request, FILE, name)?;
+                ("ContactMonitorRequest (§13.2)", encoded, round_trip)
+            }
+            RequestInput::OwnerInitRequest { last, label, start } => {
+                let request = OwnerInitRequest {
+                    last: *last,
+                    label: unhex(FILE, name, "label", label)?,
+                    start: *start,
+                };
+                let encoded = kt_wire::codec::encode(&request);
+                let round_trip = round_trips::<OwnerInitRequest>(&expected, &request, FILE, name)?;
+                ("OwnerInitRequest (§13.3)", encoded, round_trip)
+            }
+            RequestInput::OwnerMonitorRequest {
+                last,
+                label,
+                entries,
+                start,
+                greatest_version,
+            } => {
+                let request = OwnerMonitorRequest {
+                    last: *last,
+                    label: unhex(FILE, name, "label", label)?,
+                    entries: entries
+                        .iter()
+                        .map(|e| MonitorMapEntry {
+                            position: e.position,
+                            version: e.version,
+                        })
+                        .collect(),
+                    start: *start,
+                    greatest_version: *greatest_version,
+                };
+                let encoded = kt_wire::codec::encode(&request);
+                let round_trip =
+                    round_trips::<OwnerMonitorRequest>(&expected, &request, FILE, name)?;
+                ("OwnerMonitorRequest (§13.4)", encoded, round_trip)
+            }
+            RequestInput::LabelValue { value } => {
+                let label_value = LabelValue::new(unhex(FILE, name, "value", value)?);
+                let encoded = kt_wire::codec::encode(&label_value);
+                let round_trip = round_trips::<LabelValue>(&expected, &label_value, FILE, name)?;
+                ("LabelValue (§13.5)", encoded, round_trip)
+            }
+            RequestInput::UpdateInfo { opening, mode } => {
+                let mode = DeploymentMode::from_u8(*mode).map_err(|_| Error::Computation {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    detail: format!("unknown deployment mode {mode}"),
+                })?;
+                let info = UpdateInfo {
+                    opening: unhex(FILE, name, "opening", opening)?,
+                    suffix: UpdateSuffix::Empty,
+                };
+                let encoded = kt_wire::codec::encode(&info);
+                // Needs both Nc and the mode; neither is in the bytes.
+                let bytes = unhex(FILE, name, "expect.encoding", &expected)?;
+                let mut dec = Decoder::new(&bytes);
+                let round_trip = match UpdateInfo::decode_with(&mut dec, suite.nc(), mode) {
+                    Err(err) => format!("decode failed: {err}"),
+                    Ok(back) => match dec.finish() {
+                        Err(err) => format!("trailing bytes: {err}"),
+                        Ok(()) if back == info => "round-trips".to_owned(),
+                        Ok(()) => "decoded to a different value".to_owned(),
+                    },
+                };
+                ("UpdateInfo (§13.5)", encoded, round_trip)
+            }
+            RequestInput::UpdateRequest {
+                last,
+                label,
+                greatest_version,
+                values,
+            } => {
+                let mut label_values = Vec::new();
+                for value in values {
+                    label_values.push(LabelValue::new(unhex(FILE, name, "values[]", value)?));
+                }
+                let request = UpdateRequest {
+                    last: *last,
+                    label: unhex(FILE, name, "label", label)?,
+                    greatest_version: *greatest_version,
+                    values: label_values,
+                };
+                let encoded = kt_wire::codec::encode(&request);
+                let round_trip = round_trips::<UpdateRequest>(&expected, &request, FILE, name)?;
+                ("UpdateRequest (§13.5)", encoded, round_trip)
+            }
+            RequestInput::UpdateTbs {
+                configuration,
+                label,
+                version,
+                value,
+            } => {
+                // The configuration comes from the peer's own bytes: this case is
+                // about what UpdateTBS puts around it, not about the config itself.
+                let config_bytes = unhex(FILE, name, "configuration", configuration)?;
+                let config =
+                    kt_wire::codec::decode::<Configuration>(&config_bytes).map_err(|err| {
+                        Error::Computation {
+                            file: FILE.to_owned(),
+                            case: name.to_owned(),
+                            detail: format!("decoding the configuration: {err}"),
+                        }
+                    })?;
+                let tbs = UpdateTBS {
+                    config,
+                    label: unhex(FILE, name, "label", label)?,
+                    version: *version,
+                    value: unhex(FILE, name, "value", value)?,
+                };
+                let encoded = kt_wire::codec::encode(&tbs);
+                let round_trip = round_trips::<UpdateTBS>(&expected, &tbs, FILE, name)?;
+                ("UpdateTBS (§11.5)", encoded, round_trip)
+            }
+        };
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: what.to_owned(),
+            checks: vec![
+                Check::new(
+                    format!("{what} encoding"),
+                    expected,
+                    render_result(encoded, hex::encode),
+                ),
+                Check::new(format!("{what} decodes back"), "round-trips", round_trip),
+            ],
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Requests and building blocks".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// Decodes the peer's bytes and checks the result equals what we built.
+///
+/// Encoding agreement alone is weaker than it looks: a decoder that reads the fields
+/// in the wrong order still produces a value, and only a comparison catches it.
+fn round_trips<T>(expected_hex: &str, original: &T, file: &str, case: &str) -> Result<String, Error>
+where
+    T: kt_wire::codec::Decode + PartialEq,
+{
+    let bytes = unhex(file, case, "expect.encoding", expected_hex)?;
+    Ok(match kt_wire::codec::decode::<T>(&bytes) {
+        Err(err) => format!("decode failed: {err}"),
+        Ok(back) if back == *original => "round-trips".to_owned(),
+        Ok(_) => "decoded to a different value".to_owned(),
+    })
+}
+
+/// §6.2: what a search ladder's outcomes say about the greatest version.
+fn interpretation_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "ladder-interpretation.json";
+    let file: VectorFile<InterpretationInput, InterpretationExpect> = load(dir, FILE)?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let results: Vec<kt_wire::proofs::PrefixSearchResult> = case
+            .input
+            .results
+            .iter()
+            .map(|included| {
+                if *included {
+                    kt_wire::proofs::PrefixSearchResult::Inclusion { depth: 0 }
+                } else {
+                    kt_wire::proofs::PrefixSearchResult::NonInclusionParent { depth: 0 }
+                }
+            })
+            .collect();
+
+        let mut checks = vec![Check::new(
+            "the ladder itself (§6.2)",
+            render_list(&case.input.ladder),
+            render_result(
+                ladder::search_binary_ladder(case.input.target, case.input.greatest, &[], &[]),
+                |versions| render_list(&versions),
+            ),
+        )];
+
+        // The verdict, rendered as the peer's -1/0/1 so the comparison is direct.
+        let verdict = match ladder::interpret_search_ladder(
+            &case.input.ladder,
+            case.input.target,
+            &results,
+        ) {
+            Err(err) => format!("refused: {err}"),
+            Ok(core::cmp::Ordering::Less) => "-1".to_owned(),
+            Ok(core::cmp::Ordering::Equal) => "0".to_owned(),
+            Ok(core::cmp::Ordering::Greater) => "1".to_owned(),
+        };
+        checks.push(Check::new(
+            "interpret_search_ladder: is the greatest version below, at, or above the target (§6.2)",
+            case.expect.verdict.to_string(),
+            verdict,
+        ));
+
+        cases.push(Case {
+            name: case.name.clone(),
+            negative: false,
+            input: format!(
+                "target {}, greatest {}",
+                case.input.target, case.input.greatest
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Search ladder interpretation".to_owned(),
         draft_section: section_of(&file.draft),
         file: FILE.to_owned(),
         generator: Generator {

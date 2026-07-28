@@ -52,6 +52,8 @@
 use alloc::vec::Vec;
 use core::fmt;
 
+use kt_wire::proofs::PrefixSearchResult;
+
 /// A ladder that cannot be expressed with `uint32` versions.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -67,6 +69,17 @@ pub enum Error {
         /// The greatest version the ladder was built for.
         greatest: u32,
     },
+    /// A ladder's results do not correspond to its lookups (§6.2).
+    ///
+    /// Either there are more results than rungs, or a result that should have ended
+    /// the ladder was followed by more. A log that sends either is answering
+    /// different lookups than the ones the user asked for.
+    LadderShape {
+        /// How many rungs the ladder has, or where it should have ended.
+        rungs: usize,
+        /// How many results arrived.
+        results: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -76,6 +89,10 @@ impl fmt::Display for Error {
                 f,
                 "binary ladder for greatest version {greatest} needs version {rung}, \
                  which does not fit the uint32 version field"
+            ),
+            Self::LadderShape { rungs, results } => write!(
+                f,
+                "a ladder of {rungs} lookups cannot be answered by {results} results"
             ),
         }
     }
@@ -474,5 +491,236 @@ mod error_tests {
         assert!(rendered.contains("4294967295"), "{rendered}");
         assert!(rendered.contains("uint32"), "{rendered}");
         assert!(err.source().is_none());
+    }
+}
+
+/// What a search binary ladder's outcomes say about the greatest version
+/// (§6.2).
+///
+/// A searching user does not need the greatest version of a label, only whether it is
+/// less than, equal to, or greater than the version they are looking for — that is
+/// enough to steer the implicit binary search tree. §6.2 gets it from two stopping
+/// rules on the ladder's outcomes:
+///
+/// - an *inclusion* proof for a version **above** the target means the greatest
+///   version is above it;
+/// - a *non-inclusion* proof for a version **at or below** the target means the
+///   greatest version is below it;
+/// - a ladder that runs to the end without either means the greatest version is
+///   exactly the target.
+///
+/// The middle case is the one worth reading twice: the ladder deliberately continues
+/// past an inclusion proof for a version *equal* to the target, because "this version
+/// exists" does not yet distinguish "it is the greatest" from "there are more".
+///
+/// `results` are the outcomes in the order the ladder asked for them; only whether
+/// each was an inclusion matters here, so a caller passes the results of a
+/// [`PrefixProof`](kt_wire::proofs::PrefixProof) straight through.
+///
+/// # Errors
+///
+/// [`Error::LadderShape`] if there are more results than rungs, or if a result that
+/// should have ended the ladder is not the last one. Both mean the log sent a ladder
+/// that does not correspond to the lookups it claims to answer, and reading past that
+/// point would be reading a proof of something else.
+pub fn interpret_search_ladder(
+    ladder: &[u32],
+    target: u32,
+    results: &[PrefixSearchResult],
+) -> Result<core::cmp::Ordering> {
+    use core::cmp::Ordering;
+
+    if results.len() > ladder.len() {
+        return Err(Error::LadderShape {
+            rungs: ladder.len(),
+            results: results.len(),
+        });
+    }
+
+    for (index, version) in ladder.iter().enumerate() {
+        let Some(result) = results.get(index) else {
+            // The ladder has rungs the proof does not answer, and no stopping rule
+            // fired, so the response is short rather than merely truncated early.
+            return Err(Error::LadderShape {
+                rungs: ladder.len(),
+                results: results.len(),
+            });
+        };
+
+        let ends = if result.is_inclusion() {
+            *version > target
+        } else {
+            *version <= target
+        };
+        if ends {
+            // A stopping rule fired, so this must be where the ladder ended.
+            if results.len() != index.saturating_add(1) {
+                return Err(Error::LadderShape {
+                    rungs: index.saturating_add(1),
+                    results: results.len(),
+                });
+            }
+            return Ok(if result.is_inclusion() {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            });
+        }
+    }
+
+    Ok(Ordering::Equal)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod interpretation_tests {
+    use super::*;
+    use core::cmp::Ordering;
+
+    /// The outcomes an honest log would produce for a ladder, given the greatest
+    /// version that really exists: a version is included exactly when it is at or
+    /// below it.
+    fn honest_results(ladder: &[u32], greatest: u32, target: u32) -> Vec<PrefixSearchResult> {
+        let mut out = Vec::new();
+        for version in ladder {
+            let included = *version <= greatest;
+            out.push(if included {
+                PrefixSearchResult::Inclusion { depth: 0 }
+            } else {
+                PrefixSearchResult::NonInclusionParent { depth: 0 }
+            });
+            // §6.2's stopping rules, applied by the log when it builds the response.
+            let ends = if included {
+                *version > target
+            } else {
+                *version <= target
+            };
+            if ends {
+                break;
+            }
+        }
+        out
+    }
+
+    /// The whole point: for every target and every greatest version, the
+    /// interpretation recovers the comparison the searcher needs. This is the
+    /// property §6.2 exists to provide, checked over a grid rather than argued.
+    #[test]
+    fn interpretation_recovers_the_comparison() {
+        for target in 0_u32..=60 {
+            for greatest in 0_u32..=60 {
+                let ladder = search_binary_ladder(target, greatest, &[], &[]).unwrap();
+                let results = honest_results(&ladder, greatest, target);
+                assert_eq!(
+                    interpret_search_ladder(&ladder, target, &results).unwrap(),
+                    greatest.cmp(&target),
+                    "target {target}, greatest {greatest}, ladder {ladder:?}"
+                );
+            }
+        }
+    }
+
+    /// §6.2: the ladder continues past an inclusion proof for a version *equal* to
+    /// the target, because existing is not the same as being the greatest. If it
+    /// stopped there, `Equal` and `Greater` would be indistinguishable.
+    #[test]
+    fn an_inclusion_at_the_target_does_not_end_the_ladder() {
+        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+        assert_eq!(ladder, alloc::vec![0, 1, 3, 7, 5, 6]);
+
+        // The stopping rules do not fire on the rung equal to the target, so an
+        // honest log answers every rung rather than stopping at version 6.
+        let equal = honest_results(&ladder, 6, 6);
+        assert_eq!(
+            equal.len(),
+            ladder.len(),
+            "an inclusion at the target must not end the ladder"
+        );
+
+        // Greatest 6 and greatest 7 share the ladder's early rungs and are told apart
+        // only by what comes after the inclusion of 6.
+        let equal = honest_results(&ladder, 6, 6);
+        assert_eq!(
+            interpret_search_ladder(&ladder, 6, &equal).unwrap(),
+            Ordering::Equal
+        );
+
+        let seven = search_binary_ladder(6, 7, &[], &[]).unwrap();
+        let greater = honest_results(&seven, 7, 6);
+        assert_eq!(
+            interpret_search_ladder(&seven, 6, &greater).unwrap(),
+            Ordering::Greater
+        );
+    }
+
+    /// A log that keeps going after a stopping rule has fired is answering different
+    /// lookups than the ones it claims to, so the shape is rejected rather than the
+    /// extra results ignored.
+    #[test]
+    fn results_past_a_stopping_rule_are_rejected() {
+        let ladder = search_binary_ladder(5, 100, &[], &[]).unwrap();
+        let mut results = honest_results(&ladder, 100, 5);
+        assert_eq!(
+            interpret_search_ladder(&ladder, 5, &results).unwrap(),
+            Ordering::Greater
+        );
+
+        // One more result than the rule allows.
+        results.push(PrefixSearchResult::Inclusion { depth: 0 });
+        assert!(matches!(
+            interpret_search_ladder(&ladder, 5, &results),
+            Err(Error::LadderShape { .. })
+        ));
+    }
+
+    #[test]
+    fn a_short_or_over_long_response_is_rejected() {
+        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+
+        // Fewer results than the ladder needs, with no stopping rule reached.
+        let short = honest_results(&ladder, 6, 6);
+        assert!(matches!(
+            interpret_search_ladder(&ladder, 6, &short[..short.len() - 1]),
+            Err(Error::LadderShape { .. })
+        ));
+
+        // More results than there are rungs.
+        let mut long = short.clone();
+        long.push(PrefixSearchResult::Inclusion { depth: 0 });
+        assert!(matches!(
+            interpret_search_ladder(&ladder, 6, &long),
+            Err(Error::LadderShape {
+                rungs: _,
+                results: _
+            })
+        ));
+    }
+
+    /// A log that lies about one outcome changes the verdict, which is why the
+    /// outcomes have to come from a verified `PrefixProof` rather than be taken on
+    /// trust: this function reads a proof, it does not check one.
+    #[test]
+    fn flipping_an_outcome_changes_the_verdict() {
+        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+        let honest = honest_results(&ladder, 6, 6);
+        assert_eq!(
+            interpret_search_ladder(&ladder, 6, &honest).unwrap(),
+            Ordering::Equal
+        );
+
+        // Claim the first rung is absent: version 0 is at or below the target, so the
+        // rule says the greatest version is below it.
+        let mut lying = honest;
+        lying.truncate(1);
+        lying[0] = PrefixSearchResult::NonInclusionParent { depth: 0 };
+        assert_eq!(
+            interpret_search_ladder(&ladder, 6, &lying).unwrap(),
+            Ordering::Less
+        );
     }
 }

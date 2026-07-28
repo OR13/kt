@@ -582,3 +582,114 @@ func log2Floor(x uint64) uint64 {
 	}
 	return k
 }
+
+// ladderInterpretationVectors covers draft §6.2: what a search binary ladder's
+// outcomes tell a searcher about the greatest version of a label.
+//
+// katie exports InterpretSearchLadder, so the inference itself has an oracle — the
+// verdict, not just the ladder. That matters because the ladder and the inference
+// have to agree about the same stopping rules: a ladder that ends one rung early and
+// an interpretation that expects one more would each look correct alone.
+//
+// The proofs are built as wire bytes and parsed back with katie's own
+// NewPrefixProof, since its result types are unexported. That has the side benefit of
+// putting the §12.2 result encoding under test again from a different direction.
+func ladderInterpretationVectors(sha string) (*File, error) {
+	cs := suites.KTSha256Ed25519{}
+
+	f := &File{
+		Primitive:   "ladder-interpretation",
+		Draft:       draftRev + " §6.2",
+		Generator:   Generator{Impl: "katie", SHA: sha},
+		CipherSuite: 0x0002,
+		Notes: "What a search binary ladder's outcomes say about the greatest version " +
+			"of a label: -1 if it is below the target, 0 if equal, 1 if above. `results` " +
+			"lists whether each lookup was an inclusion, in ladder order, as an honest " +
+			"log would answer them. `verdict` is katie's InterpretSearchLadder. The " +
+			"ladder and the inference share §6.2's stopping rules, so a vector that pins " +
+			"only one of them would miss a disagreement about where a ladder ends.",
+	}
+
+	for target := uint32(0); target <= 40; target++ {
+		for greatest := uint32(0); greatest <= 40; greatest++ {
+			// Keep the file to a readable size: the interesting pairs are near the
+			// diagonal, plus a spread of far-apart ones.
+			near := target >= greatest && target-greatest <= 2
+			if greatest > target {
+				near = greatest-target <= 2
+			}
+			if !near && !(target%13 == 0 && greatest%13 == 0) {
+				continue
+			}
+
+			ladder := ktmath.SearchBinaryLadder(target, greatest, nil, nil)
+
+			// An honest log's outcomes, stopping where §6.2 says to stop.
+			results := make([]bool, 0, len(ladder))
+			for _, version := range ladder {
+				included := version <= greatest
+				results = append(results, included)
+				ends := (included && version > target) || (!included && version <= target)
+				if ends {
+					break
+				}
+			}
+
+			proof, err := prefixProofFromOutcomes(cs, results)
+			if err != nil {
+				return nil, fmt.Errorf("target %d greatest %d: %w", target, greatest, err)
+			}
+			verdict, err := ktmath.InterpretSearchLadder(ladder, target, proof)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"target %d greatest %d: katie rejects its own ladder: %w",
+					target, greatest, err)
+			}
+			// Sanity: the verdict must be the comparison it claims to recover.
+			want := 0
+			if greatest < target {
+				want = -1
+			} else if greatest > target {
+				want = 1
+			}
+			if verdict != want {
+				return nil, fmt.Errorf(
+					"target %d greatest %d: katie says %d, expected %d",
+					target, greatest, verdict, want)
+			}
+
+			f.Cases = append(f.Cases, Case{
+				Name: fmt.Sprintf("target-%d-greatest-%d", target, greatest),
+				Input: map[string]any{
+					"target":   target,
+					"greatest": greatest,
+					"ladder":   ladder,
+					"results":  results,
+				},
+				Expect: map[string]any{"verdict": verdict},
+			})
+		}
+	}
+
+	return f, nil
+}
+
+// prefixProofFromOutcomes builds a PrefixProof with one result per outcome —
+// inclusion where true, nonInclusionParent where false — by writing the §12.2 wire
+// encoding and parsing it with katie's own reader, since its result types are
+// unexported.
+func prefixProofFromOutcomes(cs suites.CipherSuite, outcomes []bool) (*prefix.PrefixProof, error) {
+	buf := &bytes.Buffer{}
+	buf.WriteByte(byte(len(outcomes)))
+	for _, included := range outcomes {
+		if included {
+			buf.WriteByte(1) // inclusion
+		} else {
+			buf.WriteByte(3) // nonInclusionParent
+		}
+		buf.WriteByte(0) // depth
+	}
+	buf.WriteByte(0) // elements: two-byte count of zero
+	buf.WriteByte(0)
+	return prefix.NewPrefixProof(cs, buf)
+}

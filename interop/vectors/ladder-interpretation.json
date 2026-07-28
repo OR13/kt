@@ -1,0 +1,6294 @@
+{
+  "primitive": "ladder-interpretation",
+  "draft": "draft-ietf-keytrans-protocol-05 §6.2",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "What a search binary ladder's outcomes say about the greatest version of a label: -1 if it is below the target, 0 if equal, 1 if above. `results` lists whether each lookup was an inclusion, in ladder order, as an honest log would answer them. `verdict` is katie's InterpretSearchLadder. The ladder and the inference share §6.2's stopping rules, so a vector that pins only one of them would miss a disagreement about where a ladder ends.",
+  "cases": [
+    {
+      "name": "target-0-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-0-greatest-1",
+      "input": {
+        "greatest": 1,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          true
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-0-greatest-2",
+      "input": {
+        "greatest": 2,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          true
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-0-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          true
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-0-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          true
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-0-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          true
+        ],
+        "target": 0
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-1-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 1
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-1-greatest-1",
+      "input": {
+        "greatest": 1,
+        "ladder": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "results": [
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 1
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-1-greatest-2",
+      "input": {
+        "greatest": 2,
+        "ladder": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "results": [
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 1
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-1-greatest-3",
+      "input": {
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          true
+        ],
+        "target": 1
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-2-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 2
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-2-greatest-1",
+      "input": {
+        "greatest": 1,
+        "ladder": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "results": [
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 2
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-2-greatest-2",
+      "input": {
+        "greatest": 2,
+        "ladder": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "results": [
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 2
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-2-greatest-3",
+      "input": {
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          true
+        ],
+        "target": 2
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-2-greatest-4",
+      "input": {
+        "greatest": 4,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          true
+        ],
+        "target": 2
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-3-greatest-1",
+      "input": {
+        "greatest": 1,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          false
+        ],
+        "target": 3
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-3-greatest-2",
+      "input": {
+        "greatest": 2,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          false
+        ],
+        "target": 3
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-3-greatest-3",
+      "input": {
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 3
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-3-greatest-4",
+      "input": {
+        "greatest": 4,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 3
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-3-greatest-5",
+      "input": {
+        "greatest": 5,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 3
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-4-greatest-2",
+      "input": {
+        "greatest": 2,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          false
+        ],
+        "target": 4
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-4-greatest-3",
+      "input": {
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 4
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-4-greatest-4",
+      "input": {
+        "greatest": 4,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          4
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 4
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-4-greatest-5",
+      "input": {
+        "greatest": 5,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 4
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-4-greatest-6",
+      "input": {
+        "greatest": 6,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 4
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-5-greatest-3",
+      "input": {
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 5
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-5-greatest-4",
+      "input": {
+        "greatest": 4,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 5
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-5-greatest-5",
+      "input": {
+        "greatest": 5,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 5
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-5-greatest-6",
+      "input": {
+        "greatest": 6,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 5
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-5-greatest-7",
+      "input": {
+        "greatest": 7,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 5
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-6-greatest-4",
+      "input": {
+        "greatest": 4,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 6
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-6-greatest-5",
+      "input": {
+        "greatest": 5,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 6
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-6-greatest-6",
+      "input": {
+        "greatest": 6,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          5,
+          6
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 6
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-6-greatest-7",
+      "input": {
+        "greatest": 7,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 6
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-6-greatest-8",
+      "input": {
+        "greatest": 8,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 6
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-7-greatest-5",
+      "input": {
+        "greatest": 5,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 7
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-7-greatest-6",
+      "input": {
+        "greatest": 6,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 7
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-7-greatest-7",
+      "input": {
+        "greatest": 7,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 7
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-7-greatest-8",
+      "input": {
+        "greatest": 8,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 7
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-7-greatest-9",
+      "input": {
+        "greatest": 9,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 7
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-8-greatest-6",
+      "input": {
+        "greatest": 6,
+        "ladder": [
+          0,
+          1,
+          3,
+          7
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 8
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-8-greatest-7",
+      "input": {
+        "greatest": 7,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 8
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-8-greatest-8",
+      "input": {
+        "greatest": 8,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          8
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 8
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-8-greatest-9",
+      "input": {
+        "greatest": 9,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 8
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-8-greatest-10",
+      "input": {
+        "greatest": 10,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 8
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-9-greatest-7",
+      "input": {
+        "greatest": 7,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 9
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-9-greatest-8",
+      "input": {
+        "greatest": 8,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 9
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-9-greatest-9",
+      "input": {
+        "greatest": 9,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 9
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-9-greatest-10",
+      "input": {
+        "greatest": 10,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 9
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-9-greatest-11",
+      "input": {
+        "greatest": 11,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 9
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-10-greatest-8",
+      "input": {
+        "greatest": 8,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 10
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-10-greatest-9",
+      "input": {
+        "greatest": 9,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 10
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-10-greatest-10",
+      "input": {
+        "greatest": 10,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          9,
+          10
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 10
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-10-greatest-11",
+      "input": {
+        "greatest": 11,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 10
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-10-greatest-12",
+      "input": {
+        "greatest": 12,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 10
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-11-greatest-9",
+      "input": {
+        "greatest": 9,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 11
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-11-greatest-10",
+      "input": {
+        "greatest": 10,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 11
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-11-greatest-11",
+      "input": {
+        "greatest": 11,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          12
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 11
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-11-greatest-12",
+      "input": {
+        "greatest": 12,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          12
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 11
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-11-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 11
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-12-greatest-10",
+      "input": {
+        "greatest": 10,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 12
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-12-greatest-11",
+      "input": {
+        "greatest": 11,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          12
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 12
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-12-greatest-12",
+      "input": {
+        "greatest": 12,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          12
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 12
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-12-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 12
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-12-greatest-14",
+      "input": {
+        "greatest": 14,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 12
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-13-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-13-greatest-11",
+      "input": {
+        "greatest": 11,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-13-greatest-12",
+      "input": {
+        "greatest": 12,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-13-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          14
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-13-greatest-14",
+      "input": {
+        "greatest": 14,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          14
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-13-greatest-15",
+      "input": {
+        "greatest": 15,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-13-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-13-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 13
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-14-greatest-12",
+      "input": {
+        "greatest": 12,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 14
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-14-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          14
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 14
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-14-greatest-14",
+      "input": {
+        "greatest": 14,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          11,
+          13,
+          14
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 14
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-14-greatest-15",
+      "input": {
+        "greatest": 15,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 14
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-14-greatest-16",
+      "input": {
+        "greatest": 16,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 14
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-15-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 15
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-15-greatest-14",
+      "input": {
+        "greatest": 14,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 15
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-15-greatest-15",
+      "input": {
+        "greatest": 15,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 15
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-15-greatest-16",
+      "input": {
+        "greatest": 16,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 15
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-15-greatest-17",
+      "input": {
+        "greatest": 17,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 15
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-16-greatest-14",
+      "input": {
+        "greatest": 14,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 16
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-16-greatest-15",
+      "input": {
+        "greatest": 15,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 16
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-16-greatest-16",
+      "input": {
+        "greatest": 16,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          16
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 16
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-16-greatest-17",
+      "input": {
+        "greatest": 17,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 16
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-16-greatest-18",
+      "input": {
+        "greatest": 18,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 16
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-17-greatest-15",
+      "input": {
+        "greatest": 15,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 17
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-17-greatest-16",
+      "input": {
+        "greatest": 16,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 17
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-17-greatest-17",
+      "input": {
+        "greatest": 17,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          18
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 17
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-17-greatest-18",
+      "input": {
+        "greatest": 18,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          18
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 17
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-17-greatest-19",
+      "input": {
+        "greatest": 19,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 17
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-18-greatest-16",
+      "input": {
+        "greatest": 16,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 18
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-18-greatest-17",
+      "input": {
+        "greatest": 17,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          18
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 18
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-18-greatest-18",
+      "input": {
+        "greatest": 18,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          17,
+          18
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 18
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-18-greatest-19",
+      "input": {
+        "greatest": 19,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 18
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-18-greatest-20",
+      "input": {
+        "greatest": 20,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 18
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-19-greatest-17",
+      "input": {
+        "greatest": 17,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 19
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-19-greatest-18",
+      "input": {
+        "greatest": 18,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 19
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-19-greatest-19",
+      "input": {
+        "greatest": 19,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          20
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 19
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-19-greatest-20",
+      "input": {
+        "greatest": 20,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          20
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 19
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-19-greatest-21",
+      "input": {
+        "greatest": 21,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 19
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-20-greatest-18",
+      "input": {
+        "greatest": 18,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 20
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-20-greatest-19",
+      "input": {
+        "greatest": 19,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          20
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 20
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-20-greatest-20",
+      "input": {
+        "greatest": 20,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          20
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 20
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-20-greatest-21",
+      "input": {
+        "greatest": 21,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 20
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-20-greatest-22",
+      "input": {
+        "greatest": 22,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 20
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-21-greatest-19",
+      "input": {
+        "greatest": 19,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 21
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-21-greatest-20",
+      "input": {
+        "greatest": 20,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 21
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-21-greatest-21",
+      "input": {
+        "greatest": 21,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          22
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 21
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-21-greatest-22",
+      "input": {
+        "greatest": 22,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          22
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 21
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-21-greatest-23",
+      "input": {
+        "greatest": 23,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 21
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-22-greatest-20",
+      "input": {
+        "greatest": 20,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 22
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-22-greatest-21",
+      "input": {
+        "greatest": 21,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          22
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 22
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-22-greatest-22",
+      "input": {
+        "greatest": 22,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          19,
+          21,
+          22
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 22
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-22-greatest-23",
+      "input": {
+        "greatest": 23,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 22
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-22-greatest-24",
+      "input": {
+        "greatest": 24,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 22
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-23-greatest-21",
+      "input": {
+        "greatest": 21,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 23
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-23-greatest-22",
+      "input": {
+        "greatest": 22,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 23
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-23-greatest-23",
+      "input": {
+        "greatest": 23,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          24
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 23
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-23-greatest-24",
+      "input": {
+        "greatest": 24,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          24
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 23
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-23-greatest-25",
+      "input": {
+        "greatest": 25,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 23
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-24-greatest-22",
+      "input": {
+        "greatest": 22,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 24
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-24-greatest-23",
+      "input": {
+        "greatest": 23,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          24
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 24
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-24-greatest-24",
+      "input": {
+        "greatest": 24,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          24
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 24
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-24-greatest-25",
+      "input": {
+        "greatest": 25,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 24
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-24-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 24
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-25-greatest-23",
+      "input": {
+        "greatest": 23,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 25
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-25-greatest-24",
+      "input": {
+        "greatest": 24,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 25
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-25-greatest-25",
+      "input": {
+        "greatest": 25,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          26
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 25
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-25-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          26
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 25
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-25-greatest-27",
+      "input": {
+        "greatest": 27,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 25
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-26-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-26-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-26-greatest-24",
+      "input": {
+        "greatest": 24,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-26-greatest-25",
+      "input": {
+        "greatest": 25,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          26
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-26-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          25,
+          26
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-26-greatest-27",
+      "input": {
+        "greatest": 27,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-26-greatest-28",
+      "input": {
+        "greatest": 28,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-26-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 26
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-27-greatest-25",
+      "input": {
+        "greatest": 25,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 27
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-27-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 27
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-27-greatest-27",
+      "input": {
+        "greatest": 27,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          28
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 27
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-27-greatest-28",
+      "input": {
+        "greatest": 28,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          28
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 27
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-27-greatest-29",
+      "input": {
+        "greatest": 29,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 27
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-28-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          false
+        ],
+        "target": 28
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-28-greatest-27",
+      "input": {
+        "greatest": 27,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          28
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false,
+          false
+        ],
+        "target": 28
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-28-greatest-28",
+      "input": {
+        "greatest": 28,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          28
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false,
+          true
+        ],
+        "target": 28
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-28-greatest-29",
+      "input": {
+        "greatest": 29,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 28
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-28-greatest-30",
+      "input": {
+        "greatest": 30,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 28
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-29-greatest-27",
+      "input": {
+        "greatest": 27,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 29
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-29-greatest-28",
+      "input": {
+        "greatest": 28,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 29
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-29-greatest-29",
+      "input": {
+        "greatest": 29,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          30
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 29
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-29-greatest-30",
+      "input": {
+        "greatest": 30,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          30
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 29
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-29-greatest-31",
+      "input": {
+        "greatest": 31,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 29
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-30-greatest-28",
+      "input": {
+        "greatest": 28,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 30
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-30-greatest-29",
+      "input": {
+        "greatest": 29,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          30
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 30
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-30-greatest-30",
+      "input": {
+        "greatest": 30,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          23,
+          27,
+          29,
+          30
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 30
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-30-greatest-31",
+      "input": {
+        "greatest": 31,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 30
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-30-greatest-32",
+      "input": {
+        "greatest": 32,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "target": 30
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-31-greatest-29",
+      "input": {
+        "greatest": 29,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 31
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-31-greatest-30",
+      "input": {
+        "greatest": 30,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 31
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-31-greatest-31",
+      "input": {
+        "greatest": 31,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 31
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-31-greatest-32",
+      "input": {
+        "greatest": 32,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 31
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-31-greatest-33",
+      "input": {
+        "greatest": 33,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 31
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-32-greatest-30",
+      "input": {
+        "greatest": 30,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 32
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-32-greatest-31",
+      "input": {
+        "greatest": 31,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 32
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-32-greatest-32",
+      "input": {
+        "greatest": 32,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          32
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 32
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-32-greatest-33",
+      "input": {
+        "greatest": 33,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 32
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-32-greatest-34",
+      "input": {
+        "greatest": 34,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 32
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-33-greatest-31",
+      "input": {
+        "greatest": 31,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 33
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-33-greatest-32",
+      "input": {
+        "greatest": 32,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 33
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-33-greatest-33",
+      "input": {
+        "greatest": 33,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          34
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 33
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-33-greatest-34",
+      "input": {
+        "greatest": 34,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          34
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 33
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-33-greatest-35",
+      "input": {
+        "greatest": 35,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 33
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-34-greatest-32",
+      "input": {
+        "greatest": 32,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 34
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-34-greatest-33",
+      "input": {
+        "greatest": 33,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          34
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 34
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-34-greatest-34",
+      "input": {
+        "greatest": 34,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          33,
+          34
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 34
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-34-greatest-35",
+      "input": {
+        "greatest": 35,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 34
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-34-greatest-36",
+      "input": {
+        "greatest": 36,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true
+        ],
+        "target": 34
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-35-greatest-33",
+      "input": {
+        "greatest": 33,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 35
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-35-greatest-34",
+      "input": {
+        "greatest": 34,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 35
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-35-greatest-35",
+      "input": {
+        "greatest": 35,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          36
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 35
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-35-greatest-36",
+      "input": {
+        "greatest": 36,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          36
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 35
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-35-greatest-37",
+      "input": {
+        "greatest": 37,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 35
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-36-greatest-34",
+      "input": {
+        "greatest": 34,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false
+        ],
+        "target": 36
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-36-greatest-35",
+      "input": {
+        "greatest": 35,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          36
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false,
+          false
+        ],
+        "target": 36
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-36-greatest-36",
+      "input": {
+        "greatest": 36,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          36
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "target": 36
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-36-greatest-37",
+      "input": {
+        "greatest": 37,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 36
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-36-greatest-38",
+      "input": {
+        "greatest": 38,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "target": 36
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-37-greatest-35",
+      "input": {
+        "greatest": 35,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 37
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-37-greatest-36",
+      "input": {
+        "greatest": 36,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 37
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-37-greatest-37",
+      "input": {
+        "greatest": 37,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          38
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 37
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-37-greatest-38",
+      "input": {
+        "greatest": 38,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          38
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 37
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-37-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 37
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-38-greatest-36",
+      "input": {
+        "greatest": 36,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false
+        ],
+        "target": 38
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-38-greatest-37",
+      "input": {
+        "greatest": 37,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          38
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false
+        ],
+        "target": 38
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-38-greatest-38",
+      "input": {
+        "greatest": 38,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          35,
+          37,
+          38
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true
+        ],
+        "target": 38
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-38-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 38
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-38-greatest-40",
+      "input": {
+        "greatest": 40,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 38
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-39-greatest-0",
+      "input": {
+        "greatest": 0,
+        "ladder": [
+          0,
+          1
+        ],
+        "results": [
+          true,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-39-greatest-13",
+      "input": {
+        "greatest": 13,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-39-greatest-26",
+      "input": {
+        "greatest": 26,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-39-greatest-37",
+      "input": {
+        "greatest": 37,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-39-greatest-38",
+      "input": {
+        "greatest": 38,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-39-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          43,
+          41,
+          40
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": 0
+      }
+    },
+    {
+      "name": "target-39-greatest-40",
+      "input": {
+        "greatest": 40,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          43,
+          41,
+          40
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 39
+      },
+      "expect": {
+        "verdict": 1
+      }
+    },
+    {
+      "name": "target-40-greatest-38",
+      "input": {
+        "greatest": 38,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 40
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-40-greatest-39",
+      "input": {
+        "greatest": 39,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          43,
+          41,
+          40
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false
+        ],
+        "target": 40
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-40-greatest-40",
+      "input": {
+        "greatest": 40,
+        "ladder": [
+          0,
+          1,
+          3,
+          7,
+          15,
+          31,
+          63,
+          47,
+          39,
+          43,
+          41,
+          40
+        ],
+        "results": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          true
+        ],
+        "target": 40
+      },
+      "expect": {
+        "verdict": 0
+      }
+    }
+  ]
+}
