@@ -32,20 +32,21 @@ use kt_wire::structs::{
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
     AppendExpect, AppendInput, AuditorExpect, AuditorInput, CommitmentExpect, CommitmentInput,
-    HeadExpect, HeadInput, IbstExpect, IbstInput, InterpretationExpect, InterpretationInput,
-    LadderExpect, LadderInput, LogMathExpect, LogMathInput, LogTreeExpect, LogTreeInput,
-    MutationExpect, MutationInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput,
-    TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput,
-    VrfExpect,
+    DistinguishedExpect, DistinguishedInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
+    InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
+    LogMathInput, LogTreeExpect, LogTreeInput, MutationExpect, MutationInput, PrefixTreeExpect,
+    PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect, TamperedInput, UpdateViewExpect,
+    UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 15] = [
+pub const FILES: [&str; 16] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
     "ladder-interpretation.json",
     "update-view.json",
+    "distinguished.json",
     "vrf.json",
     "log-math.json",
     "log-tree.json",
@@ -167,6 +168,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         ladder_suite(dir)?,
         interpretation_suite(dir)?,
         update_view_suite(dir)?,
+        distinguished_suite(dir)?,
         vrf_suite(dir)?,
         log_math_suite(dir)?,
         log_tree_suite(dir)?,
@@ -846,6 +848,89 @@ fn prefix_tree_suite(dir: &Path) -> Result<Suite, Error> {
     Ok(Suite {
         primitive: file.primitive,
         title: "Prefix tree".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
+        cases,
+    })
+}
+
+/// §6.1: which log entries are distinguished.
+fn distinguished_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "distinguished.json";
+    let file: VectorFile<DistinguishedInput, DistinguishedExpect> = load(dir, FILE)?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let timestamps = case.input.timestamps.clone();
+        let at = move |position: u64| {
+            usize::try_from(position)
+                .ok()
+                .and_then(|index| timestamps.get(index))
+                .copied()
+        };
+        let window = case.input.window;
+        let size = case.input.size;
+
+        // The peer reaches both answers by walking the frontier. This side runs §6.1's
+        // recursion and takes the greatest element of the set it produces, so agreement is
+        // evidence about the shortcut rather than about two copies of the same code.
+        let render = |value: Result<Option<u64>, kt_tree::distinguished::Error>| match value {
+            Ok(None) => "none".to_owned(),
+            Ok(Some(position)) => position.to_string(),
+            Err(err) => format!("failed: {err}"),
+        };
+        let checks = vec![
+            Check::new(
+                "rightmost distinguished log entry (§6.1)",
+                case.expect
+                    .rightmost
+                    .map_or_else(|| "none".to_owned(), |value| value.to_string()),
+                render(kt_tree::distinguished::rightmost(size, window, &at)),
+            ),
+            Check::new(
+                "rightmost distinguished entry left of the last one (§6.1)",
+                case.expect
+                    .previous_rightmost
+                    .map_or_else(|| "none".to_owned(), |value| value.to_string()),
+                render(kt_tree::distinguished::previous_rightmost(
+                    size, window, &at,
+                )),
+            ),
+        ];
+
+        // The full set has no counterpart to compare against — the peer never computes one —
+        // so it goes in the description, where it is the thing a reader wants anyway.
+        let enumerated = kt_tree::distinguished::enumerate(size, window, &at);
+        let summary = match &enumerated {
+            Err(err) => format!("enumerating failed: {err}"),
+            Ok(set) if set.is_empty() => "no distinguished entries".to_owned(),
+            Ok(set) => format!(
+                "{} distinguished: {}",
+                set.len(),
+                render_list(&set.iter().take(8).map(u64::to_string).collect::<Vec<_>>())
+            ),
+        };
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "size {size}, window {window} · {summary} · peer read {} timestamps",
+                case.expect.requested.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Distinguished log entries".to_owned(),
         draft_section: section_of(&file.draft),
         file: FILE.to_owned(),
         generator: Generator {

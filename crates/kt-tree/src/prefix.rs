@@ -1455,7 +1455,8 @@ mod error_tests {
 /// root that assumes no collapse, which is what the Go peer returns, and records the
 /// assumption in [`Mutation::assumed_no_collapse`] so a caller that cannot tolerate it
 /// can decline. It is not tolerable for an auditor: signing an `AuditorTreeHead` over a
-/// guessed root publishes a root no user can reproduce. Written up in `docs/interop.md`.
+/// guessed root publishes a root no user can reproduce. Tracked as `DRAFT-04` in
+/// `docs/interop.md`.
 ///
 /// # Errors
 ///

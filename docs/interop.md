@@ -95,6 +95,7 @@ disagrees:
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
 | 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | signatures **agree** (§11.2–§11.4); combined tree todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
+| 9a | Distinguished entries (§6.1) | size, window, timestamps → the distinguished set | Decides which entries every user must inspect; pure integer and timestamp math, so cheap and high-yield. | **agrees** across 42 shapes |
 | 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 12 verdicts, every encoding, and every log root; three divergences recorded, see below |
 
 Steps 1 through 6 are done, along with step 9 and the signature half of step 7.
@@ -110,6 +111,44 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### A shortcut that turns out to be the specification
+
+§6.1 defines distinguished log entries — the reference points every user checks against —
+with a recursion over the implicit binary search tree: an entry is distinguished when the
+gap between the timestamps bracketing it reaches the Reasonable Monitoring Window, and then
+both halves are examined the same way.
+
+katie does not run that recursion. `RightmostDistinguished` descends the frontier while the
+current node's right child is still distinguished, which is `O(log n)` rather than
+`O(|D|)`. `PreviousRightmost` is stranger: it special-cases the rightmost entry being
+distinguished, then hunts for the rightmost edge of a subtree of distinguished entries.
+Neither is obviously the same function as the definition, and the set they describe decides
+which entries every user in the deployment is obliged to inspect — so this is a good place
+for two implementations to differ quietly.
+
+`distinguished.json` therefore records katie's answers, and `kt-tree::distinguished` answers
+from §6.1 directly: [`enumerate`] runs the recursion, and the rightmost is the greatest
+element of the set it returns. They agree across 42 shapes — sizes from 0 to 1000, windows
+from zero (everything is distinguished) to `2^40` (nothing is), evenly spaced timestamps, a
+log that stalls and then bursts, and fifty entries sharing a single millisecond. The
+shortcut is the definition; that is now a result rather than an assumption.
+
+Two things worth writing down from this. The window-of-zero cases exist because §6.1 goes
+out of its way to say the comparison is "less than" and not "less than or equal to" — with
+the comparison the other way, a window of zero would distinguish *nothing* instead of
+everything, and a deployment that misconfigured it would silently have no reference points
+at all. And when the tree size is a power of two the root *is* the rightmost entry, so its
+own timestamp is the right bracket and its left child inherits the identical pair: the whole
+left spine comes out distinguished. That looks like a misconfigured window if you meet it
+without expecting it.
+
+An adjacent thing measured and *not* found: katie's auditor builds its data provider with a
+nil proof handle, so any timestamp request outside the retained frontier would be a nil
+dereference. Swept across 120,000 combinations — sizes to 4096, ten windows, three timestamp
+patterns — `PreviousRightmost` never asked for one. The retained frontier is exactly enough.
+Recorded here because the reasoning that says it *should* be reachable is wrong, and the next
+reader deserves to know that was checked rather than assumed.
 
 ### Two ways to reach the same root
 
@@ -129,7 +168,7 @@ shape drifts. The two implementations arrive differently: katie indexes a chain 
 and propagates a carry, `kt-tree::log` keeps subtree lengths beside their heads and merges
 the rightmost pair while the lengths match.
 
-### §4.2 can leave a user checking nothing at all
+### DRAFT-06: §4.2 can leave a user checking nothing at all
 
 Implementing §4.2's update-view procedure turned up a hole, and `update-view.json`
 records the Go peer reproducing it, which is what makes it the procedure's behaviour
@@ -232,11 +271,15 @@ can both pass Appendix B and still not interoperate if they disagree about eithe
 Worth remembering when the next primitive with an RFC behind it comes along: use the
 RFC's vectors for the primitive and the peer's for the protocol's use of it.
 
-### Findings from steps 1, 2, and 6
+### Findings
 
-Recorded here rather than rediscovered, and each is worth an upstream report.
+Recorded here rather than rediscovered. Each carries a stable identifier so code comments
+and vector notes can point at one without restating it; the register at the end of this
+file lists them all with their status. `KT-` is an implementation bug in the Go peer,
+`DRAFT-` a gap or ambiguity in the specification, and `NOTE-` a difference that is not a
+bug in either but would silently break a third implementation that guessed differently.
 
-**katie's binary ladder does not terminate for versions at or above `2^31-1`.**
+**[KT-01] katie's binary ladder does not terminate for versions at or above `2^31-1`.**
 `tree/transparency/math.baseBinaryLadder` computes in `uint32` and takes the
 binary-search midpoint as `(lower + upper) / 2`. Once that sum passes `MaxUint32`
 it wraps, the midpoint lands *below* the lower bound, and the loop walks away from
@@ -250,7 +293,7 @@ it a remote hang, not just a robustness nit. Consequence for us:
 `binary-ladder.json` stops at `2^31-2`, and the range above it is covered by
 Rust-side tests.
 
-**A greatest version of `2^32-1` cannot be proven at all.** Appendix B is Python,
+**[DRAFT-01] A greatest version of `2^32-1` cannot be proven at all.** Appendix B is Python,
 so the ladder for `n = 2^32-1` contains `2^33-1`; on the wire a version is a
 `uint32` (§11.7), so that lookup does not exist. Establishing `2^32-1` as the
 greatest version requires a non-inclusion proof for version `2^32`, which is
@@ -258,7 +301,7 @@ unrepresentable. `kt-tree::ladder` reports this rather than truncating. This is 
 draft-level gap: either the version space needs to exclude its own maximum, or
 Appendix B needs to say what happens there.
 
-**katie's search ladder is indexed on the target, Appendix B's on the greatest
+**[NOTE-01] katie's search ladder is indexed on the target, Appendix B's on the greatest
 version — and they agree anyway.** draft-05's `search_binary_ladder` iterates
 `base_binary_ladder(n)`; katie iterates `baseBinaryLadder(t)`. The outputs are
 identical, because the two base ladders agree rung by rung until the first rung
@@ -269,13 +312,13 @@ over a 131×131 grid at generation time and refuses to emit vectors if it ever
 fails, and `kt-tree` asserts it again from the Rust side. So katie-generated
 ladder vectors are a valid oracle for a draft-shaped implementation.
 
-**katie's monitoring ladder predates draft-05's deduplication parameter.**
+**[NOTE-02] katie's monitoring ladder predates draft-05's deduplication parameter.**
 Appendix B's `monitoring_binary_ladder(t, left_inclusion)` drops lookups already
 proven to the left; katie's `MonitoringBinaryLadder(t)` takes only `t`. Monitoring
 vectors are therefore emitted with an empty set only, and the deduplication is
 covered by Rust-side tests. Not a disagreement, just a pin that is behind.
 
-**§12.2 leaves two things implicit about prefix proofs.** First, what `depth`
+**[DRAFT-02] §12.2 leaves two things implicit about prefix proofs.** First, what `depth`
 counts for a `nonInclusionParent` result: §12.2 calls the terminal node "a parent
 node that lacks the desired child" and says `depth` is "the depth of the terminal
 node", and those give numbers one apart. katie counts the bits consumed to reach
@@ -287,7 +330,7 @@ as all-zero per §12.2's own sentence. Both readings are now pinned by
 `prefix-tree.json`; both are worth an upstream question, since a second
 implementation reading them the other way would be silently incompatible.
 
-**§12.2's `depth` field cannot describe the deepest possible prefix tree.** `depth`
+**[DRAFT-03] §12.2's `depth` field cannot describe the deepest possible prefix tree.** `depth`
 is a `uint8`, so it tops out at 255. Two search keys that agree on their first 255
 bits put their leaves at depth 256, which no `PrefixSearchResult` can express — the
 tree is well formed and its root is computable, but no proof about it can be encoded.
@@ -298,7 +341,7 @@ VRF outputs this is a `2^-255` coincidence, and a log cannot grind for it becaus
 must produce a valid VRF proof for whatever label-version pair it uses. Worth a
 sentence in the draft rather than a fix.
 
-**§15.2 makes some removals unauditable, and both implementations guess.** An
+**[DRAFT-04] §15.2 makes some removals unauditable, and both implementations guess.** An
 auditor is sent an `AuditorUpdate` — leaves added, leaves removed, and one batch
 proof in the *previous* entry's prefix tree — and has to reconstruct the root the new
 entry claims (step 7). Applying a removal is not just clearing a node: §3.3's shape
@@ -321,7 +364,7 @@ root katie does, so the two interoperate, but reports it through
 verifier's opinion. The fix belongs in the draft: the update needs to be able to name
 the sibling, or `removed` needs to carry it.
 
-**katie treats §11.9's all-zero copath element as an opaque node.** The same
+**[KT-02] katie treats §11.9's all-zero copath element as an opaque node.** The same
 reconstruction, different cause, and here the two implementations differ. When a
 removal empties the last leaf under a parent whose other slot was supplied as an
 element equal to the all-zero stand-in, that element *does* identify the subtree as
@@ -332,7 +375,7 @@ gives `dc48a742…` where `Tree.Mutate` gives the all-zero root. `kt-tree::prefi
 resolves the stand-in and reaches the tree's root. Pinned as a divergence in
 `prefix-mutation.json`.
 
-**katie cannot evaluate the replacement §15.2 explicitly permits.** Step 2 says "a
+**[KT-03] katie cannot evaluate the replacement §15.2 explicitly permits.** Step 2 says "a
 VRF output in `added` is also allowed to be in `removed`", and step 3 exempts exactly
 those keys from the non-inclusion requirement — that pair of sentences is how a
 label's value is replaced in one entry. katie's `EvaluateBeforeAfter` concatenates
@@ -346,7 +389,7 @@ way that is easy to miss — step 6 computes the previous root "with `proof` and
 `PrefixLeaf` structures in `removed`". Pinned by `prefix-mutation.json`'s
 `replace-in-place` case, where the vector records katie's refusal.
 
-**§15.2 cannot audit a log entry that changes nothing.** Neither `added` nor
+**[DRAFT-05] §15.2 cannot audit a log entry that changes nothing.** Neither `added` nor
 `removed` has a lower bound, so an entry that adds and removes no prefix tree leaves
 is well formed — a log publishing on a fixed schedule with no updates to make would
 produce one. But then the proof has no results and no copath, and step 6 has no
@@ -356,7 +399,7 @@ same underlying reason; `auditor-update.json`'s `change-nothing` case pins that.
 Whether the draft intends to forbid such an entry or to exempt it from step 6 is
 worth asking.
 
-**`opening` sits in a different place in the two implementations.** The draft puts
+**[NOTE-03] `opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
 and writes it to the HMAC first. Same bytes, different factoring — the vectors
 record the full `CommitmentValue` encoding as well as the commitment, so both
@@ -404,28 +447,29 @@ CI runs Tier 1 on every push (Go and Rust toolchains, vectors regenerated and
 diffed so a silent upstream drift fails loudly). Tier 2 runs on demand until it
 is stable.
 
-## Reporting upstream
+## Findings register
 
-Interop work finds spec bugs; that is the most valuable output here. Draft issues
-go to [ietf-wg-keytrans/draft-protocol](https://github.com/ietf-wg-keytrans/draft-protocol/issues).
-Implementation disagreements go to the respective repository. Record every
-resolved ambiguity as a comment in the Rust code citing the issue, so the next
-reader does not re-derive it.
+Nothing is filed upstream. That is a standing project decision, not an oversight: findings
+are tracked here, and each one is pinned by a committed vector so a filing can point at
+reproducible bytes whenever the decision changes.
 
-Nothing has been filed yet — the disclosure email about the ladder hang went to katie's
-maintainer first, and the rest are held pending a decision on what to file where. The
-queue, in the order they seem worth raising:
+| ID | What | Belongs to | Pinned by | Status |
+|---|---|---|---|---|
+| `KT-01` | Binary ladder does not terminate for greatest versions at or above `2^31-1` | katie | `binary-ladder.json` capped at `2^31-2`; Rust tests above it | disclosed by email; not filed |
+| `KT-02` | `EvaluateBeforeAfter` treats §11.9's all-zero copath element as an opaque node | katie | `prefix-mutation.json` `remove-every-leaf` | tracked locally |
+| `KT-03` | `EvaluateBeforeAfter` refuses the replacement §15.2 permits | katie | `prefix-mutation.json` `replace-in-place` | tracked locally |
+| `DRAFT-01` | A greatest version of `2^32-1` cannot be proven at all | draft | `kt-tree::ladder` refuses it | tracked locally |
+| `DRAFT-02` | §12.2 leaves `nonInclusionParent`'s `depth` and its element accounting implicit | draft | `prefix-tree.json` | tracked locally |
+| `DRAFT-03` | §12.2's `uint8 depth` cannot express depth 256 | draft | `kt-tree::prefix` `DepthOverflow` | tracked locally |
+| `DRAFT-04` | §15.2 step 7 cannot determine the root when a removal's sibling is uncovered | draft | `prefix-mutation.json`, `auditor-update.json` | tracked locally |
+| `DRAFT-05` | §15.2 cannot audit a log entry that changes nothing | draft | `auditor-update.json` `change-nothing` | tracked locally |
+| `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::leaves_right_edge_unchecked` | tracked locally |
+| `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
+| `NOTE-02` | katie's monitoring ladder predates draft-05's deduplication parameter | katie | `binary-ladder.json` empty-set cases only | no action |
+| `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
-*Draft issues.* §15.2 step 7 cannot determine the root when a removal's sibling is
-uncovered — the substantive one, since it makes some updates unauditable as specified.
-§15.2 has no way to audit an entry that changes nothing. The `2^32-1` greatest version is
-unprovable. §12.2's `depth` cannot express 256, and leaves two things implicit about what
-it counts. §11.2's grouped `select` reads two ways, and the two Go implementations took
-one each.
-
-*katie issues.* The binary ladder hang at versions at or above `2^31-1` (already
-disclosed). `EvaluateBeforeAfter` treating §11.9's all-zero copath element as an opaque
-node. `EvaluateBeforeAfter` refusing the replacement §15.2 permits.
-
-Each is pinned by a committed vector, so a filing can point at reproducible bytes rather
-than at prose.
+Two ground rules for anything added here. A finding is only a finding once a committed
+vector or test pins it — otherwise it is a hunch, and hunches do not survive contact with a
+regenerated vector. And a `DRAFT-` entry has to say what an implementation is supposed to
+do instead, because "the specification is unclear" is not actionable and this file is the
+place the next reader looks.

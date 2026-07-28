@@ -645,7 +645,8 @@ pub fn update_view(size: u64, advertised: Option<u64>) -> Result<Vec<u64>> {
 /// rightmost entry's timestamp — the one they are never given.
 ///
 /// This function exists so a client can notice and refuse rather than treat an empty
-/// response as "nothing to check". Reported upstream; see `docs/interop.md`.
+/// response as "nothing to check". Tracked as `DRAFT-06` in `docs/interop.md`; not filed
+/// upstream.
 ///
 /// # Errors
 ///
