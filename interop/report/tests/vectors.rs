@@ -208,42 +208,48 @@ fn ladder_vectors_cover_all_three_variants() {
     );
 }
 
-/// The coverage table is the page's honesty check, so it gets one of its own: a
-/// row may only claim to be verified against the peer if it names a vector file
-/// that this report actually contains and that actually passes.
+/// The coverage table is the page's honesty check, so it gets one of its own.
+///
+/// Three properties: a row may only claim peer verification if every file it cites
+/// is in the report and passing; a row that claims less must not cite evidence; and
+/// refusal coverage has to be *visible in the table*, not merely present in a file.
+/// That last one is the assertion that would have caught the gap this suite closed —
+/// `tampered.json` existed as an idea long before any area admitted to needing it.
 #[test]
 fn coverage_table_cannot_overstate() {
     let report = report();
 
     for area in report.areas_with(Coverage::VerifiedAgainstPeer) {
-        let file = area.evidence.as_deref().unwrap_or_else(|| {
-            panic!(
-                "{} {} claims peer verification with no vector file",
-                area.section, area.name
-            )
-        });
-        let suite = report
-            .suites
-            .iter()
-            .find(|s| s.file == file)
-            .unwrap_or_else(|| {
-                panic!(
-                    "{} {} cites {file}, which is not in the report",
-                    area.section, area.name
-                )
-            });
         assert!(
-            suite.passing(),
-            "{} {} claims peer verification but {file} has {} failing checks",
+            !area.evidence.is_empty(),
+            "{} {} claims peer verification with no vector file",
             area.section,
-            area.name,
-            suite.failed()
+            area.name
         );
+        for file in &area.evidence {
+            let suite = report
+                .suites
+                .iter()
+                .find(|s| &s.file == file)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{} {} cites {file}, which is not in the report",
+                        area.section, area.name
+                    )
+                });
+            assert!(
+                suite.passing(),
+                "{} {} claims peer verification but {file} has {} failing checks",
+                area.section,
+                area.name,
+                suite.failed()
+            );
+        }
     }
 
     for area in report.areas_with(Coverage::ImplementedUnverified) {
         assert!(
-            area.evidence.is_none(),
+            area.evidence.is_empty(),
             "{} {} is marked unverified but cites evidence",
             area.section,
             area.name
@@ -256,27 +262,47 @@ fn coverage_table_cannot_overstate() {
         );
     }
 
-    for area in report.areas_with(Coverage::NotImplemented) {
-        assert!(
-            area.module.is_none() && area.evidence.is_none(),
-            "{} {} is marked unimplemented but names a module or evidence",
-            area.section,
-            area.name
-        );
+    for coverage in [Coverage::NotImplemented, Coverage::OutOfScope] {
+        for area in report.areas_with(coverage) {
+            assert!(
+                area.module.is_none() && area.evidence.is_empty(),
+                "{} {} is marked {} but names a module or evidence",
+                area.section,
+                area.name,
+                coverage.label()
+            );
+        }
     }
 
-    // Every suite in the report must be cited by some verified row, or the page
-    // would be running checks it does not tell the reader about.
+    // Every suite must be cited by some row, or the page runs checks it does not
+    // tell the reader about.
     for suite in &report.suites {
         let cited = report
-            .areas_with(Coverage::VerifiedAgainstPeer)
-            .any(|area| area.evidence.as_deref() == Some(suite.file.as_str()));
+            .coverage
+            .iter()
+            .any(|area| area.evidence.iter().any(|file| file == &suite.file));
         assert!(
             cited,
             "{} is checked but no coverage row cites it",
             suite.file
         );
     }
+
+    // Refusal coverage, made visible. Every area with a verifier — a commitment to
+    // open, a proof to check — must cite the must-reject suite; an area that only
+    // agrees about computed values cannot catch an implementation that accepts
+    // everything.
+    let refusing: Vec<&str> = report
+        .coverage
+        .iter()
+        .filter(|area| area.has_refusal_evidence())
+        .map(|area| area.name.as_str())
+        .collect();
+    assert!(
+        refusing.len() >= 4,
+        "only {} areas cite refusal evidence, expected the four with verifiers: {refusing:?}",
+        refusing.len()
+    );
 }
 
 /// The rendered page must contain what it claims to: every case name, and no

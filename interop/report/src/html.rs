@@ -334,24 +334,39 @@ fn coverage_section(report: &Report) -> String {
     let verified = report.areas_with(Coverage::VerifiedAgainstPeer).count();
     let unverified = report.areas_with(Coverage::ImplementedUnverified).count();
     let missing = report.areas_with(Coverage::NotImplemented).count();
+    let out_of_scope = report.areas_with(Coverage::OutOfScope).count();
+    let refuses = report
+        .coverage
+        .iter()
+        .filter(|area| area.has_refusal_evidence())
+        .count();
 
     format!(
-        r#"<section id="coverage">
+        r##"<section id="coverage">
 <h2>Coverage</h2>
 <p>
   {verified} areas of the protocol are verified against the peer, {unverified} are
-  implemented without a peer confirming the bytes, and {missing} are not
-  implemented. The unimplemented rows are listed on purpose: a page that showed
-  only the passing ones would be a claim about this implementation's completeness
-  that is not true.
+  implemented without a peer confirming the bytes, {missing} are not implemented,
+  and {out_of_scope} are deliberately excluded. The unimplemented rows are listed on
+  purpose: a page that showed only the passing ones would be a claim about this
+  implementation's completeness that is not true.
+</p>
+<p>
+  The <strong>Refuses</strong> column is the one to read second. &ldquo;Values
+  only&rdquo; means the peer and this implementation agree on what to <em>compute</em>
+  — which a verifier that accepted everything would also satisfy, because nothing in
+  that file asks it to say no. {refuses} areas additionally have vectors in
+  <a href="#tampered"><code>tampered.json</code></a>, where the peer has confirmed a
+  proof is invalid and this implementation has to reject it too. Areas with no verifier
+  to speak of — the tree arithmetic in §4.1 and §5 — have nothing to refuse.
 </p>
 <table class="coverage">
-<thead><tr><th>Draft</th><th>Area</th><th>Module</th><th>State</th><th>Evidence</th></tr></thead>
+<thead><tr><th>Draft</th><th>Area</th><th>Module</th><th>State</th><th>Evidence</th><th>Refuses</th></tr></thead>
 <tbody>
 {rows}</tbody>
 </table>
 </section>
-"#
+"##
     )
 }
 
@@ -359,7 +374,7 @@ fn coverage_row(area: &Area) -> String {
     let class = match area.coverage {
         Coverage::VerifiedAgainstPeer => "verified",
         Coverage::ImplementedUnverified => "partial",
-        Coverage::NotImplemented => "missing",
+        Coverage::NotImplemented | Coverage::OutOfScope => "missing",
     };
     format!(
         r##"<tr class="{class}">
@@ -368,6 +383,7 @@ fn coverage_row(area: &Area) -> String {
 <td>{module}</td>
 <td><span class="state {class}">{state}</span></td>
 <td>{evidence}</td>
+<td>{refuses}</td>
 </tr>
 "##,
         section = escape(&area.section),
@@ -377,14 +393,28 @@ fn coverage_row(area: &Area) -> String {
             |m| format!("<code>{}</code>", escape(m))
         ),
         state = escape(area.coverage.label()),
-        evidence = area.evidence.as_ref().map_or_else(
-            || "&mdash;".to_owned(),
-            |file| format!(
-                r##"<a href="#{anchor}"><code>{file}</code></a>"##,
-                anchor = anchor(file.trim_end_matches(".json")),
-                file = escape(file)
-            )
-        ),
+        evidence = if area.evidence.is_empty() {
+            "&mdash;".to_owned()
+        } else {
+            area.evidence
+                .iter()
+                .map(|file| {
+                    format!(
+                        r##"<a href="#{anchor}"><code>{file}</code></a>"##,
+                        anchor = anchor(file.trim_end_matches(".json")),
+                        file = escape(file)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("<br>")
+        },
+        refuses = if area.has_refusal_evidence() {
+            r#"<span class="badge pass">yes</span>"#
+        } else if matches!(area.coverage, Coverage::VerifiedAgainstPeer) {
+            r#"<span class="tag">values only</span>"#
+        } else {
+            "&mdash;"
+        },
     )
 }
 

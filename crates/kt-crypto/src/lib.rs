@@ -113,3 +113,72 @@ impl From<codec::Error> for Error {
         Self::Wire(err)
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lint protects library paths"
+)]
+mod tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every variant renders with its detail, and the wrapping variant chains to
+    /// what it wrapped. A verifier's rejection message is the only thing a caller
+    /// sees when a proof fails, so it should say which length or which value was
+    /// wrong rather than "invalid".
+    #[test]
+    fn every_error_renders_and_chains() {
+        use core::error::Error as _;
+
+        let wire = Error::Wire(codec::Error::TrailingBytes { remaining: 3 });
+        assert!(wire.to_string().contains("trailing"));
+        assert!(
+            wire.source().is_some(),
+            "Wire must chain to the codec error it wrapped"
+        );
+
+        let cases = [
+            (
+                Error::OpeningLength {
+                    expected: 16,
+                    actual: 15,
+                },
+                ["16", "15"],
+            ),
+            (
+                Error::CommitmentLength {
+                    expected: 32,
+                    actual: 31,
+                },
+                ["32", "31"],
+            ),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            for needle in needles {
+                assert!(rendered.contains(needle), "{rendered:?} omits {needle:?}");
+            }
+            assert!(error.source().is_none());
+        }
+
+        // These two carry no detail on purpose: which byte of a commitment differed
+        // is not something to hand back to whoever supplied it.
+        assert!(
+            Error::CommitmentMismatch
+                .to_string()
+                .contains("does not open")
+        );
+        assert!(Error::CommitmentKeyLength.to_string().contains("Kc"));
+        assert!(Error::CommitmentMismatch.source().is_none());
+    }
+
+    #[test]
+    fn codec_errors_convert() {
+        let converted: Error = codec::Error::InvalidPresence { octet: 2 }.into();
+        assert!(matches!(
+            converted,
+            Error::Wire(codec::Error::InvalidPresence { octet: 2 })
+        ));
+    }
+}

@@ -448,3 +448,76 @@ mod tests {
         assert_eq!(left(63).unwrap(), 31);
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod error_tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every variant renders with the indices it names. An implicit-binary-search-tree
+    /// error is what a client reports when a log's timestamps do not line up, so
+    /// "invalid" alone would not help anyone debug it.
+    #[test]
+    fn every_error_renders_its_detail() {
+        use core::error::Error as _;
+
+        let cases: [(Error, &[&str]); 4] = [
+            (Error::EmptyLog, &["empty"]),
+            (Error::LeafHasNoChildren { index: 4 }, &["4", "leaf"]),
+            // 13 of 14: both numbers, and the end of the range.
+            (
+                Error::NoRightChild {
+                    index: 13,
+                    size: 14,
+                },
+                &["13", "14"],
+            ),
+            (
+                Error::IndexOutOfRange {
+                    index: 20,
+                    size: 14,
+                },
+                &["20", "14"],
+            ),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            for needle in needles {
+                assert!(rendered.contains(needle), "{rendered:?} omits {needle:?}");
+            }
+            assert!(error.source().is_none());
+        }
+    }
+
+    /// `log2` and `level` are total, including at the boundaries where a shift-based
+    /// implementation would overflow.
+    #[test]
+    fn bit_helpers_are_total_at_the_boundaries() {
+        assert_eq!(log2(0), 0, "the pseudocode's convention");
+        assert_eq!(log2(1), 0);
+        assert_eq!(log2(u64::MAX), 63);
+        assert_eq!(level(0), 0);
+        assert_eq!(level(u64::MAX), 64, "every bit set is 64 trailing ones");
+        assert!(is_leaf(0));
+        assert!(!is_leaf(1));
+    }
+
+    /// The root of the largest expressible log, where `1 << 63` is the last shift
+    /// that fits.
+    #[test]
+    fn the_largest_log_has_a_root() {
+        assert_eq!(root(u64::MAX).unwrap(), (1 << 63) - 1);
+        assert_eq!(root(1 << 63).unwrap(), (1 << 63) - 1);
+    }
+
+    /// `left` on the highest possible intermediate node: `u64::MAX` has level 64, so
+    /// the shift is by 63 and stays in range.
+    #[test]
+    fn left_of_the_deepest_node_is_in_range() {
+        assert_eq!(left(u64::MAX).unwrap(), u64::MAX ^ (1 << 63));
+    }
+}

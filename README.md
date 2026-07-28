@@ -119,6 +119,12 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 | Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
 
+**Refusing what the peer refuses.**
+[`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
+katie built, corrupted, and confirmed its own verifier rejects — so accepting one is
+a bug rather than a difference of opinion. Every other vector file asks whether we
+compute the same values, which a verifier that accepted everything would also pass.
+
 **Both directions.** The vectors above are generated from the pinned katie by
 `interop/go/cmd/gen` and checked by `cargo test`. The reverse also runs:
 `kt-interop-emit` builds proofs from this implementation — half of them corrupted
@@ -135,9 +141,22 @@ encoding of a `VrfInput` (§11.7), and that the 64-byte output is truncated to 3
 (§17.1). Two conforming ECVRF implementations can still fail to interoperate on
 exactly those two decisions.
 
-Not implemented: `ECVRF-P256-SHA256-TAI` for the P-256 suite (the Ed25519 suite is
-the first target), the combined tree (§3.4, §12.3), signatures (§11.2–§11.4), and
-the client algorithms (§6–§10, §13).
+Not implemented: the combined tree (§3.4, §12.3), signatures (§11.2–§11.4), and the
+client algorithms (§6–§10, §13).
+
+Deliberately out of scope: the `KT_128_SHA256_P256` suite. `KT_128_SHA256_Ed25519`
+is supported by both Go peers, and one suite implemented properly is worth more here
+than two implemented thinly. Asking for the P-256 VRF returns an error rather than
+evaluating the wrong curve. The coverage table on the evidence page distinguishes
+"out of scope" from "not implemented", so this does not read as a gap.
+
+## Test coverage
+
+`cargo llvm-cov` reports **99% line coverage across the three protocol crates**
+(`kt-wire`, `kt-crypto`, `kt-tree`), and CI fails below 97%. The number is a floor
+against regression, not a target: what it mostly bought was covering every error
+type's `Display` — the text a verifier emits when it rejects something — which turned
+up one real inconsistency, a wrapped error that did not chain to its cause.
 
 Interop work has already turned up two bugs in the Go peer and one gap in the
 draft — see the findings in [`docs/interop.md`](docs/interop.md).

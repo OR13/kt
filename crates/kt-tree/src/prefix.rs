@@ -116,6 +116,19 @@ pub enum Error {
     },
     /// The proof evaluated to a different root than the one supplied.
     RootMismatch,
+    /// A terminal node sits deeper than §12.2's `uint8 depth` can express.
+    ///
+    /// Reachable only when two search keys agree on their first 255 bits, which puts
+    /// their leaves at depth 256. For VRF outputs that is a `2^-255` coincidence, and
+    /// a log cannot grind for it either, since it has to produce a valid VRF proof
+    /// for whatever label-version pair it uses. So this is a limit of the wire
+    /// format rather than a practical one — but saturating the field instead would
+    /// emit a proof whose `depth` disagrees with the tree it describes, and no
+    /// verifier could catch that except by failing on the root.
+    DepthOverflow {
+        /// The depth the terminal node actually sits at.
+        depth: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -150,6 +163,11 @@ impl fmt::Display for Error {
                 write!(f, "proof needs {expected} copath elements, got {actual}")
             }
             Self::RootMismatch => f.write_str("proof does not evaluate to the expected root"),
+            Self::DepthOverflow { depth } => write!(
+                f,
+                "terminal node is at depth {depth}, which the uint8 depth field of §12.2 \
+                 cannot express"
+            ),
         }
     }
 }
@@ -275,24 +293,34 @@ impl PrefixTree {
     }
 
     /// Searches for `key` and reports where the search ended (§12.2).
-    #[must_use]
-    pub fn search(&self, key: &HashValue) -> PrefixSearchResult {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::DepthOverflow`] if the terminal node is deeper than §12.2's `uint8
+    /// depth` can express, which takes two keys agreeing on 255 bits.
+    pub fn search(&self, key: &HashValue) -> Result<PrefixSearchResult> {
         let mut slot = self.root.as_ref();
         let mut depth = 0_usize;
         loop {
-            let truncated = u8::try_from(depth).unwrap_or(u8::MAX);
+            let truncated = || u8::try_from(depth).map_err(|_| Error::DepthOverflow { depth });
             match slot {
                 // The child the search wanted is absent: the terminal is this
                 // empty slot, at the depth reached to get here.
-                None => return PrefixSearchResult::NonInclusionParent { depth: truncated },
+                None => {
+                    return Ok(PrefixSearchResult::NonInclusionParent {
+                        depth: truncated()?,
+                    });
+                }
                 Some(Node::Leaf(leaf)) => {
                     return if leaf.vrf_output == *key {
-                        PrefixSearchResult::Inclusion { depth: truncated }
+                        Ok(PrefixSearchResult::Inclusion {
+                            depth: truncated()?,
+                        })
                     } else {
-                        PrefixSearchResult::NonInclusionLeaf {
+                        Ok(PrefixSearchResult::NonInclusionLeaf {
                             leaf: *leaf,
-                            depth: truncated,
-                        }
+                            depth: truncated()?,
+                        })
                     };
                 }
                 Some(Node::Parent { left, right }) => {
@@ -323,7 +351,10 @@ impl PrefixTree {
             }
         }
 
-        let results = keys.iter().map(|key| self.search(key)).collect();
+        let mut results = Vec::new();
+        for key in keys {
+            results.push(self.search(key)?);
+        }
         let mut elements = Vec::new();
         if !keys.is_empty() {
             let active: Vec<&HashValue> = keys.iter().collect();
@@ -692,7 +723,7 @@ mod tests {
     use super::*;
     use alloc::vec;
 
-    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+    pub(super) const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
 
     /// A key whose first five bits are `bits`, the rest zero — so the §3.3 figures
     /// can be written out directly.
@@ -719,7 +750,7 @@ mod tests {
     }
 
     /// The tree from §3.3's first figure: 00010, 00101, 10001, 10111, 11011.
-    fn figure_tree() -> (PrefixTree, Vec<PrefixLeaf>) {
+    pub(super) fn figure_tree() -> (PrefixTree, Vec<PrefixLeaf>) {
         let leaves = vec![
             leaf([0, 0, 0, 1, 0], 0xa1),
             leaf([0, 0, 1, 0, 1], 0xb2),
@@ -854,7 +885,7 @@ mod tests {
         // Present: 00101 is a leaf. Its siblings 00010 shares two bits, so the
         // leaf sits at depth 3.
         assert_eq!(
-            tree.search(&leaves[1].vrf_output),
+            tree.search(&leaves[1].vrf_output).unwrap(),
             PrefixSearchResult::Inclusion { depth: 3 }
         );
 
@@ -863,7 +894,7 @@ mod tests {
         // as deep as it needs to, so the search runs out of tree at depth 3 rather
         // than walking all five bits.
         let searched = key([0, 0, 0, 1, 1]);
-        match tree.search(&searched) {
+        match tree.search(&searched).unwrap() {
             PrefixSearchResult::NonInclusionLeaf { leaf: found, depth } => {
                 assert_eq!(found.vrf_output, leaves[0].vrf_output);
                 assert_eq!(depth, 3);
@@ -874,7 +905,7 @@ mod tests {
         // Absent, ending at a missing child: 01000 leaves the tree after one bit,
         // because nothing else begins 01.
         assert_eq!(
-            tree.search(&key([0, 1, 0, 0, 0])),
+            tree.search(&key([0, 1, 0, 0, 0])).unwrap(),
             PrefixSearchResult::NonInclusionParent { depth: 2 }
         );
     }
@@ -1151,5 +1182,214 @@ mod tests {
             tree.prove(SUITE, &[keys[0], keys[0]]),
             Err(Error::DuplicateSearch { key: keys[0] })
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod error_tests {
+    use super::tests::{SUITE, figure_tree};
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// Every variant renders, and the ones that identify a search say which one — a
+    /// batch proof can hold 255 lookups, so "malformed proof" without an index is not
+    /// an error message a caller can act on.
+    #[test]
+    fn every_error_renders_its_detail() {
+        use core::error::Error as _;
+
+        let key = HashValue::from_bytes([1; 32]);
+        let cases: [(Error, &[&str]); 8] = [
+            (Error::DuplicateKey { key }, &["already"]),
+            (Error::DuplicateSearch { key }, &["twice"]),
+            (
+                Error::ResultCount {
+                    expected: 3,
+                    actual: 2,
+                },
+                &["3", "2"],
+            ),
+            (Error::Malformed { index: 4 }, &["4"]),
+            (Error::MissingCommitment { index: 1 }, &["1", "commitment"]),
+            (Error::ImpossibleLeaf { index: 2 }, &["2"]),
+            (
+                Error::ProofShape {
+                    expected: 5,
+                    actual: 6,
+                },
+                &["5", "6"],
+            ),
+            (Error::RootMismatch, &["root"]),
+        ];
+        for (error, needles) in cases {
+            let rendered = error.to_string();
+            for needle in needles {
+                assert!(rendered.contains(needle), "{rendered:?} omits {needle:?}");
+            }
+            assert!(error.source().is_none());
+        }
+    }
+
+    /// A batch that searches nothing: the root is a single unknown node, so the proof
+    /// has to supply it and the evaluation is just that value.
+    #[test]
+    fn an_empty_batch_evaluates_to_the_supplied_root() {
+        let root = HashValue::from_bytes([0x99; 32]);
+        let proof = PrefixProof {
+            results: Vec::new(),
+            elements: alloc::vec![root],
+        };
+        assert_eq!(evaluate(SUITE, &[], &proof).unwrap(), root);
+
+        // And with nothing supplied, the shape is wrong rather than silently zero.
+        let empty = PrefixProof::default();
+        assert_eq!(
+            evaluate(SUITE, &[], &empty),
+            Err(Error::ProofShape {
+                expected: 1,
+                actual: 0
+            })
+        );
+    }
+
+    /// A search whose result claims to end deeper than another search proved the tree
+    /// branches: the two contradict each other and the second one in is rejected.
+    #[test]
+    fn contradictory_depths_are_rejected() {
+        let (tree, leaves) = figure_tree();
+        let keys = [leaves[0].vrf_output, leaves[1].vrf_output];
+        let proof = tree.prove(SUITE, &keys).unwrap();
+
+        let mut forged = proof.clone();
+        // Claim the first search ended at the root, where the second proved a parent.
+        forged.results[0] = PrefixSearchResult::NonInclusionParent { depth: 0 };
+        let lookups = [
+            SearchEntry::included(keys[0], leaves[0].commitment),
+            SearchEntry::included(keys[1], leaves[1].commitment),
+        ];
+        assert!(matches!(
+            evaluate(SUITE, &lookups, &forged),
+            Err(Error::Malformed { .. }) | Err(Error::ProofShape { .. })
+        ));
+    }
+
+    /// `SearchEntry`'s two constructors, and the accessors on a search result that the
+    /// verifier reads but the tests had not.
+    #[test]
+    fn search_entry_and_result_accessors() {
+        let key = HashValue::from_bytes([2; 32]);
+        let commitment = HashValue::from_bytes([3; 32]);
+        assert_eq!(
+            SearchEntry::included(key, commitment).commitment,
+            Some(commitment)
+        );
+        assert_eq!(SearchEntry::absent(key).commitment, None);
+
+        let inclusion = PrefixSearchResult::Inclusion { depth: 3 };
+        assert!(inclusion.is_inclusion());
+        assert_eq!(inclusion.depth(), 3);
+
+        let parent = PrefixSearchResult::NonInclusionParent { depth: 9 };
+        assert!(!parent.is_inclusion());
+        assert_eq!(parent.depth(), 9);
+    }
+
+    /// Keys that agree for all 256 bits are the same key, so the tree refuses the
+    /// second one rather than growing a 256-deep spine to separate them.
+    #[test]
+    fn keys_differing_only_by_commitment_are_duplicates() {
+        let mut tree = PrefixTree::new();
+        let key = HashValue::from_bytes([0x5a; 32]);
+        tree.insert(PrefixLeaf {
+            vrf_output: key,
+            commitment: HashValue::ZERO,
+        })
+        .unwrap();
+        assert_eq!(
+            tree.insert(PrefixLeaf {
+                vrf_output: key,
+                commitment: HashValue::from_bytes([1; 32])
+            }),
+            Err(Error::DuplicateKey { key })
+        );
+    }
+
+    /// Builds a two-entry tree whose keys first differ at bit `index`, so their
+    /// leaves sit at depth `index + 1`.
+    fn pair_differing_at(index: usize) -> (PrefixTree, PrefixLeaf, PrefixLeaf) {
+        let mut second = [0_u8; 32];
+        second[index / 8] |= 1 << (7 - (index % 8));
+        let a = PrefixLeaf {
+            vrf_output: HashValue::from_bytes([0_u8; 32]),
+            commitment: HashValue::from_bytes([7; 32]),
+        };
+        let b = PrefixLeaf {
+            vrf_output: HashValue::from_bytes(second),
+            commitment: HashValue::from_bytes([8; 32]),
+        };
+        let mut tree = PrefixTree::new();
+        tree.insert(a).unwrap();
+        tree.insert(b).unwrap();
+        (tree, a, b)
+    }
+
+    /// The deepest tree §12.2 can describe: keys differing at bit 254 put their
+    /// leaves at depth 255, which is exactly `u8::MAX`.
+    #[test]
+    fn the_deepest_expressible_tree_verifies() {
+        let (tree, a, _) = pair_differing_at(254);
+        let root = tree.root(SUITE);
+        let proof = tree.prove(SUITE, &[a.vrf_output]).unwrap();
+        assert_eq!(proof.results[0].depth(), 255);
+        assert_eq!(
+            proof.elements.len(),
+            255,
+            "254 absent siblings plus the sibling leaf"
+        );
+        verify(
+            SUITE,
+            &[SearchEntry::included(a.vrf_output, a.commitment)],
+            &proof,
+            root,
+        )
+        .unwrap();
+    }
+
+    /// One bit deeper is not expressible, and saying so is better than emitting a
+    /// proof whose `depth` field disagrees with the tree it describes.
+    ///
+    /// Two keys agreeing on 255 bits is a `2^-255` coincidence for VRF outputs, and a
+    /// log cannot grind for it — it has to produce a valid VRF proof for whatever
+    /// label-version pair it uses. So this is a limit of the wire format, not a
+    /// practical one; it is worth an upstream note rather than a fix.
+    #[test]
+    fn a_tree_deeper_than_the_depth_field_is_refused() {
+        let (tree, a, _) = pair_differing_at(255);
+        assert_eq!(
+            tree.search(&a.vrf_output),
+            Err(Error::DepthOverflow { depth: 256 })
+        );
+        assert_eq!(
+            tree.prove(SUITE, &[a.vrf_output]),
+            Err(Error::DepthOverflow { depth: 256 })
+        );
+        // The tree itself is still well formed; only the proof cannot be expressed.
+        assert_ne!(tree.root(SUITE), HashValue::ZERO);
+    }
+
+    /// `bit` past the end of a key reads false rather than panicking, which is what
+    /// keeps a hostile depth field from taking the process down.
+    #[test]
+    fn bits_past_the_key_are_false() {
+        let key = HashValue::from_bytes([0xff; 32]);
+        assert!(bit(&key, KEY_BITS - 1));
+        assert!(!bit(&key, KEY_BITS));
+        assert!(!bit(&key, usize::MAX));
     }
 }

@@ -1,0 +1,414 @@
+{
+  "primitive": "tampered",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.6, §11.7, §12.1, §12.2",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "Proofs and openings that must be rejected. Each was built by katie, corrupted in the way `tamper` describes, and then confirmed rejected by katie's own verifier before being written here -- so accepting one is not a difference of opinion, it is a bug. `kind` selects the primitive. For the log tree, 'rejected' means the verifier errors or arrives at a root other than `root`; for the others it means the verify call fails. The mirror image of this file is from-kt.json, where the Rust side builds the corrupted proofs and katie has to reject them.",
+  "cases": [
+    {
+      "name": "log-flipped-element",
+      "input": {
+        "elements": [
+          "74c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+          "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+          "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+        ],
+        "entries": [
+          4
+        ],
+        "kind": "log-tree",
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the first proof element"
+      }
+    },
+    {
+      "name": "log-dropped-element",
+      "input": {
+        "elements": [
+          "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+          "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf"
+        ],
+        "entries": [
+          4
+        ],
+        "kind": "log-tree",
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "the last proof element removed"
+      }
+    },
+    {
+      "name": "log-extra-element",
+      "input": {
+        "elements": [
+          "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+          "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+          "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        "entries": [
+          4
+        ],
+        "kind": "log-tree",
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "an extra all-zero proof element appended"
+      }
+    },
+    {
+      "name": "log-swapped-elements",
+      "input": {
+        "elements": [
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+          "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+          "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+          "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+        ],
+        "entries": [
+          4
+        ],
+        "kind": "log-tree",
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "0322843bf84586bc646e7f05a43f904fd5582e67c8f7062b4dac0d18b2debb3a"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "the first two proof elements exchanged"
+      }
+    },
+    {
+      "name": "log-wrong-leaf-value",
+      "input": {
+        "elements": [
+          "75c0c725ddf9dd295d4548e0cd7b2415b1b410496a8e0cb0d31421e706daa741",
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16",
+          "717ad6e720be386d72fad7eda50d6a46deffac30ab29aac7475665ce5e8d0676",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+          "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+        ],
+        "entries": [
+          4
+        ],
+        "kind": "log-tree",
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "6f05e15189094d74b6ef61f4b2b54c4d5a8e4da5ddab0231efe6824a39410b16"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a different leaf's value claimed for the proven index"
+      }
+    },
+    {
+      "name": "log-corrupted-retained-head",
+      "input": {
+        "elements": [
+          "460ac5388da9f422a93267d318838340fba917a9b19d56af19a994029eb186f0",
+          "e321d5321dae0f4be56fd9ea8a65b63da0e572989925075ccdccf6b6d1ed2129",
+          "59fa62ae4ce3737a66f9d042722638fdf8827c52ee07cea0b83abf72cb026208",
+          "be8c7adee4b2fb0289a11c540473d1f878133025d2b1ccad04d09b2ad754dfdf",
+          "40b58a603976405df47c330453ce362b7f41900d58fe673690e048e8347da474"
+        ],
+        "entries": [
+          2
+        ],
+        "kind": "log-tree",
+        "retained": [
+          "d0311dd997a7b87a48314781b25e8a355d8c3879ae852bcba6181df7e8e26f51"
+        ],
+        "retained_size": 8,
+        "root": "3e92e20d401c8533e78af0e75ed12e081e0de8f91ce434820cf4f523fb605a57",
+        "size": 11,
+        "values": [
+          "0b03bb98c456c33e2a718fc09c81044e207e66d231245be87a8f4cce6c724f50"
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a retained full subtree head corrupted, with a proven leaf inside it"
+      }
+    },
+    {
+      "name": "prefix-flipped-element",
+      "input": {
+        "kind": "prefix-tree",
+        "proof": "0501030302021000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a103010202d800000000000000000000000000000000000000000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e502000233979dbb7c8c7e3d9b97b12cd22fcb1048bf64a6392498101c7a87d53d9351de768cfaeb4039e3a06cff66651da824ea6373b65842c2423dc8d0465cdd518029",
+        "root": "bb0a41868d61177f0b22c608ee1382cbee6685aafba53395cfc67ba3ef217064",
+        "searches": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "1000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000022"
+          },
+          {
+            "vrf_output": "1800000000000000000000000000000000000000000000000000000000000023"
+          },
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "d800000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "vrf_output": "f800000000000000000000000000000000000000000000000000000000000024"
+          }
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the first copath element"
+      }
+    },
+    {
+      "name": "prefix-dropped-element",
+      "input": {
+        "kind": "prefix-tree",
+        "proof": "0501030302021000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a103010202d800000000000000000000000000000000000000000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e502000132979dbb7c8c7e3d9b97b12cd22fcb1048bf64a6392498101c7a87d53d9351de",
+        "root": "bb0a41868d61177f0b22c608ee1382cbee6685aafba53395cfc67ba3ef217064",
+        "searches": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "1000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000022"
+          },
+          {
+            "vrf_output": "1800000000000000000000000000000000000000000000000000000000000023"
+          },
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "d800000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "vrf_output": "f800000000000000000000000000000000000000000000000000000000000024"
+          }
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "the last copath element removed"
+      }
+    },
+    {
+      "name": "prefix-extra-element",
+      "input": {
+        "kind": "prefix-tree",
+        "proof": "0501030302021000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a103010202d800000000000000000000000000000000000000000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e502000332979dbb7c8c7e3d9b97b12cd22fcb1048bf64a6392498101c7a87d53d9351de768cfaeb4039e3a06cff66651da824ea6373b65842c2423dc8d0465cdd5180290000000000000000000000000000000000000000000000000000000000000000",
+        "root": "bb0a41868d61177f0b22c608ee1382cbee6685aafba53395cfc67ba3ef217064",
+        "searches": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "1000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000022"
+          },
+          {
+            "vrf_output": "1800000000000000000000000000000000000000000000000000000000000023"
+          },
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "d800000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "vrf_output": "f800000000000000000000000000000000000000000000000000000000000024"
+          }
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "an extra all-zero copath element appended"
+      }
+    },
+    {
+      "name": "prefix-reordered-elements",
+      "input": {
+        "kind": "prefix-tree",
+        "proof": "0501030302021000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a103010202d800000000000000000000000000000000000000000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5020002768cfaeb4039e3a06cff66651da824ea6373b65842c2423dc8d0465cdd51802932979dbb7c8c7e3d9b97b12cd22fcb1048bf64a6392498101c7a87d53d9351de",
+        "root": "bb0a41868d61177f0b22c608ee1382cbee6685aafba53395cfc67ba3ef217064",
+        "searches": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "1000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000022"
+          },
+          {
+            "vrf_output": "1800000000000000000000000000000000000000000000000000000000000023"
+          },
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "d800000000000000000000000000000000000000000000000000000000000005"
+          },
+          {
+            "vrf_output": "f800000000000000000000000000000000000000000000000000000000000024"
+          }
+        ]
+      },
+      "expect": {
+        "error": true,
+        "tamper": "the first two copath elements exchanged"
+      }
+    },
+    {
+      "name": "vrf-flipped-proof-byte",
+      "input": {
+        "kind": "vrf",
+        "label": "616c696365406578616d706c652e636f6d",
+        "proof": "cfd7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c1e775f9cff0173344e4e19fc301c504f3dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the proof's Gamma"
+      }
+    },
+    {
+      "name": "vrf-flipped-challenge",
+      "input": {
+        "kind": "vrf",
+        "label": "616c696365406578616d706c652e636f6d",
+        "proof": "ced7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c0e775f9cff0173344e4e19fc301c504f3dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the proof's challenge"
+      }
+    },
+    {
+      "name": "vrf-flipped-scalar",
+      "input": {
+        "kind": "vrf",
+        "label": "616c696365406578616d706c652e636f6d",
+        "proof": "ced7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c1e775f9cff0173344e4e19fc301c504f2dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "public_key": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the proof's s"
+      }
+    },
+    {
+      "name": "vrf-wrong-public-key",
+      "input": {
+        "kind": "vrf",
+        "label": "616c696365406578616d706c652e636f6d",
+        "proof": "ced7ea2e063e5e55db04fc17c64cbd6e1a58f6fe3fa64c0afd66e0315f3210f0c1e775f9cff0173344e4e19fc301c504f3dcb20a83615a7ca09ed75e32a2f7e47aa42b0b3d193c28d5839e488ac19009",
+        "public_key": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a valid proof checked against a different public key"
+      }
+    },
+    {
+      "name": "commitment-flipped-bit",
+      "input": {
+        "commitment": "d49be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "kind": "commitment",
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d31"
+        },
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the commitment"
+      }
+    },
+    {
+      "name": "commitment-wrong-label",
+      "input": {
+        "commitment": "d59be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "kind": "commitment",
+        "label": "626f62406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d31"
+        },
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a different label opened against the same commitment"
+      }
+    },
+    {
+      "name": "commitment-wrong-version",
+      "input": {
+        "commitment": "d59be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "kind": "commitment",
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d31"
+        },
+        "version": 1
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a different version opened against the same commitment"
+      }
+    },
+    {
+      "name": "commitment-wrong-value",
+      "input": {
+        "commitment": "d59be42d9c42be3f4f3c24870b2dcb1dafa6022f2ac64eee904e4e577257f125",
+        "kind": "commitment",
+        "label": "616c696365406578616d706c652e636f6d",
+        "opening": "101112131415161718191a1b1c1d1e1f",
+        "update": {
+          "value": "6b65792d6d6174657269616c2d32"
+        },
+        "version": 0
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a different value opened against the same commitment"
+      }
+    }
+  ]
+}

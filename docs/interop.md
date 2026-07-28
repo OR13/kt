@@ -111,6 +111,27 @@ themselves and disagree with the peer everywhere. Recomputing katie's values wou
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
 
+### Asking a verifier to say no
+
+Until `tampered.json` existed, the Go → Rust direction had **one** must-reject case
+across 162. Everything else compared computed values, which a verifier that accepted
+every proof would pass — nothing in those files asks it to reject anything. The
+security-relevant property for a client is the other one: a client receives proofs
+from a server, so what matters is that it refuses what the peer refuses.
+
+`tampered.json` closes that. Each case is a proof katie built, corrupted in a
+described way, and confirmed rejected by katie's own verifier before being written
+out — so the peer is asserting invalidity and a Rust verifier that accepts is wrong,
+not merely different. 18 cases across the commitment, the VRF, and both trees:
+flipped elements, dropped and duplicated elements, reordered elements, a wrong leaf
+value, a corrupted retained subtree head (the §12.1 `MUST`), a proof checked against
+the wrong key, and openings for the wrong label, version, and value.
+
+Combined with `from-kt.json`, which runs the same idea with the roles swapped, the
+two implementations now have to agree about what is invalid. The evidence page marks
+areas whose only evidence is a file of values as "values only", because that is a
+weaker claim than a green tick suggests.
+
 ### A third kind of oracle: the specification itself
 
 The VRF is the first primitive where the *spec* ships test vectors. RFC 9381
@@ -180,6 +201,17 @@ empty — while a copath sibling that happens not to exist does consume one, lis
 as all-zero per §12.2's own sentence. Both readings are now pinned by
 `prefix-tree.json`; both are worth an upstream question, since a second
 implementation reading them the other way would be silently incompatible.
+
+**§12.2's `depth` field cannot describe the deepest possible prefix tree.** `depth`
+is a `uint8`, so it tops out at 255. Two search keys that agree on their first 255
+bits put their leaves at depth 256, which no `PrefixSearchResult` can express — the
+tree is well formed and its root is computable, but no proof about it can be encoded.
+`kt-tree::prefix` reports `DepthOverflow` rather than saturating the field, since a
+saturated `depth` would describe a different tree than the one being proven and a
+verifier could only catch it by failing on the root. Not reachable in practice: for
+VRF outputs this is a `2^-255` coincidence, and a log cannot grind for it because it
+must produce a valid VRF proof for whatever label-version pair it uses. Worth a
+sentence in the draft rather than a fix.
 
 **`opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct

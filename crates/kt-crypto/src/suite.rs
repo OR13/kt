@@ -134,3 +134,49 @@ mod tests {
         assert_eq!(hex, "d821f8790d97709796b4d7903357c3f5");
     }
 }
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+    use alloc::string::ToString as _;
+
+    /// The suite parameters §17.1 fixes, read back through the accessors that the
+    /// rest of the workspace uses to avoid hard-coding them.
+    #[test]
+    fn parameters_match_the_registry() {
+        for suite in [
+            CipherSuite::Kt128Sha256P256,
+            CipherSuite::Kt128Sha256Ed25519,
+        ] {
+            assert_eq!(suite.nc(), 16, "Nc for {suite}");
+            assert_eq!(suite.nh(), 32, "Hash.Nh for {suite}");
+            assert_eq!(suite.kc(), &KC, "Kc for {suite}");
+            assert_eq!(suite.kc().len(), suite.nc());
+        }
+    }
+
+    /// The registry names, which appear in the interop report and in error text.
+    #[test]
+    fn suites_render_as_their_registry_names() {
+        assert_eq!(
+            CipherSuite::Kt128Sha256P256.to_string(),
+            "KT_128_SHA256_P256"
+        );
+        assert_eq!(
+            CipherSuite::Kt128Sha256Ed25519.to_string(),
+            "KT_128_SHA256_Ed25519"
+        );
+        assert_eq!(
+            CipherSuite::Kt128Sha256Ed25519.name(),
+            "KT_128_SHA256_Ed25519"
+        );
+    }
+
+    #[test]
+    fn unknown_suites_render_their_value_in_hex() {
+        use core::error::Error as _;
+        let err = UnknownCipherSuite(0xf00d);
+        assert_eq!(err.to_string(), "unknown cipher suite 0xf00d");
+        assert!(err.source().is_none());
+    }
+}

@@ -303,3 +303,64 @@ mod tests {
         assert_eq!(p256.as_bytes(), ed25519.as_bytes());
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "tests fail loudly by panicking; the lints protect library paths"
+)]
+mod equality_tests {
+    use super::*;
+    use kt_wire::structs::UpdateValue;
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    /// `PartialEq` is hand-written to compare without an early exit, so it gets a
+    /// test of its own: equal, differing in the first byte, and differing in the last.
+    /// A short-circuiting comparison would still pass these, but a *wrong* one — say
+    /// one that only looked at the first word — would not.
+    #[test]
+    fn commitments_compare_over_every_byte() {
+        let base = Commitment::from_bytes([0x11; NH]);
+        assert_eq!(base, Commitment::from_bytes([0x11; NH]));
+
+        for index in 0..NH {
+            let mut bytes = [0x11_u8; NH];
+            bytes[index] ^= 0x80;
+            assert_ne!(
+                base,
+                Commitment::from_bytes(bytes),
+                "byte {index} was ignored"
+            );
+        }
+    }
+
+    /// `from_bytes` is the wire-facing constructor; `as_bytes` is what writes one
+    /// back out. Both are on the path a client takes and neither had been exercised.
+    #[test]
+    fn commitments_round_trip_through_bytes() {
+        let bytes = [0x2a_u8; NH];
+        let commitment = Commitment::from_bytes(bytes);
+        assert_eq!(commitment.as_bytes(), &bytes);
+        assert_eq!(Commitment::from_slice(&bytes).unwrap(), commitment);
+    }
+
+    /// The label ceiling in §11.6 is enforced when encoding, so `commit` reports a
+    /// wire error rather than hashing a truncated label — which would give two
+    /// different labels the same commitment.
+    #[test]
+    fn over_long_labels_cannot_be_committed() {
+        let value = CommitmentValue {
+            opening: alloc::vec![0; 16],
+            label: alloc::vec![0x61; 256],
+            version: 0,
+            update: UpdateValue::new(alloc::vec::Vec::new()),
+        };
+        assert!(matches!(commit(SUITE, &value), Err(Error::Wire(_))));
+        assert!(matches!(
+            encode_commitment_value(SUITE, &value),
+            Err(Error::Wire(_))
+        ));
+    }
+}

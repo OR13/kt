@@ -198,6 +198,10 @@ pub struct Generator {
 
 /// How well covered one area of the protocol is.
 ///
+/// [`Coverage::OutOfScope`] exists so the table can distinguish "we have not got to
+/// this" from "we have decided not to do this". Listing a deliberate exclusion as a
+/// gap invites someone to file it as a bug.
+///
 /// This table is the reason the page can be read as evidence rather than as a
 /// claim: it lists the areas that are *not* covered next to the ones that are. A
 /// row only moves up when a committed vector or a live test asserts it.
@@ -211,6 +215,8 @@ pub enum Coverage {
     ImplementedUnverified,
     /// Not implemented.
     NotImplemented,
+    /// Deliberately not implemented, with a reason.
+    OutOfScope,
 }
 
 impl Coverage {
@@ -221,6 +227,7 @@ impl Coverage {
             Self::VerifiedAgainstPeer => "verified against peer",
             Self::ImplementedUnverified => "implemented, unverified",
             Self::NotImplemented => "not implemented",
+            Self::OutOfScope => "out of scope",
         }
     }
 }
@@ -236,8 +243,22 @@ pub struct Area {
     pub module: Option<String>,
     /// How well covered it is.
     pub coverage: Coverage,
-    /// The vector file that asserts it, if any.
-    pub evidence: Option<String>,
+    /// The vector files that assert it, if any.
+    ///
+    /// A list rather than one file because an area can be covered in two different
+    /// senses, and the difference matters: a file of values proves the two
+    /// implementations *compute* the same thing, while `tampered.json` proves they
+    /// *refuse* the same things. An area with only the first cannot catch a verifier
+    /// that accepts everything.
+    pub evidence: Vec<String>,
+}
+
+impl Area {
+    /// Whether some file attests that this area rejects what the peer rejects.
+    #[must_use]
+    pub fn has_refusal_evidence(&self) -> bool {
+        self.evidence.iter().any(|file| file == "tampered.json")
+    }
 }
 
 /// Where the report was produced, so a reader can reproduce it.
@@ -309,19 +330,19 @@ impl Report {
 /// report actually contains and that passes, so the table cannot overstate.
 #[must_use]
 pub fn coverage_table() -> Vec<Area> {
-    let verified = |section: &str, name: &str, module: &str, file: &str| Area {
+    let verified = |section: &str, name: &str, module: &str, files: &[&str]| Area {
         section: section.to_owned(),
         name: name.to_owned(),
         module: Some(module.to_owned()),
         coverage: Coverage::VerifiedAgainstPeer,
-        evidence: Some(file.to_owned()),
+        evidence: files.iter().map(|file| (*file).to_owned()).collect(),
     };
     let todo = |section: &str, name: &str| Area {
         section: section.to_owned(),
         name: name.to_owned(),
         module: None,
         coverage: Coverage::NotImplemented,
-        evidence: None,
+        evidence: Vec::new(),
     };
 
     vec![
@@ -329,83 +350,84 @@ pub fn coverage_table() -> Vec<Area> {
             "§2.1",
             "Presentation-language codec",
             "kt-wire::codec",
-            "commitment.json",
+            &["commitment.json"],
         ),
         verified(
             "§11.5",
             "UpdateValue",
             "kt-wire::structs",
-            "commitment.json",
+            &["commitment.json"],
         ),
         verified(
             "§11.6",
             "CommitmentValue",
             "kt-wire::structs",
-            "commitment.json",
+            &["commitment.json"],
         ),
         verified(
             "§11.6",
             "Commitment, HMAC(Kc, CommitmentValue)",
             "kt-crypto::commitment",
-            "commitment.json",
+            &["commitment.json", "tampered.json"],
         ),
         verified(
             "§4.1, App. A",
             "Implicit binary search tree",
             "kt-tree::ibst",
-            "ibst.json",
+            &["ibst.json"],
         ),
         verified(
             "§5, App. B",
             "Binary ladders",
             "kt-tree::ladder",
-            "binary-ladder.json",
+            &["binary-ladder.json"],
         ),
         verified(
             "§11.7",
             "VRF: ECVRF-EDWARDS25519-SHA512-TAI",
             "kt-crypto::vrf",
-            "vrf.json",
+            &["vrf.json", "tampered.json"],
         ),
         verified(
             "§3.2, §11.8, §12.1",
             "Log tree: root, batch inclusion and consistency proofs",
             "kt-tree::log",
-            "log-tree.json",
+            &["log-tree.json", "tampered.json"],
         ),
         verified(
             "§3.3, §11.9, §12.2",
             "Prefix tree: root, membership and non-membership proofs",
             "kt-tree::prefix",
-            "prefix-tree.json",
+            &["prefix-tree.json", "tampered.json"],
         ),
         Area {
             section: "§11.1, §17.1".to_owned(),
             name: "Cipher suite registry".to_owned(),
             module: Some("kt-crypto::suite".to_owned()),
             coverage: Coverage::ImplementedUnverified,
-            evidence: None,
+            evidence: Vec::new(),
         },
         Area {
             section: "§11.1".to_owned(),
             name: "Cipher suite hash function".to_owned(),
             module: Some("kt-crypto::hash".to_owned()),
             coverage: Coverage::ImplementedUnverified,
-            evidence: None,
+            evidence: Vec::new(),
         },
         Area {
             section: "§11.2".to_owned(),
             name: "DeploymentMode".to_owned(),
             module: Some("kt-wire::structs".to_owned()),
             coverage: Coverage::ImplementedUnverified,
-            evidence: None,
+            evidence: Vec::new(),
         },
+        // Not a gap: the Ed25519 suite is the target, and both Go peers support it.
         Area {
-            section: "§11.7".to_owned(),
-            name: "VRF: ECVRF-P256-SHA256-TAI".to_owned(),
+            section: "§11.7, §17.1".to_owned(),
+            name: "VRF: ECVRF-P256-SHA256-TAI (KT_128_SHA256_P256)".to_owned(),
             module: None,
-            coverage: Coverage::NotImplemented,
-            evidence: None,
+            coverage: Coverage::OutOfScope,
+            evidence: Vec::new(),
         },
         todo("§3.4, §12.3", "Combined tree and CombinedTreeProof"),
         todo(

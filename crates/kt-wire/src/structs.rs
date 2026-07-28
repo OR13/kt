@@ -558,3 +558,182 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::arithmetic_side_effects,
+    reason = "tests fail loudly by panicking; the lints protect the parsing paths"
+)]
+mod more_tests {
+    use super::*;
+    use crate::codec::{decode, encode};
+    use alloc::vec;
+
+    /// `HashValue`'s constructors and the stand-in value §11.9 depends on.
+    #[test]
+    fn hash_values_round_trip_and_report_zero() {
+        let bytes = [0x5a_u8; HashValue::SIZE];
+        let value = HashValue::from_bytes(bytes);
+        assert_eq!(value.as_bytes(), &bytes);
+        assert!(!value.is_zero());
+        assert!(HashValue::ZERO.is_zero());
+        assert!(
+            HashValue::default().is_zero(),
+            "the default is the §11.9 stand-in"
+        );
+
+        assert_eq!(HashValue::from_slice(&bytes), Ok(value));
+        assert_eq!(
+            HashValue::from_slice(&bytes[..31]),
+            Err(Error::HashLength {
+                expected: 32,
+                actual: 31
+            })
+        );
+        assert_eq!(
+            HashValue::from_slice(&[0; 33]),
+            Err(Error::HashLength {
+                expected: 32,
+                actual: 33
+            })
+        );
+
+        // On the wire it is a fixed-size opaque: no length prefix.
+        assert_eq!(encode(&value).unwrap(), bytes.to_vec());
+        assert_eq!(decode::<HashValue>(&bytes).unwrap(), value);
+        assert!(decode::<HashValue>(&bytes[..31]).is_err());
+    }
+
+    /// §11.8's leaf, whose encoding the log tree hashes. Nothing had decoded one
+    /// before: a log verifier only ever hashes them, but a server reading its own
+    /// storage needs the other direction.
+    #[test]
+    fn log_entries_round_trip() {
+        let entry = LogEntry {
+            timestamp: 0x0102_0304_0506_0708,
+            prefix_tree: HashValue::from_bytes([0xab; 32]),
+        };
+        let bytes = encode(&entry).unwrap();
+        assert_eq!(bytes.len(), 8 + 32, "uint64 then opaque[Nh]");
+        assert_eq!(
+            &bytes[..8],
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+            "big-endian timestamp"
+        );
+        assert_eq!(decode::<LogEntry>(&bytes).unwrap(), entry);
+
+        assert_eq!(LogEntry::default().timestamp, 0);
+        assert!(decode::<LogEntry>(&bytes[..39]).is_err());
+    }
+
+    /// §11.7's VRF input. The length prefix on `label` is the whole reason this is a
+    /// struct and not a concatenation, so the test pins the layout byte by byte.
+    #[test]
+    fn vrf_inputs_round_trip_and_prefix_their_label() {
+        let input = VrfInput::new(b"ab".to_vec(), 0x0000_0001);
+        let bytes = encode(&input).unwrap();
+        assert_eq!(bytes, vec![0x02, b'a', b'b', 0x00, 0x00, 0x00, 0x01]);
+        assert_eq!(decode::<VrfInput>(&bytes).unwrap(), input);
+
+        // ("a", 0x62000000) and ("ab", 0) share their bytes after the prefix; the
+        // prefix is what keeps them apart.
+        let one = encode(&VrfInput::new(b"a".to_vec(), 0x6200_0000)).unwrap();
+        let two = encode(&VrfInput::new(b"ab".to_vec(), 0)).unwrap();
+        assert_ne!(one, two);
+
+        assert_eq!(VrfInput::default(), VrfInput::new(Vec::new(), 0));
+        assert_eq!(
+            encode(&VrfInput::new(vec![0x61; 256], 0)),
+            Err(Error::VectorTooLong {
+                count: 256,
+                max: 255
+            }),
+            "§11.7's label ceiling is 2^8-1"
+        );
+        assert!(decode::<VrfInput>(&[0x02, b'a']).is_err());
+    }
+
+    /// The mode an `UpdateSuffix` belongs to, which callers use to check a suffix
+    /// against the `Configuration` they are verifying under.
+    #[test]
+    fn update_suffix_reports_its_mode() {
+        assert_eq!(
+            UpdateSuffix::Empty.mode(),
+            None,
+            "empty fits two of the three modes"
+        );
+        assert_eq!(
+            UpdateSuffix::ThirdPartyManagement {
+                signature: vec![1, 2]
+            }
+            .mode(),
+            Some(DeploymentMode::ThirdPartyManagement)
+        );
+        assert_eq!(UpdateSuffix::default(), UpdateSuffix::Empty);
+    }
+
+    #[test]
+    fn deployment_modes_round_trip_on_the_wire() {
+        for mode in [
+            DeploymentMode::ContactMonitoring,
+            DeploymentMode::ThirdPartyManagement,
+            DeploymentMode::ThirdPartyAuditing,
+        ] {
+            let bytes = encode(&mode).unwrap();
+            assert_eq!(bytes, vec![mode.as_u8()]);
+            assert_eq!(decode::<DeploymentMode>(&bytes).unwrap(), mode);
+            assert_eq!(
+                mode.has_update_signature(),
+                mode == DeploymentMode::ThirdPartyManagement,
+                "only third-party management signs updates (§11.5)"
+            );
+        }
+        assert!(decode::<DeploymentMode>(&[0]).is_err(), "reserved(0)");
+    }
+
+    /// `UpdateValue::new` and the ceiling on its value.
+    #[test]
+    fn update_values_are_built_and_bounded() {
+        let update = UpdateValue::new(b"key".to_vec());
+        assert_eq!(update.suffix, UpdateSuffix::Empty);
+        assert_eq!(update.value, b"key");
+        assert_eq!(UpdateValue::default().value, Vec::<u8>::new());
+
+        // The 2^32-1 ceiling is not reachable in a test, but the spec constant is,
+        // and it is what the encoder checks against.
+        assert_eq!(UpdateValue::VALUE.max_count(), (1 << 32) - 1);
+        assert_eq!(CommitmentValue::LABEL.max_count(), 255);
+        assert_eq!(UpdateSuffix::SIGNATURE.max_count(), 65_535);
+        assert_eq!(VrfInput::LABEL.max_count(), 255);
+    }
+
+    /// A commitment value whose opening is the wrong length still encodes — `Nc`
+    /// belongs to the cipher suite, which this crate does not know — so the check
+    /// lives in `kt-crypto`. Decoding is where `Nc` is applied.
+    #[test]
+    fn commitment_value_decoding_applies_nc() {
+        let cv = CommitmentValue {
+            opening: vec![0xaa; 16],
+            label: b"x".to_vec(),
+            version: 1,
+            update: UpdateValue::new(b"v".to_vec()),
+        };
+        let bytes = encode(&cv).unwrap();
+
+        let mut dec = Decoder::new(&bytes);
+        let decoded =
+            CommitmentValue::decode_with_nc(&mut dec, 16, DeploymentMode::ContactMonitoring)
+                .unwrap();
+        assert_eq!(decoded, cv);
+        dec.finish().unwrap();
+
+        // Reading it with the wrong Nc shifts every following field, so the label
+        // length is read out of the middle of the opening and the parse fails or
+        // produces something else — either way it must not silently succeed as `cv`.
+        let mut dec = Decoder::new(&bytes);
+        let other = CommitmentValue::decode_with_nc(&mut dec, 8, DeploymentMode::ContactMonitoring);
+        assert!(other.is_err() || other.unwrap() != cv);
+    }
+}
