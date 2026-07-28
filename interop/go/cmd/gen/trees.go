@@ -14,6 +14,7 @@ import (
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/log"
+	logmath "github.com/Bren2010/katie/tree/log/math"
 	"github.com/Bren2010/katie/tree/prefix"
 	ktmath "github.com/Bren2010/katie/tree/transparency/math"
 	"github.com/Bren2010/katie/tree/transparency/structs"
@@ -692,4 +693,131 @@ func prefixProofFromOutcomes(cs suites.CipherSuite, outcomes []bool) (*prefix.Pr
 	buf.WriteByte(0) // elements: two-byte count of zero
 	buf.WriteByte(0)
 	return prefix.NewPrefixProof(cs, buf)
+}
+
+// logMathVectors covers draft §3.2 and §12.1 in the peer's own addressing.
+//
+// log-tree.json already pins the proof *bytes*, which is the stronger claim about
+// output. This pins the decomposition that produces them: katie's BatchCopath returns
+// the flat node indices a batch proof carries, in order, and FullSubtrees returns the
+// heads a verifier retains.
+//
+// The distinction is worth the extra file. Agreeing on proof bytes for the cases we
+// happen to generate is compatible with taking the tree apart differently and getting
+// away with it — two decompositions can coincide on the sizes tested and diverge on
+// one that was not. Comparing the indices directly rules that out, over far more
+// combinations than there are proofs in log-tree.json.
+//
+// It also crosses an addressing boundary on purpose. The Rust side works in leaf
+// ranges, katie works in flat node indices, and a balanced subtree spanning
+// `[start, start+len)` is node `2*start + len - 1`. Every §12.1 proof element is a
+// balanced subtree head, so the translation is total on exactly the values that
+// matter; a range that failed to map would itself be the bug.
+func logMathVectors(sha string) (*File, error) {
+	f := &File{
+		Primitive: "log-math",
+		Draft:     draftRev + " §3.2, §4.2, §12.1",
+		Generator: Generator{Impl: "katie", SHA: sha},
+		Notes: "Log tree structure in flat node indices: leaf i is node 2i, and a " +
+			"balanced subtree over leaves [start, start+len) is node 2*start+len-1. " +
+			"`full_subtrees` are the heads a verifier retains for a tree of that size. " +
+			"`batch_copath` is the ordered list of nodes a batch proof carries for the " +
+			"requested leaves, optionally against a retained size. Where log-tree.json " +
+			"pins the proof bytes, this pins how the tree is taken apart to produce them.",
+	}
+
+	sizes := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 20, 31, 32, 33, 50, 64, 100, 1000}
+
+	for _, size := range sizes {
+		f.Cases = append(f.Cases, Case{
+			Name:  fmt.Sprintf("full-subtrees-size-%d", size),
+			Input: map[string]any{"kind": "full-subtrees", "size": size},
+			Expect: map[string]any{
+				"indices": indices(logmath.FullSubtrees(logmath.Root(size), size)),
+			},
+		})
+
+		// Single leaves, pairs, and a whole-tree batch, each with and without a
+		// retained view. For small trees that is exhaustive over the leaves.
+		leafSets := make([][]uint64, 0)
+		if size <= 17 {
+			for i := uint64(0); i < size; i++ {
+				leafSets = append(leafSets, []uint64{i})
+			}
+			for i := uint64(0); i+1 < size; i++ {
+				leafSets = append(leafSets, []uint64{i, i + 1})
+			}
+			if size >= 3 {
+				leafSets = append(leafSets, []uint64{0, size / 2, size - 1})
+			}
+		} else {
+			leafSets = append(leafSets,
+				[]uint64{0}, []uint64{size / 2}, []uint64{size - 1},
+				[]uint64{0, size - 1}, []uint64{0, size / 2, size - 1})
+		}
+		leafSets = append(leafSets, []uint64{})
+
+		// Deduplicated: for small sizes these candidates collide (at size 2,
+		// size/2 and size-1 are both 1), and a repeated pair would produce two
+		// cases with the same name.
+		retainedSizes := []uint64{0}
+		seen := map[uint64]struct{}{}
+		for _, m := range []uint64{1, size / 2, size - 1, size} {
+			if m == 0 || m > size {
+				continue
+			}
+			if _, ok := seen[m]; ok {
+				continue
+			}
+			seen[m] = struct{}{}
+			retainedSizes = append(retainedSizes, m)
+		}
+
+		for _, leaves := range leafSets {
+			for _, m := range retainedSizes {
+				var retained *uint64
+				if m != 0 {
+					value := m
+					retained = &value
+				}
+				if len(leaves) == 0 && retained == nil {
+					// Nothing to prove and nothing to be consistent with.
+					continue
+				}
+
+				input := map[string]any{
+					"kind":   "batch-copath",
+					"size":   size,
+					"leaves": indices(leaves),
+				}
+				if retained != nil {
+					input["retained_size"] = *retained
+				}
+				f.Cases = append(f.Cases, Case{
+					Name: fmt.Sprintf("batch-copath-size-%d-leaves-%s-retained-%d",
+						size, joinIndices(leaves), m),
+					Input: input,
+					Expect: map[string]any{
+						"indices": indices(logmath.BatchCopath(leaves, size, nil, retained)),
+					},
+				})
+			}
+		}
+	}
+
+	return f, nil
+}
+
+func joinIndices(in []uint64) string {
+	if len(in) == 0 {
+		return "none"
+	}
+	out := ""
+	for i, v := range in {
+		if i > 0 {
+			out += "-"
+		}
+		out += fmt.Sprintf("%d", v)
+	}
+	return out
 }

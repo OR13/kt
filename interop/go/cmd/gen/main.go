@@ -79,6 +79,7 @@ func main() {
 		{"binary-ladder.json", ladderVectors},
 		{"vrf.json", vrfVectors},
 		{"update-view.json", updateViewVectors},
+		{"log-math.json", logMathVectors},
 		{"log-tree.json", logTreeVectors},
 		{"prefix-tree.json", prefixTreeVectors},
 		{"tree-head.json", headVectors},

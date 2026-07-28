@@ -392,7 +392,7 @@ pub fn coverage_table() -> Vec<Area> {
             "§3.2, §11.8, §12.1",
             "Log tree: root, batch inclusion and consistency proofs",
             "kt-tree::log",
-            &["log-tree.json", "tampered.json"],
+            &["log-tree.json", "log-math.json", "tampered.json"],
         ),
         verified(
             "§6.2",

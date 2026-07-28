@@ -1225,3 +1225,193 @@ mod error_tests {
         assert!(full_subtrees(MAX_TREE_SIZE).is_ok());
     }
 }
+
+/// The flat node index of the balanced subtree covering `start..start+len`.
+///
+/// This module works in leaf *ranges* (see the module documentation), while the Go
+/// peer and RFC 9420 address log tree nodes by a flat array index: leaf `i` sits at
+/// index `2i`, and internal nodes take the odd indices between their children. The
+/// two describe the same tree, and for a *balanced* subtree the translation is exact:
+///
+/// ```text
+/// index = 2 * start + len - 1
+/// ```
+///
+/// Check it against the ends. A single leaf (`len == 1`) gives `2 * start`, which is
+/// where leaf `start` lives. A pair gives `2 * start + 1`, the node between leaves
+/// `start` and `start + 1`. Four leaves give `2 * start + 3`, and so on: each
+/// doubling moves the root one step further right, because the flat scheme lays a
+/// subtree's nodes out contiguously.
+///
+/// Returns `None` when `len` is not a power of two, because an unbalanced span is not
+/// one node — it is the several balanced subtrees §12.1 decomposes it into. That
+/// restriction is exactly why this is usable for comparing proofs: a §12.1 proof only
+/// ever carries balanced subtree heads.
+#[must_use]
+pub const fn node_index(start: u64, len: u64) -> Option<u64> {
+    if len == 0 || !len.is_power_of_two() {
+        return None;
+    }
+    match start.checked_mul(2) {
+        None => None,
+        Some(doubled) => match doubled.checked_add(len) {
+            None => None,
+            Some(sum) => Some(sum.saturating_sub(1)),
+        },
+    }
+}
+
+/// The subtrees a batch proof carries, as leaf ranges, in the order they appear
+/// (§12.1).
+///
+/// [`prove`] returns their *values*; this returns which nodes they are. Exposed
+/// because the interop harness compares the decomposition itself against the peer's
+/// node indices — agreeing on proof bytes for the cases we happen to test is weaker
+/// than agreeing on how a tree is taken apart.
+///
+/// # Errors
+///
+/// As [`prove`]: the request has to be consistent with the tree size.
+pub fn proof_ranges(
+    size: u64,
+    leaves: &[u64],
+    retained: Option<&Retained>,
+) -> Result<Vec<(u64, u64)>> {
+    let plan = Plan::new(size, leaves, retained)?;
+    let mut out = Vec::new();
+    plan.walk(0, size, &mut |start, len| {
+        out.push((start, len));
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// The flat node indices a batch proof carries, in order (§12.1).
+///
+/// The peer's `BatchCopath` in its own addressing. Every element of a §12.1 proof is a
+/// balanced subtree head, so each range maps to exactly one index via [`node_index`];
+/// a `None` here would mean the walk emitted something unbalanced, which would be the
+/// bug this function exists to rule out.
+///
+/// # Errors
+///
+/// As [`proof_ranges`], plus [`Error::InvalidSize`] if a range is not balanced, which
+/// should be unreachable.
+pub fn proof_node_indices(
+    size: u64,
+    leaves: &[u64],
+    retained: Option<&Retained>,
+) -> Result<Vec<u64>> {
+    let mut out = Vec::new();
+    for (start, len) in proof_ranges(size, leaves, retained)? {
+        out.push(node_index(start, len).ok_or(Error::InvalidSize { size: len })?);
+    }
+    Ok(out)
+}
+
+/// The flat node indices of a log's full subtrees, left to right (§4.2).
+///
+/// # Errors
+///
+/// [`Error::InvalidSize`] if `size` is out of range.
+pub fn full_subtree_indices(size: u64) -> Result<Vec<u64>> {
+    let mut out = Vec::new();
+    for (start, len) in full_subtrees(size)? {
+        out.push(node_index(start, len).ok_or(Error::InvalidSize { size: len })?);
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod index_tests {
+    use super::tests::{SUITE, leaves};
+    use super::*;
+
+    /// The translation between leaf ranges and flat node indices, checked at the ends
+    /// and then structurally: a parent's index sits between its children's.
+    #[test]
+    fn node_indices_match_the_flat_scheme() {
+        // Leaves are the even indices.
+        for start in 0_u64..64 {
+            assert_eq!(node_index(start, 1), Some(2 * start));
+        }
+        // A pair sits between its two leaves.
+        assert_eq!(node_index(0, 2), Some(1));
+        assert_eq!(node_index(2, 2), Some(5));
+        // Four leaves: one further right again.
+        assert_eq!(node_index(0, 4), Some(3));
+        assert_eq!(node_index(4, 4), Some(11));
+        assert_eq!(node_index(0, 8), Some(7));
+
+        // A parent's index lies strictly between its children's, which is the
+        // property the flat scheme is built on.
+        for exponent in 1_u32..8 {
+            let len = 1_u64 << exponent;
+            for start in (0..32).step_by(usize::try_from(len).unwrap()) {
+                let parent = node_index(start, len).unwrap();
+                let left = node_index(start, len / 2).unwrap();
+                let right = node_index(start + len / 2, len / 2).unwrap();
+                assert!(left < parent && parent < right, "{start}..{}", start + len);
+            }
+        }
+
+        // An unbalanced span is not a node.
+        for len in [0_u64, 3, 5, 6, 7, 9, 100] {
+            assert_eq!(node_index(0, len), None, "len {len}");
+        }
+    }
+
+    /// Every proof's ranges are balanced, so every one maps to a node index. This is
+    /// the §12.1 invariant the earlier bug violated, restated as a property.
+    #[test]
+    fn every_proof_element_is_a_balanced_subtree() {
+        for size in 1_u64..=64 {
+            let values = leaves(size);
+            for index in 0..size {
+                for advertised in [None, Some(1), Some(size / 2 + 1), Some(size)] {
+                    let retained = advertised
+                        .filter(|previous| *previous <= size && *previous > 0)
+                        .map(|previous| Retained::from_leaves(SUITE, previous, &values).unwrap());
+                    let ranges = proof_ranges(size, &[index], retained.as_ref()).unwrap();
+                    for (start, len) in &ranges {
+                        assert!(
+                            len.is_power_of_two(),
+                            "size {size}, leaf {index}: {start}..{} is not balanced",
+                            start + len
+                        );
+                        assert!(node_index(*start, *len).is_some());
+                    }
+                    // And the indices come out in the same order as the ranges.
+                    let indices = proof_node_indices(size, &[index], retained.as_ref()).unwrap();
+                    assert_eq!(indices.len(), ranges.len());
+                }
+            }
+        }
+    }
+
+    /// The full subtrees of a log, in the peer's addressing. A log of five entries has
+    /// its `0..4` subtree at node 3 and its lone leaf 4 at node 8.
+    #[test]
+    fn full_subtree_indices_are_the_flat_heads() {
+        assert_eq!(full_subtree_indices(1).unwrap(), alloc::vec![0]);
+        assert_eq!(full_subtree_indices(4).unwrap(), alloc::vec![3]);
+        assert_eq!(full_subtree_indices(5).unwrap(), alloc::vec![3, 8]);
+        assert_eq!(full_subtree_indices(7).unwrap(), alloc::vec![3, 9, 12]);
+        assert_eq!(full_subtree_indices(8).unwrap(), alloc::vec![7]);
+
+        // Strictly increasing, one per set bit of the size.
+        for size in 1_u64..=500 {
+            let indices = full_subtree_indices(size).unwrap();
+            assert_eq!(indices.len(), usize::try_from(size.count_ones()).unwrap());
+            for pair in indices.windows(2) {
+                assert!(pair[0] < pair[1], "size {size}");
+            }
+        }
+    }
+}
