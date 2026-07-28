@@ -48,7 +48,16 @@ title, draft PR on first push, merge when green.
 - `crates/kt-client` — search, monitor, update, distinguished heads (§4.2, §6–§10, §13)
 - `interop/go` — **separate Go module, AGPL-3.0** (it links katie). Emits JSON vectors only.
 - `interop/vectors` — committed JSON test vectors, each stamped with its generator's SHA.
+- `interop/report` — workspace member `kt-interop`: checks the vectors, and renders
+  the evidence page at [or13.github.io/kt](https://or13.github.io/kt/). Not published.
 - `upstream/` — pinned submodules: two drafts, two Go implementations.
+
+The vector checks live in `interop/report`, not in the individual crates, because
+the published page and the test suite must run the same code. If you add a vector
+file, add it to `kt_interop::check::FILES` and to the coverage table in
+`kt_interop::report`; a test fails if the table claims evidence that the report
+does not contain or that does not pass. Rule 4 is enforced there, not by good
+intentions.
 
 Dependency direction is strictly bottom-up; `kt-wire` depends on no other in-tree crate.
 

@@ -1,0 +1,25 @@
+[package]
+name = "kt-interop"
+description = "Vector-driven interop verification for the kt implementation, and the evidence report it publishes"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hex = "0.4.3"
+kt-crypto.workspace = true
+kt-tree.workspace = true
+kt-wire.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[[bin]]
+name = "kt-interop-report"
+path = "src/bin/report.rs"
+
+[lints]
+workspace = true

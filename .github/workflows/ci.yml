@@ -23,6 +23,22 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+      # Build the evidence page on every pull request too, so a broken generator
+      # or a report that would publish a disagreement fails here rather than on
+      # main. Deployment happens only from main, in pages.yml.
+      - name: Build the interop evidence page
+        run: |
+          cargo run -p kt-interop --bin kt-interop-report -- \
+            --vectors interop/vectors \
+            --out site \
+            --commit "${{ github.sha }}" \
+            --rustc "$(rustc --version)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interop-evidence-page
+          path: site
+          if-no-files-found: error
+
   interop-vectors:
     # Regenerate the committed vectors from the pinned Go peer. A diff means
     # either an upstream bump changed behavior or someone hand-edited a vector —
