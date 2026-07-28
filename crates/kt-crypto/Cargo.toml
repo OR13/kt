@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 curve25519-dalek = { version = "5.0.0", default-features = false, features = ["alloc", "precomputed-tables"] }
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc"] }
 hmac = { version = "0.13.0", default-features = false }
 kt-wire.workspace = true
 sha2 = { version = "0.11.0", default-features = false }

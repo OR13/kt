@@ -347,6 +347,27 @@ pub enum TamperedInput {
         /// The proof, hex.
         proof: String,
     },
+    /// A tree head signature that must not verify (§11.2).
+    TreeHead {
+        /// The `DeploymentMode` registry value.
+        mode: u8,
+        /// The key the configuration names, hex.
+        signature_public_key: String,
+        /// The VRF public key, hex.
+        vrf_public_key: String,
+        /// How far ahead a head may be.
+        max_ahead: u64,
+        /// How far behind.
+        max_behind: u64,
+        /// The Reasonable Monitoring Window.
+        reasonable_monitoring_window: u64,
+        /// The tree size claimed.
+        tree_size: u64,
+        /// The root, hex.
+        root: String,
+        /// The signature that must not verify, hex.
+        signature: String,
+    },
     /// A commitment opening that must not verify (§11.6).
     Commitment {
         /// The opening, hex.
@@ -382,4 +403,61 @@ pub struct TamperedExpect {
     pub error: bool,
     /// A description of the corruption, for the report.
     pub tamper: String,
+}
+
+/// `tree-head.json` input (§11.2, §11.3).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeadInput {
+    /// The `DeploymentMode` registry value.
+    pub mode: u8,
+    /// The key that verifies tree head signatures, hex.
+    pub signature_public_key: String,
+    /// The VRF public key, hex.
+    pub vrf_public_key: String,
+    /// The Service Operator's key, under `thirdPartyManagement`, hex.
+    #[serde(default)]
+    pub leaf_public_key: Option<String>,
+    /// The auditor's permitted lag, under `thirdPartyAuditing`.
+    #[serde(default)]
+    pub max_auditor_lag: Option<u64>,
+    /// The auditor's start position.
+    #[serde(default)]
+    pub auditor_start_pos: Option<u64>,
+    /// The auditor's key, hex.
+    #[serde(default)]
+    pub auditor_public_key: Option<String>,
+    /// When the auditor signed.
+    #[serde(default)]
+    pub auditor_timestamp: Option<u64>,
+    /// How far ahead a head may be.
+    pub max_ahead: u64,
+    /// How far behind.
+    pub max_behind: u64,
+    /// The Reasonable Monitoring Window.
+    pub reasonable_monitoring_window: u64,
+    /// The tree size being signed.
+    pub tree_size: u64,
+    /// The log tree root at that size, hex.
+    pub root: String,
+}
+
+/// `tree-head.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeadExpect {
+    /// The encoded `Configuration`, hex.
+    pub configuration: String,
+    /// The encoded `TreeHeadTBS` — what the signature covers, hex.
+    pub tree_head_tbs: String,
+    /// The encoded `TreeHead`, hex.
+    pub tree_head: String,
+    /// The signature alone, hex.
+    pub signature: String,
+    /// The encoded `AuditorTreeHeadTBS`, under `thirdPartyAuditing`, hex.
+    #[serde(default)]
+    pub auditor_tree_head_tbs: Option<String>,
+    /// The encoded `AuditorTreeHead`, hex.
+    #[serde(default)]
+    pub auditor_tree_head: Option<String>,
 }

@@ -41,11 +41,7 @@ pub mod suite;
 
 pub mod vrf;
 
-/// Tree head, auditor tree head, and full tree head signatures
-/// (`draft-ietf-keytrans-protocol-05` §11.2, §11.3, §11.4).
-pub mod signature {
-    // TODO(interop tier 1, step 7).
-}
+pub mod signature;
 
 /// A cryptographic computation failed, or was asked to operate on ill-formed
 /// input.
