@@ -27,14 +27,15 @@ use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
     CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput, LadderExpect,
     LadderInput, LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, TamperedExpect,
-    TamperedInput, VectorFile, VrfCaseInput, VrfExpect,
+    TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 8] = [
+pub const FILES: [&str; 9] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
+    "update-view.json",
     "vrf.json",
     "log-tree.json",
     "prefix-tree.json",
@@ -149,6 +150,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         commitment_suite(dir)?,
         ibst_suite(dir)?,
         ladder_suite(dir)?,
+        update_view_suite(dir)?,
         vrf_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
@@ -1487,6 +1489,70 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
             sha: file.generator.sha,
         },
         cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// §4.2: the entries a user needs in order to advance their view.
+fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "update-view.json";
+    let file: VectorFile<UpdateViewInput, UpdateViewExpect> = load(dir, FILE)?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let size = case.input.size;
+        let advertised = case.input.advertised;
+
+        let mut checks = vec![Check::new(
+            "update_view(size, advertised) (§4.2)",
+            render_list(&case.expect.entries),
+            render_result(ibst::update_view(size, advertised), |entries| {
+                render_list(&entries)
+            }),
+        )];
+
+        if let Some(expected) = &case.expect.frontier {
+            checks.push(Check::new(
+                "frontier(size) (§4.1)",
+                render_list(expected),
+                render_result(ibst::frontier(size), |f| render_list(&f)),
+            ));
+        }
+
+        // The peer agreeing about the cases that yield nothing is what makes the
+        // §4.2 gap a property of the procedure rather than of either implementation.
+        if let Some(expected) = case.expect.right_edge_unchecked {
+            checks.push(Check::new(
+                "whether the rightmost entry is left unchecked (§4.2)",
+                expected.to_string(),
+                render_result(
+                    ibst::leaves_right_edge_unchecked(size, advertised),
+                    |flag| flag.to_string(),
+                ),
+            ));
+        }
+
+        cases.push(Case {
+            name: case.name.clone(),
+            negative: false,
+            input: match advertised {
+                None => format!("log of {size} entries, no previous view"),
+                Some(previous) => format!("log of {size} entries, advertised {previous}"),
+            },
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Updating a view".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: None,
         cases,
     })
 }

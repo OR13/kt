@@ -116,6 +116,10 @@ Verified facts worth not rediscovering:
   `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike
   every other integer in this protocol. RFC 9381's Appendix B vectors are in
   `kt-crypto::vrf`'s tests and are what adjudicate both.
+- §4.2's update-view procedure can return nothing while the log has grown — when the
+  user's previous rightmost entry is still on the new frontier. katie agrees, so it is
+  the procedure. `leaves_right_edge_unchecked` reports it; do not "fix" it silently,
+  the vectors pin the peer's behaviour. Written up in `docs/interop.md`.
 - §11.2's `Configuration` is where the two Go peers disagree: `leaf_public_key`
   under `contactMonitoring`. We follow the draft's prose and katie (omit it). Since
   every `TreeHeadTBS` starts with a `Configuration`, this decides whether any

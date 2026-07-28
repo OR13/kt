@@ -111,6 +111,36 @@ themselves and disagree with the peer everywhere. Recomputing katie's values wou
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
 
+### §4.2 can leave a user checking nothing at all
+
+Implementing §4.2's update-view procedure turned up a hole, and `update-view.json`
+records the Go peer reproducing it, which is what makes it the procedure's behaviour
+rather than either implementation's.
+
+The procedure starts from "the direct path of the log entry with index `size-1`, where
+`size` is the tree size advertised by the user", and keeps the entries at or beyond
+`size`. When the user's previous rightmost entry is still on the *new* tree's
+frontier, every one of its ancestors is smaller than it — a frontier node is only ever
+reached by turning left from above — so the filter removes the entire direct path.
+There is then nothing to start the frontier walk from, and the user is sent **no
+timestamps at all**, despite the log having grown.
+
+For a log of 1000 entries, the advertised sizes affected are 512, 768, 896, 960, and
+992: the frontier shifted by one. Those are not obscure values — a user's advertised
+size is one they were handed by an earlier response, and the frontier is exactly where
+retained rightmost entries sit.
+
+What the user then fails to check is everything §4.2 exists for: the timestamps of the
+entries added since, the monotonic series they are meant to form, and the `max_ahead` /
+`max_behind` clock bounds, which are checked against the rightmost entry's timestamp —
+the one they are never given. `katie`'s `UpdateView(12, 8)` is empty too.
+
+`kt-tree::ibst::leaves_right_edge_unchecked` reports the condition so a client can
+refuse rather than read an empty response as "nothing to verify". Worth an upstream
+issue: either the procedure needs to fall back to the frontier when the direct path
+filters away, or §4.2 needs to say why the rightmost timestamp does not have to be
+checked in that case.
+
 ### The two Go implementations disagree about §11.2
 
 The most consequential finding so far, and the one that needed both peers to see.

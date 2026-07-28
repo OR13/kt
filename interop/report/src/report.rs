@@ -395,6 +395,12 @@ pub fn coverage_table() -> Vec<Area> {
             &["log-tree.json", "tampered.json"],
         ),
         verified(
+            "§4.2",
+            "Updating a view of the tree: which entries must be checked",
+            "kt-tree::ibst",
+            &["update-view.json"],
+        ),
+        verified(
             "§11.2, §11.4",
             "Configuration, TreeHead, and FullTreeHead verification",
             "kt-crypto::signature",
@@ -446,7 +452,6 @@ pub fn coverage_table() -> Vec<Area> {
             "§11.2–§11.4",
             "Tree head, auditor head, and full head signatures",
         ),
-        todo("§4.2", "Updating a view of the tree"),
         todo("§6, §7, §13.1", "Greatest-version and fixed-version search"),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),

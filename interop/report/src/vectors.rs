@@ -461,3 +461,28 @@ pub struct HeadExpect {
     #[serde(default)]
     pub auditor_tree_head: Option<String>,
 }
+
+/// `update-view.json` input (§4.2).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateViewInput {
+    /// The log's current size.
+    pub size: u64,
+    /// The size the user last observed, absent if they have none.
+    #[serde(default)]
+    pub advertised: Option<u64>,
+}
+
+/// `update-view.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateViewExpect {
+    /// The entry indices whose timestamps must be provided, in check order.
+    pub entries: Vec<u64>,
+    /// The frontier, on the no-previous-view cases.
+    #[serde(default)]
+    pub frontier: Option<Vec<u64>>,
+    /// Whether the procedure leaves the rightmost entry unchecked.
+    #[serde(default)]
+    pub right_edge_unchecked: Option<bool>,
+}

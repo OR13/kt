@@ -15,6 +15,7 @@ import (
 	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
+	ktmath "github.com/Bren2010/katie/tree/transparency/math"
 	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
@@ -497,4 +498,87 @@ func hexAll(values [][]byte) []string {
 		out = append(out, hex.EncodeToString(value))
 	}
 	return out
+}
+
+// updateViewVectors covers draft §4.2: the log entries whose timestamps a user
+// needs in order to advance their view of the tree.
+//
+// katie exports UpdateView, so this is a direct oracle for the whole procedure —
+// including the cases where it returns nothing at all. Those are recorded rather
+// than skipped: a user whose previous rightmost entry is still on the new frontier
+// is sent no timestamps, so the entries added since go unchecked, and the peer
+// agreeing with us about that is the evidence it is the procedure's behaviour and
+// not ours. See docs/interop.md.
+func updateViewVectors(sha string) (*File, error) {
+	f := &File{
+		Primitive: "update-view",
+		Draft:     draftRev + " §4.2",
+		Generator: Generator{Impl: "katie", SHA: sha},
+		Notes: "Log entry indices whose timestamps must be provided for a user to " +
+			"advance their view, in the order the user checks them. `advertised` is the " +
+			"tree size the user last observed, absent if they have none. An empty " +
+			"`entries` is a real result and appears twice over: once when the user is " +
+			"already up to date, and once — noted as `right_edge_unchecked` — when the " +
+			"procedure yields nothing despite the log having grown, which happens when " +
+			"the user's previous rightmost entry is still on the new frontier.",
+	}
+
+	sizes := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 16, 17, 31, 32, 50, 64, 100, 1000}
+	for _, size := range sizes {
+		// No previous view.
+		f.Cases = append(f.Cases, Case{
+			Name:  fmt.Sprintf("size-%d-no-previous-view", size),
+			Input: map[string]any{"size": size},
+			Expect: map[string]any{
+				"entries":  indices(ktmath.UpdateView(size, nil)),
+				"frontier": indices(ktmath.Frontier(size)),
+			},
+		})
+
+		// Every advertised size for small trees, a sample for large ones.
+		for advertised := uint64(1); advertised <= size; advertised++ {
+			if size > 32 && advertised != 1 && advertised != size/2 &&
+				advertised != size-1 && advertised != size &&
+				advertised != 1<<log2Floor(size) {
+				continue
+			}
+			m := advertised
+			entries := ktmath.UpdateView(size, &m)
+			rightEdgeUnchecked := advertised != size &&
+				(len(entries) == 0 || entries[len(entries)-1] != size-1)
+
+			f.Cases = append(f.Cases, Case{
+				Name: fmt.Sprintf("size-%d-advertised-%d", size, advertised),
+				Input: map[string]any{
+					"size":       size,
+					"advertised": advertised,
+				},
+				Expect: map[string]any{
+					"entries":              indices(entries),
+					"right_edge_unchecked": rightEdgeUnchecked,
+				},
+			})
+		}
+	}
+
+	return f, nil
+}
+
+// indices normalizes a nil slice to an empty one, so an absent result encodes as
+// `[]` rather than `null`. UpdateView returns nil when the user is already up to
+// date, and a decoder should not have to treat that as a third case.
+func indices(in []uint64) []uint64 {
+	if in == nil {
+		return []uint64{}
+	}
+	return in
+}
+
+// log2Floor is the exponent of the largest power of two not greater than x.
+func log2Floor(x uint64) uint64 {
+	k := uint64(0)
+	for x>>(k+1) > 0 {
+		k++
+	}
+	return k
 }
