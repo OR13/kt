@@ -31,15 +31,16 @@ use kt_wire::structs::{
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
-    AuditorExpect, AuditorInput, CommitmentExpect, CommitmentInput, HeadExpect, HeadInput,
-    IbstExpect, IbstInput, InterpretationExpect, InterpretationInput, LadderExpect, LadderInput,
-    LogMathExpect, LogMathInput, LogTreeExpect, LogTreeInput, MutationExpect, MutationInput,
-    PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect, TamperedInput,
-    UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
+    AppendExpect, AppendInput, AuditorExpect, AuditorInput, CommitmentExpect, CommitmentInput,
+    HeadExpect, HeadInput, IbstExpect, IbstInput, InterpretationExpect, InterpretationInput,
+    LadderExpect, LadderInput, LogMathExpect, LogMathInput, LogTreeExpect, LogTreeInput,
+    MutationExpect, MutationInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput,
+    TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput,
+    VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 14] = [
+pub const FILES: [&str; 15] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -48,6 +49,7 @@ pub const FILES: [&str; 14] = [
     "vrf.json",
     "log-math.json",
     "log-tree.json",
+    "log-append.json",
     "prefix-tree.json",
     "prefix-mutation.json",
     "auditor-update.json",
@@ -168,6 +170,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         vrf_suite(dir)?,
         log_math_suite(dir)?,
         log_tree_suite(dir)?,
+        append_suite(dir)?,
         prefix_tree_suite(dir)?,
         mutation_suite(dir)?,
         auditor_suite(dir)?,
@@ -854,6 +857,110 @@ fn prefix_tree_suite(dir: &Path) -> Result<Suite, Error> {
     })
 }
 
+/// §3.2 and §11.8: growing the log tree one leaf at a time.
+fn append_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "log-append.json";
+    let file: VectorFile<AppendInput, AppendExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    // One view carried across the whole sweep, appended to case by case — which is the
+    // property under test. Re-deriving it per case would check the shape and miss the
+    // thing an auditor actually does.
+    let mut view = log::Retained {
+        size: 0,
+        full_subtrees: Vec::new(),
+    };
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let entry = case
+            .input
+            .entries
+            .first()
+            .ok_or_else(|| Error::Computation {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                detail: "input.entries is empty".to_owned(),
+            })?;
+        let leaf = log::leaf_value(
+            suite,
+            &kt_wire::structs::LogEntry {
+                timestamp: entry.timestamp,
+                prefix_tree: hash_field(FILE, name, "entries[].prefix_tree", &entry.prefix_tree)?,
+            },
+        )
+        .map_err(|err| Error::Computation {
+            file: FILE.to_owned(),
+            case: name.to_owned(),
+            detail: alloc_string(&err),
+        })?;
+        let appended = view.append(suite, leaf);
+
+        let mut checks = vec![Check::new(
+            "full subtree heads after the append (§3.2)",
+            render_list(&case.expect.full_subtrees),
+            match &appended {
+                Err(err) => format!("appending failed: {err}"),
+                Ok(()) => render_list(
+                    &view
+                        .full_subtrees
+                        .iter()
+                        .map(|value| hex::encode(value.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        )];
+        checks.push(Check::new(
+            "root folded from those heads (§11.8)",
+            case.expect.root.clone(),
+            match view.root(suite) {
+                Ok(root) => hex::encode(root.as_bytes()),
+                Err(err) => format!("rooting failed: {err}"),
+            },
+        ));
+
+        // And the same root the other way, from every leaf, which is the check that makes
+        // the incremental path worth having: the two computations meet only at §11.8's
+        // hashContent rule.
+        let mut leaves = Vec::new();
+        for value in &case.input.leaves {
+            leaves.push(hash_field(FILE, name, "leaves[]", value)?);
+        }
+        checks.push(Check::new(
+            "the same root computed from every leaf instead (§3.2)",
+            case.expect.root.clone(),
+            match log::root(suite, &leaves) {
+                Ok(root) => hex::encode(root.as_bytes()),
+                Err(err) => format!("rooting failed: {err}"),
+            },
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{} leaves, {} heads",
+                case.input.size,
+                case.expect.full_subtrees.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Log tree, grown one leaf at a time".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
 /// §15.2: the prefix tree mutation an auditor replays from a proof.
 fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
     const FILE: &str = "prefix-mutation.json";
@@ -1033,14 +1140,33 @@ fn auditor_suite(dir: &Path) -> Result<Suite, Error> {
         // make the check about English rather than about the protocol.
         let previous = (!case.input.first_entry)
             .then(|| {
+                // The auditor's log view is the one entry that produced the prefix root it
+                // holds — which is how the peer's own state was primed, so the step 7
+                // roots are comparable.
+                let prefix_root =
+                    hash_field(FILE, name, "input.prefix_root", &case.input.prefix_root)?;
+                let mut view = log::Retained {
+                    size: 0,
+                    full_subtrees: Vec::new(),
+                };
+                let computed = log::leaf_value(
+                    suite,
+                    &kt_wire::structs::LogEntry {
+                        timestamp: case.input.previous_timestamp,
+                        prefix_tree: prefix_root,
+                    },
+                )
+                .map_err(|err| alloc_string(&err))
+                .and_then(|leaf| view.append(suite, leaf).map_err(|err| alloc_string(&err)));
+                computed.map_err(|detail| Error::Computation {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    detail,
+                })?;
                 Ok::<_, Error>(audit::AuditorState {
                     timestamp: case.input.previous_timestamp,
-                    prefix_root: hash_field(
-                        FILE,
-                        name,
-                        "input.prefix_root",
-                        &case.input.prefix_root,
-                    )?,
+                    prefix_root,
+                    log: view,
                 })
             })
             .transpose()?;
@@ -1069,6 +1195,25 @@ fn auditor_suite(dir: &Path) -> Result<Suite, Error> {
                 Err(_) => "rejected",
             },
         ));
+
+        // Step 7's second half, for the updates the peer accepted: the log tree root the
+        // auditor would sign. The peer computes it by folding the full subtree heads its
+        // own state carries, which is the same job done by different code — and unlike the
+        // prefix root, there is nothing ambiguous about it.
+        if let (Some(size), Some(root)) = (case.expect.tree_size, case.expect.log_root.as_ref()) {
+            checks.push(Check::new(
+                "log tree root over the new entry (§15.2 step 7, §11.3)",
+                format!("size {size}, root {root}"),
+                match &outcome {
+                    Ok(accepted) => format!(
+                        "size {}, root {}",
+                        accepted.state.log.size,
+                        hex::encode(accepted.log_root.as_bytes())
+                    ),
+                    Err(detail) => detail.clone(),
+                },
+            ));
+        }
 
         // Our own reason, and whether the new root followed from the proof, go in the
         // case's description rather than into checks of their own. Neither has anything in

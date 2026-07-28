@@ -476,15 +476,21 @@ pub fn coverage_table() -> Vec<Area> {
             &["auditor-update.json"],
         ),
         verified(
+            "§3.2, §11.8",
+            "Growing the log tree one leaf at a time, from retained subtree heads",
+            "kt-tree::log",
+            &["log-append.json", "auditor-update.json"],
+        ),
+        verified(
             "§15.2, §3.3",
             "Prefix tree root before and after an audited update",
             "kt-tree::prefix",
             &["prefix-mutation.json", "auditor-update.json"],
         ),
         todo(
-            "§15.2 steps 5, 7",
-            "Removal eligibility from distinguished entries, and the log tree root an \
-             AuditorTreeHead signs",
+            "§15.2 step 5",
+            "Removal eligibility: that a removed leaf was published in a distinguished \
+             log entry first",
         ),
         todo("live wire", "HTTP interop against a running Go peer"),
     ]

@@ -347,6 +347,104 @@ impl Retained {
         })
     }
 
+    /// The root of the tree these heads describe (§3.2).
+    ///
+    /// A verifier that has kept the full subtree heads of a tree can recompute its root
+    /// without the leaves, which is what makes them the right thing to retain: they are
+    /// the smallest state from which the tree can still be grown and re-rooted. §12.1
+    /// proofs are built out of exactly these, and §15.2's auditor keeps nothing else about
+    /// the log tree at all.
+    ///
+    /// The fold is right to left because a left-balanced tree hangs its remainder on the
+    /// right: `full_subtrees` returns spans of strictly decreasing power-of-two length, so
+    /// each head is the left child of a parent whose right child is everything after it.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSize`] if the size is out of range — which includes zero, since
+    /// §3.2 gives an empty log tree no value at all (§11.9's all-zero stand-in is a
+    /// *prefix* tree convention) — or [`Error::RetainedShape`] if the number of heads does
+    /// not match the size.
+    pub fn root(&self, suite: CipherSuite) -> Result<HashValue> {
+        let ranges = self.ranges()?;
+        let mut folded: Option<(HashValue, bool)> = None;
+        for ((_, len), value) in ranges.into_iter().rev() {
+            let child = (value, len == 1);
+            folded = Some(match folded {
+                None => child,
+                Some(right) => (parent_value(suite, child, right), false),
+            });
+        }
+        // Unreachable: `ranges` rejects size zero, and every other valid size has at
+        // least one full subtree.
+        folded
+            .map(|(value, _)| value)
+            .ok_or(Error::InvalidSize { size: self.size })
+    }
+
+    /// Adds one leaf, keeping the heads a tree of size `size + 1` would have (§3.2).
+    ///
+    /// This is what a §15.2 auditor does for each entry it accepts: it never holds the
+    /// log, so the only way it can compute the root an `AuditorTreeHead` signs is to
+    /// carry the heads forward one leaf at a time.
+    ///
+    /// The mechanics are binary counting. The new leaf is a subtree of length one on the
+    /// right; whenever the two rightmost subtrees have the same length they are exactly
+    /// the two halves of a balanced subtree of twice that length, so they merge — and the
+    /// carry propagates the way adding one to a binary number does.
+    ///
+    /// A `size` of zero is allowed here and nowhere else: an auditor's first entry has to
+    /// be appended to a log that does not exist yet, and `full_subtrees` must be empty to
+    /// match.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSize`] if the new size would be out of range, or
+    /// [`Error::RetainedShape`] if the heads do not match the current size.
+    pub fn append(&mut self, suite: CipherSuite, leaf: HashValue) -> Result<()> {
+        let new_size = self
+            .size
+            .checked_add(1)
+            .ok_or(Error::InvalidSize { size: u64::MAX })?;
+        check_size(new_size)?;
+
+        // Lengths and values together, so the merge condition can be read off directly.
+        let mut heads: Vec<(u64, HashValue)> = if self.size == 0 {
+            if !self.full_subtrees.is_empty() {
+                return Err(Error::RetainedShape {
+                    expected: 0,
+                    actual: self.full_subtrees.len(),
+                });
+            }
+            Vec::new()
+        } else {
+            self.ranges()?
+                .into_iter()
+                .map(|((_, len), value)| (len, value))
+                .collect()
+        };
+        heads.push((1, leaf));
+
+        while heads.len() >= 2 {
+            let Some(&(right_len, right)) = heads.last() else {
+                break;
+            };
+            let Some(&(left_len, left)) = heads.get(heads.len().saturating_sub(2)) else {
+                break;
+            };
+            if left_len != right_len {
+                break;
+            }
+            heads.truncate(heads.len().saturating_sub(2));
+            let merged = parent_value(suite, (left, left_len == 1), (right, right_len == 1));
+            heads.push((left_len.saturating_mul(2), merged));
+        }
+
+        self.size = new_size;
+        self.full_subtrees = heads.into_iter().map(|(_, value)| value).collect();
+        Ok(())
+    }
+
     /// The ranges its heads cover, paired with their values.
     ///
     /// # Errors
@@ -739,6 +837,123 @@ mod tests {
                 .unwrap()
             })
             .collect()
+    }
+
+    /// Growing a log one leaf at a time from nothing has to land on the same root as
+    /// hashing all the leaves at once, at every size. The two computations share only
+    /// `parent_value`: one walks the tree top-down over a slice it holds, the other folds
+    /// a handful of heads bottom-up with no leaves at all.
+    #[test]
+    fn appending_leaf_by_leaf_tracks_the_whole_tree() {
+        let all = leaves(64);
+        let mut view = Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        };
+        for size in 1..=all.len() {
+            view.append(SUITE, all[size - 1]).unwrap();
+            assert_eq!(view.size, size as u64);
+            assert_eq!(
+                view.root(SUITE).unwrap(),
+                root(SUITE, &all[..size]).unwrap(),
+                "size {size}"
+            );
+            // And the heads themselves, not just the root they fold to.
+            assert_eq!(
+                view,
+                Retained::from_leaves(SUITE, size as u64, &all).unwrap(),
+                "size {size}"
+            );
+        }
+    }
+
+    /// The head count follows the binary representation of the size, because each merge is
+    /// a carry: 7 = 0b111 keeps three subtrees, 8 = 0b1000 collapses them into one.
+    #[test]
+    fn heads_count_the_bits_of_the_size() {
+        let all = leaves(16);
+        let mut view = Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        };
+        for size in 1..=16_u64 {
+            view.append(SUITE, all[(size - 1) as usize]).unwrap();
+            assert_eq!(
+                view.full_subtrees.len(),
+                size.count_ones() as usize,
+                "size {size}"
+            );
+        }
+    }
+
+    /// A single-leaf log's root is the leaf: §3.2 gives it no parent to hash into.
+    #[test]
+    fn a_one_leaf_log_roots_at_its_leaf() {
+        let all = leaves(1);
+        let mut view = Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        };
+        view.append(SUITE, all[0]).unwrap();
+        assert_eq!(view.root(SUITE).unwrap(), all[0]);
+    }
+
+    #[test]
+    fn an_empty_view_has_no_root_and_must_be_empty_to_append() {
+        let empty = Retained {
+            size: 0,
+            full_subtrees: Vec::new(),
+        };
+        assert_eq!(empty.root(SUITE), Err(Error::InvalidSize { size: 0 }));
+
+        let mut bogus = Retained {
+            size: 0,
+            full_subtrees: vec![HashValue::ZERO],
+        };
+        assert_eq!(
+            bogus.append(SUITE, HashValue::ZERO),
+            Err(Error::RetainedShape {
+                expected: 0,
+                actual: 1
+            })
+        );
+    }
+
+    #[test]
+    fn a_view_with_the_wrong_number_of_heads_is_rejected() {
+        let mut view = Retained {
+            size: 3,
+            full_subtrees: vec![HashValue::ZERO],
+        };
+        assert!(matches!(
+            view.append(SUITE, HashValue::ZERO),
+            Err(Error::RetainedShape { expected: 2, .. })
+        ));
+        assert!(matches!(
+            view.root(SUITE),
+            Err(Error::RetainedShape { expected: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn appending_past_the_maximum_size_is_refused() {
+        let mut view = Retained {
+            size: MAX_TREE_SIZE,
+            full_subtrees: Vec::new(),
+        };
+        assert!(matches!(
+            view.append(SUITE, HashValue::ZERO),
+            Err(Error::InvalidSize { .. })
+        ));
+
+        let mut overflowing = Retained {
+            size: u64::MAX,
+            full_subtrees: Vec::new(),
+        };
+        assert_eq!(
+            overflowing.append(SUITE, HashValue::ZERO),
+            Err(Error::InvalidSize { size: u64::MAX })
+        );
     }
 
     /// §3.2's rule, read off the figures: a five-leaf tree splits 4/1, not 3/2.
