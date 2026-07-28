@@ -99,19 +99,27 @@ has fewer encoding traps.
 
 ## Status
 
-Scaffolding plus a working interop pipeline. No Rust protocol logic yet — the
-crates exist to fix the module boundaries and the draft-section mapping.
+Three primitives implemented and verified against the Go peer, byte for byte:
 
-What does work: `interop/go/cmd/gen` generates
-[`interop/vectors/commitment.json`](interop/vectors/commitment.json) — 6 positive
-and 1 negative case for the §11.6 commitment — from the pinned katie. Those
-values were independently re-derived from the draft's own `CommitmentValue`
-definition, so katie and the draft agree here and the Rust side has a
-trustworthy first target. CI regenerates the vectors and fails on any diff.
+| Implemented | Draft | Verified by |
+|---|---|---|
+| Presentation-language codec (`kt-wire::codec`) | §2.1 | [`commitment.json`](interop/vectors/commitment.json), for the structs it covers |
+| `UpdateValue`, `CommitmentValue` (`kt-wire::structs`) | §11.5, §11.6 | [`commitment.json`](interop/vectors/commitment.json) |
+| Commitment, `HMAC(Kc, CommitmentValue)` (`kt-crypto::commitment`) | §11.6 | [`commitment.json`](interop/vectors/commitment.json) — 6 positive, 1 negative |
+| Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/ibst.json) — 38 log sizes |
+| Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/binary-ladder.json) — 76 cases |
 
-Next: the same treatment for the wire codec (§2.1) and the integer math for the
-implicit binary search tree and binary ladders (§4.1, §5) — both self-contained,
-both prerequisites for everything above them.
+All vectors are generated from the pinned katie by `interop/go/cmd/gen`; CI
+regenerates them and fails on any diff, so upstream drift is loud.
+
+Not implemented: the VRF (§11.7), the three trees and their proofs (§3, §11.8–§11.9,
+§12), signatures (§11.2–§11.4), and the client algorithms (§6–§10, §13).
+
+Interop work has already turned up two bugs in the Go peer and one gap in the
+draft — see the findings in [`docs/interop.md`](docs/interop.md).
+
+Next: the VRF (§11.7), then the log and prefix trees, in that order — each is a
+prerequisite for the proofs above it.
 
 ## License
 

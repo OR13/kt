@@ -54,14 +54,16 @@ Dependency direction is strictly bottom-up; `kt-wire` depends on no other in-tre
 
 ## Current state
 
-The Rust crates compile and are empty. The interop pipeline works end to end:
-`interop/go/cmd/gen` emits `interop/vectors/commitment.json` (§11.6) from the
-pinned katie, and CI fails if regeneration produces a diff.
+`docs/interop.md` Tier 1 steps 1, 2, and 6 are done and pinned against the Go
+peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the §11.6
+commitment, the implicit binary search tree (§4.1), and the binary ladders (§5).
+Three vector files — `commitment.json`, `ibst.json`, `binary-ladder.json` — are
+generated from the pinned katie, and CI fails if regeneration produces a diff.
 
-The first real work is the Rust side of `docs/interop.md` Tier 1 steps 1, 2, and
-6 — commitment, wire codec, and the integer math for the implicit binary search
-tree and binary ladders. Each is self-contained and each is a prerequisite for
-everything above it. Step 1 already has its vectors waiting.
+`kt-tree::log`, `kt-tree::prefix`, `kt-tree::combined`, `kt-crypto::vrf`,
+`kt-crypto::signature`, and all of `kt-client` are still stubs. Next up is the
+VRF (§11.7), then the log tree, then the prefix tree — bottom-up, because a
+vector for a layer whose foundation disagrees proves nothing.
 
 Verified facts worth not rediscovering:
 
@@ -70,3 +72,13 @@ Verified facts worth not rediscovering:
 - The draft puts `opening` inside `CommitmentValue`; katie keeps it outside the
   struct and writes it to the HMAC first. Same bytes, different factoring.
   Follow the draft.
+- katie's binary ladder does not terminate for a greatest version at or above
+  `2^31-1` (`uint32` midpoint overflow), and the draft cannot express the ladder
+  for `2^32-1` at all. Both are written up under "Findings" in
+  `docs/interop.md`; don't re-derive them, and don't put those inputs in a vector.
+- §2.1.2 means *element* counts where RFC 8446 means byte counts. It matters for
+  any vector of a type wider than a byte. `kt_wire::codec::VectorSpec` is where
+  that lives.
+- Appendix A and B are Python: unbounded integers, exceptions for missing cases.
+  The Rust equivalents take `u64` indices and `u32` versions and return `Result`.
+  Every such deviation is documented at the function that makes it.

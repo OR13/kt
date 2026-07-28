@@ -18,10 +18,24 @@
 //!
 //! # Integer math
 //!
-//! The implicit binary search tree (§4.1) and the binary ladder (§5) are pure
-//! integer functions with pseudocode in Appendices A and B. They need no
-//! cryptography, no state, and no I/O — which makes them the cheapest
-//! high-confidence interop win available. Do them early.
+//! The implicit binary search tree ([`ibst`], §4.1) and the binary ladder
+//! ([`ladder`], §5) are pure integer functions with pseudocode in Appendices A
+//! and B. They need no cryptography, no state, and no I/O — which makes them the
+//! cheapest high-confidence interop win available, and they are done: both are
+//! pinned against the Go peer by `interop/vectors/ibst.json` and
+//! `interop/vectors/binary-ladder.json`.
+//!
+//! Where the appendices assume Python's unbounded integers, this crate uses the
+//! wire types (`u64` log indices, `u32` versions) and turns the cases the
+//! pseudocode leaves implicit — an empty log, a leaf's child, a ladder rung that
+//! does not fit a `uint32` — into errors. Each is documented where it occurs.
+//!
+//! The trees themselves are still to come; the crate is `no_std` because none of
+//! this needs an operating system.
+
+#![no_std]
+
+extern crate alloc;
 
 /// Append-only log tree (`draft-ietf-keytrans-protocol-05` §3.2, §11.8, §12.1).
 pub mod log {
@@ -39,16 +53,5 @@ pub mod combined {
     // TODO(interop tier 1, step 7).
 }
 
-/// Implicit binary search tree over log positions
-/// (`draft-ietf-keytrans-protocol-05` §4.1, Appendix A).
-pub mod ibst {
-    // TODO(interop tier 1, step 6): log2, level, root, left, right.
-}
-
-/// Binary ladder construction (`draft-ietf-keytrans-protocol-05` §5, Appendix B).
-///
-/// Three variants: the greatest-version ladder (§6.2), the search ladder for a
-/// target version (§6.2), and the monitoring ladder (§8.1).
-pub mod ladder {
-    // TODO(interop tier 1, step 6).
-}
+pub mod ibst;
+pub mod ladder;

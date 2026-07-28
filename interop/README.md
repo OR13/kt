@@ -67,13 +67,33 @@ Rules:
 
 - All byte strings are lowercase hex, no `0x` prefix.
 - `cipher_suite` is the IANA `CipherSuite` value: `1` = `KT_128_SHA256_P256`,
-  `2` = `KT_128_SHA256_Ed25519`.
+  `2` = `KT_128_SHA256_Ed25519`. It is **omitted** for primitives that do not
+  depend on a suite — the implicit binary search tree and the binary ladders are
+  integer math with no hash, key, or suite parameter in sight, and a value there
+  would only imply otherwise.
 - `generator.sha` is the submodule commit the values came from. A vector without
   it cannot be regenerated and is worthless when it fails.
 - `name` is stable and unique within the file; it becomes the test identifier.
 - Negative cases use `"expect": { "error": true }` — never an error string, since
   error text is implementation-specific and would make the vector untestable
   across implementations.
+- Where a case is a table of sub-results rather than one value, an expected
+  `null` means **must refuse**: the input has no answer and an implementation that
+  produces one is wrong. `ibst.json` uses this for a leaf's child and for the
+  rightmost log entry's right child.
 - Vectors are deterministic. No randomness at generation time: openings, keys,
   and labels are fixed in the generator so regeneration is a no-op diff and real
   drift stands out.
+
+Where the peer cannot produce a value at all — because it hangs, panics, or
+disagrees with the draft — the generator says so in a comment and in the file's
+`notes`, and the case is covered by Rust-side tests instead of being quietly
+dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
+
+## Current files
+
+| File | Primitive | Draft | Cases |
+|---|---|---|---|
+| `commitment.json` | commitment | §11.6 | 6 positive, 1 negative |
+| `ibst.json` | implicit binary search tree | §4.1, Appendix A | 38 log sizes |
+| `binary-ladder.json` | binary ladder | §5, Appendix B | 76 across base, search, monitoring |
