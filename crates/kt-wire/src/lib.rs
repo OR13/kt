@@ -21,19 +21,20 @@
 //! # Invariants
 //!
 //! Every decoder takes adversary-controlled bytes. Decoding therefore always
-//! returns [`Result`], never panics, and never trusts a length prefix without
-//! checking it against the remaining input.
+//! returns [`codec::Result`], never panics, and never trusts a length prefix
+//! without checking it against the remaining input.
+//!
+//! The crate is `no_std` (it needs `alloc` for `Vec`): nothing about encoding
+//! bytes requires an operating system, and keeping it that way means a
+//! misplaced `std` dependency shows up as a build error rather than as a
+//! surprise for an embedded verifier.
 
-/// Presentation-language primitives: optional values and variable-length
-/// vectors (`draft-ietf-keytrans-protocol-05` §2.1).
-pub mod codec {
-    // TODO(interop tier 1, step 2): encoder/decoder for §2.1.
-}
+#![no_std]
 
-/// Protocol structs (`draft-ietf-keytrans-protocol-05` §11, §12, §13).
-pub mod structs {
-    // TODO(interop tier 1, step 2): TreeHead, FullTreeHead, CommitmentValue, …
-}
+extern crate alloc;
+
+pub mod codec;
+pub mod structs;
 
 /// The draft revision this crate targets.
 pub const DRAFT: &str = "draft-ietf-keytrans-protocol-05";

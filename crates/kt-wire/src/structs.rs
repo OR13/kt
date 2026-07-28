@@ -1,0 +1,398 @@
+//! Protocol structs (`draft-ietf-keytrans-protocol-05` §11, §12, §13).
+//!
+//! Only the structs the commitment computation needs are here so far:
+//! `DeploymentMode` (§11.2), `UpdateValue` with its `UpdateSuffix` (§11.5), and
+//! `CommitmentValue` (§11.6). The rest arrive with the layers that consume them.
+
+use alloc::vec::Vec;
+
+use crate::codec::{Decode, Decoder, Encode, Encoder, Error, Result, VectorSpec};
+
+/// How the Transparency Log is deployed (§11.2 `DeploymentMode`).
+///
+/// The mode is not carried in the structs that branch on it — it comes from
+/// `Configuration`, which users learn out of band or from a tree head — so
+/// decoding any struct with a `select (Configuration.mode)` takes it as an
+/// argument.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum DeploymentMode {
+    /// `contactMonitoring(1)`: users monitor the labels of their contacts.
+    ContactMonitoring,
+    /// `thirdPartyManagement(2)`: a Third-Party Manager operates the tree and
+    /// the Service Operator signs each update.
+    ThirdPartyManagement,
+    /// `thirdPartyAuditing(3)`: a Third-Party Auditor countersigns tree heads.
+    ThirdPartyAuditing,
+}
+
+impl DeploymentMode {
+    /// The registry value from §11.2.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            Self::ContactMonitoring => 1,
+            Self::ThirdPartyManagement => 2,
+            Self::ThirdPartyAuditing => 3,
+        }
+    }
+
+    /// Parses a registry value.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidEnum`] for anything outside the registry, including
+    /// `reserved(0)`.
+    pub const fn from_u8(value: u8) -> Result<Self> {
+        match value {
+            1 => Ok(Self::ContactMonitoring),
+            2 => Ok(Self::ThirdPartyManagement),
+            3 => Ok(Self::ThirdPartyAuditing),
+            other => Err(Error::InvalidEnum {
+                name: "DeploymentMode",
+                value: other as u64,
+            }),
+        }
+    }
+
+    /// Whether this mode carries a Service Operator signature in
+    /// `UpdateSuffix` (§11.5).
+    #[must_use]
+    pub const fn has_update_signature(self) -> bool {
+        matches!(self, Self::ThirdPartyManagement)
+    }
+}
+
+impl Encode for DeploymentMode {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.u8(self.as_u8());
+        Ok(())
+    }
+}
+
+impl Decode for DeploymentMode {
+    fn decode(dec: &mut Decoder<'_>) -> Result<Self> {
+        Self::from_u8(dec.u8()?)
+    }
+}
+
+/// The mode-dependent tail of an `UpdateValue` (§11.5 `UpdateSuffix`).
+///
+/// ```tls-presentation
+/// struct {
+///   select (Configuration.mode) {
+///     case thirdPartyManagement:
+///       opaque signature<0..2^16-1>;
+///   };
+/// } UpdateSuffix;
+/// ```
+///
+/// Only `thirdPartyManagement` has a case, so in the other two modes the suffix
+/// contributes no bytes at all.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum UpdateSuffix {
+    /// No bytes: `contactMonitoring` or `thirdPartyAuditing`.
+    #[default]
+    Empty,
+    /// A Service Operator signature over `UpdateTBS`, under
+    /// `thirdPartyManagement`.
+    ThirdPartyManagement {
+        /// `opaque signature<0..2^16-1>`.
+        signature: Vec<u8>,
+    },
+}
+
+impl UpdateSuffix {
+    /// `opaque signature<0..2^16-1>`.
+    pub const SIGNATURE: VectorSpec = VectorSpec::new((1 << 16) - 1);
+
+    /// The mode this suffix belongs to, or `None` if it is mode-agnostic.
+    ///
+    /// [`UpdateSuffix::Empty`] is correct for two of the three modes, so it maps
+    /// to `None` rather than picking one.
+    #[must_use]
+    pub const fn mode(&self) -> Option<DeploymentMode> {
+        match self {
+            Self::Empty => None,
+            Self::ThirdPartyManagement { .. } => Some(DeploymentMode::ThirdPartyManagement),
+        }
+    }
+
+    /// Reads the suffix that `mode` implies.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from the signature vector under `thirdPartyManagement`.
+    pub fn decode_with_mode(dec: &mut Decoder<'_>, mode: DeploymentMode) -> Result<Self> {
+        if mode.has_update_signature() {
+            let signature = dec.opaque_vector(Self::SIGNATURE)?;
+            Ok(Self::ThirdPartyManagement {
+                signature: signature.to_vec(),
+            })
+        } else {
+            Ok(Self::Empty)
+        }
+    }
+}
+
+impl Encode for UpdateSuffix {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        match self {
+            Self::Empty => Ok(()),
+            Self::ThirdPartyManagement { signature } => {
+                enc.opaque_vector(Self::SIGNATURE, signature)
+            }
+        }
+    }
+}
+
+/// The contents of a prefix-tree commitment (§11.5 `UpdateValue`).
+///
+/// ```tls-presentation
+/// struct {
+///   opaque value<0..2^32-1>;
+///   UpdateSuffix suffix;
+/// } UpdateValue;
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UpdateValue {
+    /// The value bound to a label-version pair, e.g. a public key.
+    pub value: Vec<u8>,
+    /// Mode-dependent tail; see [`UpdateSuffix`].
+    pub suffix: UpdateSuffix,
+}
+
+impl UpdateValue {
+    /// `opaque value<0..2^32-1>`.
+    pub const VALUE: VectorSpec = VectorSpec::new((1 << 32) - 1);
+
+    /// An update with no suffix, i.e. any mode but `thirdPartyManagement`.
+    #[must_use]
+    pub fn new(value: impl Into<Vec<u8>>) -> Self {
+        Self {
+            value: value.into(),
+            suffix: UpdateSuffix::Empty,
+        }
+    }
+
+    /// Reads an `UpdateValue` as `mode` defines it.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from the value vector or the suffix.
+    pub fn decode_with_mode(dec: &mut Decoder<'_>, mode: DeploymentMode) -> Result<Self> {
+        let value = dec.opaque_vector(Self::VALUE)?;
+        let suffix = UpdateSuffix::decode_with_mode(dec, mode)?;
+        Ok(Self {
+            value: value.to_vec(),
+            suffix,
+        })
+    }
+}
+
+impl Encode for UpdateValue {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.opaque_vector(Self::VALUE, &self.value)?;
+        self.suffix.encode(enc)
+    }
+}
+
+/// The preimage of a commitment (§11.6 `CommitmentValue`).
+///
+/// ```tls-presentation
+/// struct {
+///   opaque opening[Nc];
+///   opaque label<0..2^8-1>;
+///   uint32 version;
+///   UpdateValue update;
+/// } CommitmentValue;
+/// ```
+///
+/// `Nc` comes from the cipher suite (16 for both suites registered in §17.1),
+/// which is why `opening` is a `Vec<u8>` and not a fixed-size array: this crate
+/// deliberately depends on nothing, including the suite definitions. Encoding
+/// writes `opening` unprefixed, exactly as long as the caller made it;
+/// [`CommitmentValue::decode_with_nc`] is where `Nc` is applied.
+///
+/// The commitment itself — `HMAC(Kc, CommitmentValue)` — lives in `kt-crypto`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CommitmentValue {
+    /// The `Nc`-byte opening. Randomly generated, or derived so as to be
+    /// indistinguishable from random (§11.6).
+    pub opening: Vec<u8>,
+    /// The label being committed to, e.g. a username.
+    pub label: Vec<u8>,
+    /// The version of the label.
+    pub version: u32,
+    /// The value the commitment opens to.
+    pub update: UpdateValue,
+}
+
+impl CommitmentValue {
+    /// `opaque label<0..2^8-1>`.
+    pub const LABEL: VectorSpec = VectorSpec::new((1 << 8) - 1);
+
+    /// Reads a `CommitmentValue` whose opening is `nc` bytes under `mode`.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors, including [`Error::UnexpectedEof`] if fewer than `nc` bytes
+    /// are available for the opening.
+    pub fn decode_with_nc(dec: &mut Decoder<'_>, nc: usize, mode: DeploymentMode) -> Result<Self> {
+        let opening = dec.opaque_fixed(nc)?;
+        let label = dec.opaque_vector(Self::LABEL)?;
+        let version = dec.u32()?;
+        let update = UpdateValue::decode_with_mode(dec, mode)?;
+        Ok(Self {
+            opening: opening.to_vec(),
+            label: label.to_vec(),
+            version,
+            update,
+        })
+    }
+}
+
+impl Encode for CommitmentValue {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.opaque_fixed(&self.opening);
+        enc.opaque_vector(Self::LABEL, &self.label)?;
+        enc.u32(self.version);
+        self.update.encode(enc)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::arithmetic_side_effects,
+    reason = "tests fail loudly by panicking; the lints protect the parsing paths"
+)]
+mod tests {
+    use super::*;
+    use crate::codec::{Decoder, encode};
+    use alloc::vec;
+
+    /// The first vector in `interop/vectors/commitment.json`, hand-checked
+    /// against §11.6 field by field: 16 bytes of opening, a zero-length label,
+    /// version 0, then an `UpdateValue` whose only content is a zero-length
+    /// `value` vector with a four-byte prefix.
+    #[test]
+    fn empty_label_empty_value_layout() {
+        let cv = CommitmentValue {
+            opening: (0..16).collect(),
+            label: Vec::new(),
+            version: 0,
+            update: UpdateValue::new(Vec::new()),
+        };
+        let bytes = encode(&cv).unwrap();
+        assert_eq!(
+            bytes,
+            vec![
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x0f, // opening[16]
+                0x00, // label<0..255>, empty
+                0x00, 0x00, 0x00, 0x00, // version
+                0x00, 0x00, 0x00, 0x00, // update.value<0..2^32-1>, empty
+            ]
+        );
+        assert_eq!(bytes.len(), 16 + 1 + 4 + 4);
+    }
+
+    #[test]
+    fn commitment_value_round_trips() {
+        let cv = CommitmentValue {
+            opening: (0x10..0x20).collect(),
+            label: b"alice@example.com".to_vec(),
+            version: 1,
+            update: UpdateValue::new(b"key-material-2".to_vec()),
+        };
+        let bytes = encode(&cv).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        let back = CommitmentValue::decode_with_nc(&mut dec, 16, DeploymentMode::ContactMonitoring)
+            .unwrap();
+        dec.finish().unwrap();
+        assert_eq!(back, cv);
+    }
+
+    /// Under third-party management the suffix carries a signature, so the same
+    /// logical update encodes to different bytes. Getting the mode wrong is a
+    /// commitment mismatch, not a silent success.
+    #[test]
+    fn third_party_management_suffix_changes_the_bytes() {
+        let mut cv = CommitmentValue {
+            opening: vec![0_u8; 16],
+            label: b"bob".to_vec(),
+            version: 2,
+            update: UpdateValue {
+                value: b"v".to_vec(),
+                suffix: UpdateSuffix::ThirdPartyManagement {
+                    signature: vec![0xaa, 0xbb],
+                },
+            },
+        };
+        let bytes = encode(&cv).unwrap();
+        assert_eq!(bytes.last(), Some(&0xbb));
+
+        let mut dec = Decoder::new(&bytes);
+        let back =
+            CommitmentValue::decode_with_nc(&mut dec, 16, DeploymentMode::ThirdPartyManagement)
+                .unwrap();
+        dec.finish().unwrap();
+        assert_eq!(back, cv);
+
+        // Decoded in the wrong mode, the signature's own length prefix is left
+        // over as trailing bytes rather than being silently absorbed.
+        let mut dec = Decoder::new(&bytes);
+        let wrong_mode =
+            CommitmentValue::decode_with_nc(&mut dec, 16, DeploymentMode::ContactMonitoring)
+                .unwrap();
+        assert_eq!(wrong_mode.update.suffix, UpdateSuffix::Empty);
+        assert!(dec.finish().is_err());
+
+        cv.update.suffix = UpdateSuffix::Empty;
+        assert_ne!(encode(&cv).unwrap(), bytes);
+    }
+
+    /// A 256-byte label cannot be expressed: the ceiling is `2^8-1` (§11.6).
+    #[test]
+    fn over_long_label_is_rejected() {
+        let cv = CommitmentValue {
+            opening: vec![0_u8; 16],
+            label: vec![0x61; 256],
+            version: 0,
+            update: UpdateValue::new(Vec::new()),
+        };
+        assert_eq!(
+            encode(&cv),
+            Err(Error::VectorTooLong {
+                count: 256,
+                max: 255
+            })
+        );
+    }
+
+    #[test]
+    fn deployment_mode_rejects_reserved_and_unknown() {
+        assert_eq!(
+            DeploymentMode::from_u8(1),
+            Ok(DeploymentMode::ContactMonitoring)
+        );
+        assert_eq!(
+            DeploymentMode::from_u8(2),
+            Ok(DeploymentMode::ThirdPartyManagement)
+        );
+        assert_eq!(
+            DeploymentMode::from_u8(3),
+            Ok(DeploymentMode::ThirdPartyAuditing)
+        );
+        for value in [0_u8, 4, 255] {
+            assert_eq!(
+                DeploymentMode::from_u8(value),
+                Err(Error::InvalidEnum {
+                    name: "DeploymentMode",
+                    value: u64::from(value)
+                })
+            );
+        }
+    }
+}
