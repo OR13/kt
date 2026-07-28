@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 use kt_crypto::commitment::{self, Commitment};
 use kt_crypto::suite::CipherSuite;
 use kt_crypto::{signature, vrf};
-use kt_tree::{ibst, ladder, log, prefix};
+use kt_tree::{audit, ibst, ladder, log, prefix};
+use kt_wire::audit::AuditorUpdate;
 use kt_wire::codec::Decoder;
 use kt_wire::heads::{
     AuditorConfig, AuditorTreeHead, AuditorTreeHeadTBS, Configuration, FullTreeHead, TreeHead,
@@ -30,15 +31,15 @@ use kt_wire::structs::{
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
-    CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
-    InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
-    LogMathInput, LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect,
-    RequestInput, TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile,
-    VrfCaseInput, VrfExpect,
+    AuditorExpect, AuditorInput, CommitmentExpect, CommitmentInput, HeadExpect, HeadInput,
+    IbstExpect, IbstInput, InterpretationExpect, InterpretationInput, LadderExpect, LadderInput,
+    LogMathExpect, LogMathInput, LogTreeExpect, LogTreeInput, MutationExpect, MutationInput,
+    PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect, TamperedInput,
+    UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 12] = [
+pub const FILES: [&str; 14] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -48,6 +49,8 @@ pub const FILES: [&str; 12] = [
     "log-math.json",
     "log-tree.json",
     "prefix-tree.json",
+    "prefix-mutation.json",
+    "auditor-update.json",
     "tree-head.json",
     "requests.json",
     "tampered.json",
@@ -166,6 +169,8 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         log_math_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
+        mutation_suite(dir)?,
+        auditor_suite(dir)?,
         head_suite(dir)?,
         request_suite(dir)?,
         tampered_suite(dir)?,
@@ -845,6 +850,264 @@ fn prefix_tree_suite(dir: &Path) -> Result<Suite, Error> {
             sha: file.generator.sha,
         },
         cipher_suite: None,
+        cases,
+    })
+}
+
+/// §15.2: the prefix tree mutation an auditor replays from a proof.
+fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "prefix-mutation.json";
+    let file: VectorFile<MutationInput, MutationExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let leaves = |field: &str, entries: &[crate::vectors::PrefixEntryInput]| {
+            entries
+                .iter()
+                .map(|entry| {
+                    Ok(PrefixLeaf {
+                        vrf_output: hash_field(FILE, name, field, &entry.vrf_output)?,
+                        commitment: hash_field(FILE, name, field, &entry.commitment)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, Error>>()
+        };
+        let entries = leaves("entries[]", &case.input.entries)?;
+        let added = leaves("add[]", &case.input.add)?;
+        let removed = leaves("remove[]", &case.input.remove)?;
+
+        let mut tree = prefix::PrefixTree::new();
+        for leaf in &entries {
+            tree.insert(*leaf).map_err(|err| Error::Computation {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                detail: alloc_string(&err),
+            })?;
+        }
+
+        // The batch an auditor is sent covers the additions first, then the removals.
+        let keys: Vec<HashValue> = added
+            .iter()
+            .chain(removed.iter())
+            .map(|leaf| leaf.vrf_output)
+            .collect();
+        let built = tree.prove(suite, &keys);
+        let mut checks = vec![Check::new(
+            "batch proof for the update's keys (§12.2)",
+            case.expect.proof.clone(),
+            match built.as_ref().map(kt_wire::codec::encode) {
+                Ok(Ok(bytes)) => hex::encode(bytes),
+                Ok(Err(err)) => format!("encoding failed: {err}"),
+                Err(err) => format!("proving failed: {err}"),
+            },
+        )];
+
+        // Everything below replays the *peer's* proof bytes, which is the direction that
+        // matters: an auditor is handed those, not its own.
+        let peer_bytes = unhex(FILE, name, "expect.proof", &case.expect.proof)?;
+        let replayed = kt_wire::codec::decode::<PrefixProof>(&peer_bytes)
+            .map_err(|err| format!("decoding the peer's proof failed: {err}"))
+            .and_then(|proof| {
+                prefix::evaluate_before_after(suite, &added, &removed, &proof)
+                    .map_err(|err| format!("refused: {err}"))
+            });
+
+        checks.push(Check::new(
+            "root before the update (§15.2 step 6)",
+            case.expect.before.clone(),
+            match &replayed {
+                Ok(mutation) => hex::encode(mutation.before.as_bytes()),
+                Err(detail) => detail.clone(),
+            },
+        ));
+
+        // Which root to expect depends on whether the proof determines one. Where a
+        // removal empties a slot beside an uncovered sibling it does not, and the value
+        // to agree with the peer on is the one both reach by assuming no collapse. Where
+        // it does, the value to reach is the root the peer's own tree took — a stronger
+        // oracle than its verifier, and in two of these cases they differ.
+        let (what, expected) = if case.input.sibling_uncovered {
+            let peer = case.expect.peer_after.clone().unwrap_or_default();
+            let label = if peer == case.expect.after {
+                "root after the update, assuming no collapse (§15.2 step 7) — \
+                 the assumption holds here, but the proof does not say so"
+            } else {
+                "root after the update, assuming no collapse (§15.2 step 7) — \
+                 the assumption is wrong here and the tree's root is unreachable"
+            };
+            (label.to_owned(), peer)
+        } else {
+            let mut label = "root after the update (§15.2 step 7)".to_owned();
+            match (&case.expect.peer_error, &case.expect.peer_after) {
+                (Some(err), _) => {
+                    label.push_str(&format!(" — the peer declines this update: {err}"))
+                }
+                (None, Some(peer)) if *peer != case.expect.after => label.push_str(&format!(
+                    " — the peer's verifier returns {}…, which its own tree does not have",
+                    &peer[..12.min(peer.len())]
+                )),
+                _ => {}
+            }
+            (label, case.expect.after.clone())
+        };
+        checks.push(Check::new(
+            what,
+            expected,
+            match &replayed {
+                Ok(mutation) => hex::encode(mutation.after.as_bytes()),
+                Err(detail) => detail.clone(),
+            },
+        ));
+
+        // And the part no vector can supply: whether that root followed from the proof.
+        checks.push(Check::new(
+            "whether the proof determines the root it produced (§15.2)",
+            if case.input.sibling_uncovered {
+                "assumed"
+            } else {
+                "determined"
+            },
+            match &replayed {
+                Ok(mutation) if mutation.determined() => "determined",
+                Ok(_) => "assumed",
+                Err(_) => "no root",
+            },
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{} entries, +{} −{}",
+                entries.len(),
+                added.len(),
+                removed.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Prefix tree mutation".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// §15.2: the third-party auditor's decision on one log entry.
+fn auditor_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "auditor-update.json";
+    let file: VectorFile<AuditorInput, AuditorExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+
+        // The update is read from the peer's own bytes: an auditor is handed these, and
+        // decoding them is the first thing that can go wrong.
+        let bytes = unhex(FILE, name, "expect.encoding", &case.expect.encoding)?;
+        let decoded = kt_wire::codec::decode::<AuditorUpdate>(&bytes);
+
+        let mut checks = vec![Check::new(
+            "AuditorUpdate wire encoding (§15.2)",
+            case.expect.encoding.clone(),
+            match decoded.as_ref().map(kt_wire::codec::encode) {
+                Ok(Ok(reencoded)) => hex::encode(reencoded),
+                Ok(Err(err)) => format!("re-encoding failed: {err}"),
+                Err(err) => format!("decoding failed: {err}"),
+            },
+        )];
+
+        // Then the verdict. Normalized to accepted/rejected: two implementations of eight
+        // prose steps have no reason to word a refusal alike, and requiring them to would
+        // make the check about English rather than about the protocol.
+        let previous = (!case.input.first_entry)
+            .then(|| {
+                Ok::<_, Error>(audit::AuditorState {
+                    timestamp: case.input.previous_timestamp,
+                    prefix_root: hash_field(
+                        FILE,
+                        name,
+                        "input.prefix_root",
+                        &case.input.prefix_root,
+                    )?,
+                })
+            })
+            .transpose()?;
+        let outcome = decoded
+            .as_ref()
+            .map_err(|err| format!("decoding failed: {err}"))
+            .and_then(|update| {
+                audit::verify_update(suite, update, previous.as_ref())
+                    .map_err(|err| format!("rejected: {err}"))
+            });
+        let mut what = "the auditor's verdict (§15.2 steps 1–7)".to_owned();
+        if let Some(detail) = &case.expect.peer_detail {
+            what.push_str(&format!(" — the peer's reason: {detail}"));
+        }
+        if case.expect.peer_step_5 {
+            what.push_str(
+                " — the peer also checks step 5's distinguished-entry eligibility, which \
+                 this implementation does not",
+            );
+        }
+        checks.push(Check::new(
+            what,
+            case.expect.verdict.clone(),
+            match &outcome {
+                Ok(_) => "accepted",
+                Err(_) => "rejected",
+            },
+        ));
+
+        // Our own reason, and whether the new root followed from the proof, go in the
+        // case's description rather than into checks of their own. Neither has anything in
+        // the vector to compare against — the peer's wording is its own, and §15.2 has no
+        // step for determinacy — and a check whose two sides are the same value by
+        // construction cannot fail, which on a page of evidence is worse than absent.
+        let mut description = format!(
+            "{} entries, +{} −{}",
+            case.input.entries.len(),
+            case.input.added.len(),
+            case.input.removed.len()
+        );
+        match &outcome {
+            Err(detail) => description.push_str(&format!(" · {detail}")),
+            Ok(accepted) if !accepted.root_determined => description.push_str(
+                " · accepted, but the new root was assumed: a removal emptied a slot beside \
+                 a sibling the proof does not identify",
+            ),
+            Ok(_) => {}
+        }
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: case.expect.verdict != "accepted",
+            input: description,
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Third-party auditor".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
         cases,
     })
 }

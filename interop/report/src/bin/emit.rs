@@ -30,6 +30,7 @@ use std::process::ExitCode;
 
 use kt_crypto::suite::CipherSuite;
 use kt_tree::{log, prefix};
+use kt_wire::audit::AuditorUpdate;
 use kt_wire::codec;
 use kt_wire::proofs::PrefixLeaf;
 use kt_wire::structs::{HashValue, LogEntry};
@@ -78,6 +79,28 @@ enum Case {
         /// The root the proof should evaluate to, hex.
         root: String,
     },
+    /// A prefix tree mutation replayed as a §15.2 auditor would.
+    PrefixMutation {
+        name: String,
+        expect: &'static str,
+        /// Leaves the update adds.
+        added: Vec<Leaf>,
+        /// Leaves the update removes.
+        removed: Vec<Leaf>,
+        /// The wire-encoded batch `PrefixProof`, hex.
+        proof: String,
+        /// The root before the update, hex.
+        before: String,
+        /// The root after it, hex.
+        after: String,
+    },
+    /// An `AuditorUpdate` for the peer's decoder (§15.2).
+    AuditorUpdate {
+        name: String,
+        expect: &'static str,
+        /// The encoded update, hex.
+        encoding: String,
+    },
     /// A prefix tree batch proof (§12.2).
     PrefixTree {
         name: String,
@@ -89,6 +112,12 @@ enum Case {
         /// The root the proof should verify against, hex.
         root: String,
     },
+}
+
+#[derive(Serialize)]
+struct Leaf {
+    vrf_output: String,
+    commitment: String,
 }
 
 #[derive(Serialize)]
@@ -179,13 +208,137 @@ fn main() -> ExitCode {
 
 const fn expect_of(case: &Case) -> &'static str {
     match case {
-        Case::LogTree { expect, .. } | Case::PrefixTree { expect, .. } => expect,
+        Case::LogTree { expect, .. }
+        | Case::PrefixTree { expect, .. }
+        | Case::PrefixMutation { expect, .. }
+        | Case::AuditorUpdate { expect, .. } => expect,
     }
 }
 
 fn build_cases() -> Result<Vec<Case>, String> {
     let mut cases = log_cases()?;
     cases.extend(prefix_cases()?);
+    cases.extend(mutation_cases()?);
+    Ok(cases)
+}
+
+/// §15.2 updates for the peer to replay, plus the encodings for its decoder.
+///
+/// Only the shapes the two implementations agree on are here. The peer does not treat
+/// §11.9's all-zero copath element as an empty subtree, and it refuses a replacement
+/// outright — those two divergences are pinned in the other direction, by
+/// `interop/vectors/prefix-mutation.json`, where the peer's own tree supplies the root it
+/// should have reached. Sending them here as expected failures would restate that finding
+/// while making this file's `reject` cases mean two different things.
+fn mutation_cases() -> Result<Vec<Case>, String> {
+    let leaf = |first: u8, tag: u8, commitment: u8| PrefixLeaf {
+        vrf_output: {
+            let mut key = [0_u8; HashValue::SIZE];
+            key[0] = first;
+            key[HashValue::SIZE - 1] = tag;
+            HashValue::from_bytes(key)
+        },
+        commitment: HashValue::from_bytes([commitment; HashValue::SIZE]),
+    };
+    let hex_leaves = |leaves: &[PrefixLeaf]| {
+        leaves
+            .iter()
+            .map(|l| Leaf {
+                vrf_output: hex::encode(l.vrf_output.as_bytes()),
+                commitment: hex::encode(l.commitment.as_bytes()),
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let a = leaf(0x00, 1, 0xa1);
+    let b = leaf(0x40, 2, 0xb2);
+    let c = leaf(0x80, 3, 0xc3);
+    let d = leaf(0xc0, 4, 0xd4);
+
+    /// One update: the tree it applies to, and what it changes.
+    struct Spec {
+        name: &'static str,
+        existing: Vec<PrefixLeaf>,
+        added: Vec<PrefixLeaf>,
+        removed: Vec<PrefixLeaf>,
+    }
+    let spec = |name, existing, added, removed| Spec {
+        name,
+        existing,
+        added,
+        removed,
+    };
+
+    let specs = [
+        spec("add-one-leaf", vec![a, c], vec![b], vec![]),
+        spec("add-two-leaves", vec![a], vec![b, c], vec![]),
+        spec("remove-the-only-leaf", vec![a], vec![], vec![a]),
+        // A removal whose emptied slot an addition refills, so no §3.3 collapse is in
+        // question and both implementations reach the root the tree actually takes.
+        spec(
+            "remove-refilled-by-an-add",
+            vec![a, b, c, d],
+            vec![leaf(0x20, 5, 0xe5)],
+            vec![a],
+        ),
+    ];
+
+    let mut cases = Vec::new();
+    for Spec {
+        name,
+        existing,
+        added,
+        removed,
+    } in specs
+    {
+        let mut tree = prefix::PrefixTree::new();
+        tree.extend(existing.iter().copied())
+            .map_err(|err| format!("{name}: building the tree: {err}"))?;
+
+        let keys: Vec<HashValue> = added
+            .iter()
+            .chain(removed.iter())
+            .map(|l| l.vrf_output)
+            .collect();
+        let proof = tree
+            .prove(SUITE, &keys)
+            .map_err(|err| format!("{name}: proving: {err}"))?;
+        let mutation = prefix::evaluate_before_after(SUITE, &added, &removed, &proof)
+            .map_err(|err| format!("{name}: evaluating: {err}"))?;
+        if !mutation.determined() {
+            return Err(format!(
+                "{name}: the root is not determined by the proof, so the peer's agreement \
+                 would not mean anything"
+            ));
+        }
+        let encoded =
+            codec::encode(&proof).map_err(|err| format!("{name}: encoding the proof: {err}"))?;
+
+        cases.push(Case::PrefixMutation {
+            name: format!("mutation-{name}"),
+            expect: ACCEPT,
+            added: hex_leaves(&added),
+            removed: hex_leaves(&removed),
+            proof: hex::encode(&encoded),
+            before: hex::encode(mutation.before.as_bytes()),
+            after: hex::encode(mutation.after.as_bytes()),
+        });
+
+        let update = AuditorUpdate {
+            timestamp: 1_700_000_000_000,
+            added: added.clone(),
+            removed: removed.clone(),
+            proof,
+        };
+        let bytes =
+            codec::encode(&update).map_err(|err| format!("{name}: encoding the update: {err}"))?;
+        cases.push(Case::AuditorUpdate {
+            name: format!("auditor-update-{name}"),
+            expect: ACCEPT,
+            encoding: hex::encode(&bytes),
+        });
+    }
+
     Ok(cases)
 }
 

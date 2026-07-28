@@ -1,0 +1,383 @@
+{
+  "primitive": "prefix-mutation",
+  "draft": "draft-ietf-keytrans-protocol-05 §15.2",
+  "generator": {
+    "impl": "katie",
+    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+  },
+  "cipher_suite": 2,
+  "notes": "Prefix tree mutations replayed from a proof, as a §15.2 auditor must. `entries` build the tree, `add` and `remove` are the update, and `proof` is the batch proof for their keys in that order. `before` and `after` are the roots of the trees katie's own Tree.Mutate builds, so they are the log's values rather than a verifier's. `peer_before` and `peer_after` are what katie's EvaluateBeforeAfter reconstructs from the proof alone, or `peer_error` where it declines: they differ from `after` in three shapes, noted in the file's source comment and in docs/interop.md. `sibling_uncovered` marks a case where a removal empties a slot whose sibling is a bare copath hash: §3.3's collapse depends on that node's type, the hash does not reveal it, and §15.2 gives no way to ask, so the root is not a function of the proof. For those cases `peer_after` is the value both implementations reach by assuming no collapse, and `after` shows whether the assumption held.",
+  "cases": [
+    {
+      "name": "add-two-leaves",
+      "input": {
+        "add": [
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+            "vrf_output": "c000000000000000000000000000000000000000000000000000000000000006"
+          }
+        ],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": []
+      },
+      "expect": {
+        "after": "f1c59c6bf8c2d147ce833a4993f437362fc3f702b49fd3e56ae2d3acc204c10c",
+        "before": "a0281728172889568ab22f74f10ecf1edc626c8ea87aaa8583f055574cb12057",
+        "elements": [],
+        "peer_after": "f1c59c6bf8c2d147ce833a4993f437362fc3f702b49fd3e56ae2d3acc204c10c",
+        "peer_before": "a0281728172889568ab22f74f10ecf1edc626c8ea87aaa8583f055574cb12057",
+        "proof": "02020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a101028000000000000000000000000000000000000000000000000000000000000004d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4010000",
+        "results": [
+          {
+            "depth": 1,
+            "leaf": {
+              "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+              "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "result_type": 2
+          },
+          {
+            "depth": 1,
+            "leaf": {
+              "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+              "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+            },
+            "result_type": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "add-pushing-a-leaf-down",
+      "input": {
+        "add": [
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "2000000000000000000000000000000000000000000000000000000000000005"
+          }
+        ],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": []
+      },
+      "expect": {
+        "after": "a2c1cdca8d5f31b25d34f55e34d8364296883792aab7dc6a16a607e66f9923c2",
+        "before": "a0281728172889568ab22f74f10ecf1edc626c8ea87aaa8583f055574cb12057",
+        "elements": [
+          "50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d"
+        ],
+        "peer_after": "a2c1cdca8d5f31b25d34f55e34d8364296883792aab7dc6a16a607e66f9923c2",
+        "peer_before": "a0281728172889568ab22f74f10ecf1edc626c8ea87aaa8583f055574cb12057",
+        "proof": "01020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a101000150555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d",
+        "results": [
+          {
+            "depth": 1,
+            "leaf": {
+              "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+              "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "result_type": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "remove-the-only-leaf",
+      "input": {
+        "add": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ]
+      },
+      "expect": {
+        "after": "0000000000000000000000000000000000000000000000000000000000000000",
+        "before": "1635d4cb735a16759a1a26fcda0c309ea0577aae20128a59075f6fea73dfb360",
+        "elements": [],
+        "peer_after": "0000000000000000000000000000000000000000000000000000000000000000",
+        "peer_before": "1635d4cb735a16759a1a26fcda0c309ea0577aae20128a59075f6fea73dfb360",
+        "proof": "0101000000",
+        "results": [
+          {
+            "depth": 0,
+            "result_type": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "remove-every-leaf",
+      "input": {
+        "add": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          }
+        ]
+      },
+      "expect": {
+        "after": "0000000000000000000000000000000000000000000000000000000000000000",
+        "before": "fea1b8a147cc1fa73c5a1938f9bd4cb50a8ed3423d067921b8ea69b181335c17",
+        "elements": [
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        "peer_after": "dc48a742ae32cfd66352372d6120ed14d6629fc166246b05ff8b03e23804701f",
+        "peer_before": "fea1b8a147cc1fa73c5a1938f9bd4cb50a8ed3423d067921b8ea69b181335c17",
+        "proof": "020102010200010000000000000000000000000000000000000000000000000000000000000000",
+        "results": [
+          {
+            "depth": 2,
+            "result_type": 1
+          },
+          {
+            "depth": 2,
+            "result_type": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "remove-beside-a-leaf",
+      "input": {
+        "add": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ],
+        "sibling_uncovered": true
+      },
+      "expect": {
+        "after": "06f44480562f66409ec58163a52c79f297daee592350cdf4e1a057a0acabc1e3",
+        "before": "ffb5bd83bfea74a93ad6303a0f281926d057ba64f6f00e174642fccef52a2024",
+        "elements": [
+          "c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd",
+          "50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d"
+        ],
+        "peer_after": "dfff45ee5c91b419047c2429da5466b70d5c888e195547e601709e6803690672",
+        "peer_before": "ffb5bd83bfea74a93ad6303a0f281926d057ba64f6f00e174642fccef52a2024",
+        "proof": "0101020002c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d",
+        "results": [
+          {
+            "depth": 2,
+            "result_type": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "remove-beside-a-parent",
+      "input": {
+        "add": [],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "vrf_output": "6000000000000000000000000000000000000000000000000000000000000003"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ],
+        "sibling_uncovered": true
+      },
+      "expect": {
+        "after": "f27e6478dd5ed27dbf144d2820154d0a681ae7e43101522e23de7566bedaadd6",
+        "before": "88ed4b1392d180e07e78ba15904335a4a5b925ecb96e32b94d0630e486e3a701",
+        "elements": [
+          "9d5fddd5f90a5e2345bf2d4bead266ed8cf77a7e6cbc66aedfca0254694b5a26",
+          "50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d"
+        ],
+        "peer_after": "f27e6478dd5ed27dbf144d2820154d0a681ae7e43101522e23de7566bedaadd6",
+        "peer_before": "88ed4b1392d180e07e78ba15904335a4a5b925ecb96e32b94d0630e486e3a701",
+        "proof": "01010200029d5fddd5f90a5e2345bf2d4bead266ed8cf77a7e6cbc66aedfca0254694b5a2650555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d",
+        "results": [
+          {
+            "depth": 2,
+            "result_type": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "remove-refilled-by-an-add",
+      "input": {
+        "add": [
+          {
+            "commitment": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+            "vrf_output": "2000000000000000000000000000000000000000000000000000000000000005"
+          }
+        ],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ]
+      },
+      "expect": {
+        "after": "0110136424d77202f37c8eb18b629eaf230998f20ab6ab232a9d7d13f7faa554",
+        "before": "ffb5bd83bfea74a93ad6303a0f281926d057ba64f6f00e174642fccef52a2024",
+        "elements": [
+          "c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd",
+          "50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d"
+        ],
+        "peer_after": "0110136424d77202f37c8eb18b629eaf230998f20ab6ab232a9d7d13f7faa554",
+        "peer_before": "ffb5bd83bfea74a93ad6303a0f281926d057ba64f6f00e174642fccef52a2024",
+        "proof": "02020000000000000000000000000000000000000000000000000000000000000001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10201020002c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d",
+        "results": [
+          {
+            "depth": 2,
+            "leaf": {
+              "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+              "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+            },
+            "result_type": 2
+          },
+          {
+            "depth": 2,
+            "result_type": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "replace-in-place",
+      "input": {
+        "add": [
+          {
+            "commitment": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ],
+        "entries": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          {
+            "commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            "vrf_output": "4000000000000000000000000000000000000000000000000000000000000002"
+          },
+          {
+            "commitment": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+            "vrf_output": "8000000000000000000000000000000000000000000000000000000000000004"
+          }
+        ],
+        "remove": [
+          {
+            "commitment": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "vrf_output": "0000000000000000000000000000000000000000000000000000000000000001"
+          }
+        ]
+      },
+      "expect": {
+        "after": "c7eb32d3a33da19b6c8863f435a7435a32dd3192441716fa99c339465ac14eca",
+        "before": "ffb5bd83bfea74a93ad6303a0f281926d057ba64f6f00e174642fccef52a2024",
+        "elements": [
+          "c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd",
+          "50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d"
+        ],
+        "peer_error": "same vrf output present multiple times",
+        "proof": "02010201020002c3f1f4cbbc6e44c52a308eaad3b44133bf09c996d6d48b5b75804fb3062bc5dd50555332243effa9f64c7b332e3c8c6d52058bd4b8bdf928e6f7d33b1840d81d",
+        "results": [
+          {
+            "depth": 2,
+            "result_type": 1
+          },
+          {
+            "depth": 2,
+            "result_type": 1
+          }
+        ]
+      }
+    }
+  ]
+}

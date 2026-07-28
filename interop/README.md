@@ -18,7 +18,7 @@ report/    Rust crate — checks the vectors, emits proofs, renders the evidence
 
 | Direction | Producer | Checker | Files |
 |---|---|---|---|
-| Go → Rust | `interop/go/cmd/gen` | `cargo test` via `kt_interop::check` | `vectors/{commitment,ibst,binary-ladder,log-tree,prefix-tree}.json` |
+| Go → Rust | `interop/go/cmd/gen` | `cargo test` via `kt_interop::check` | `vectors/*.json` except `from-kt.json` |
 | Rust → Go | `kt-interop-emit` | `interop/go/cmd/verify` | `vectors/from-kt.json` |
 
 The second is not symmetry for its own sake. Recomputing the peer's values cannot
@@ -154,12 +154,14 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `log-math.json` | log tree structure, in node indices | §3.2, §4.2, §12.1 | 1679 decompositions |
 | `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
 | `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
+| `prefix-mutation.json` | prefix tree before/after an audited update | §15.2, §3.3 | 8 update shapes |
+| `auditor-update.json` | `AuditorUpdate` bytes + the auditor's verdict | §15.2 | 12, 8 negative |
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `tree-head.json` | configuration + signatures | §11.2–§11.4 | 9, all three modes |
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
-| `from-kt.json` | must accept / must reject, in reverse | as above | 201, half negative |
+| `from-kt.json` | must accept / must reject, in reverse | as above | 209, roughly half negative |
 
 ## Two kinds of agreement
 
@@ -182,6 +184,25 @@ ranges; katie works in flat node indices, where leaf `i` is node `2i`. A balance
 subtree over `[start, start+len)` is node `2*start + len - 1`, and because a §12.1 proof
 only ever carries balanced subtree heads, that translation is total on exactly the
 values that matter. A range that failed to map would itself be the bug.
+
+## When the peer is the oracle and the peer is wrong
+
+`prefix-mutation.json` records two different answers from the same implementation: `after`
+is the root katie's own `Tree.Mutate` produces for the updated tree, and `peer_after` is
+what katie's `EvaluateBeforeAfter` reconstructs from the proof. On three of eight update
+shapes they differ, which is only visible because both are recorded.
+
+That is the general pattern worth reusing: when a peer contains both a *builder* and a
+*verifier* for the same value, take the builder as the oracle. A verifier is an opinion
+about what the bytes mean; a builder is what the log will actually publish. Where they
+disagree, the vector should carry both, and the check should compare against the builder
+while naming the verifier's answer in its label — a divergence recorded as data survives
+an upstream fix, and a divergence recorded as a failing check just makes CI red.
+
+The exception is a value the proof genuinely does not determine, where there is no fact to
+appeal to. `sibling_uncovered` marks those cases: two implementations can only be asked to
+agree on the same assumption, so the check compares against `peer_after` and the vector's
+`after` shows whether the assumption happened to hold. See `docs/interop.md`.
 
 ## When a suite has a thousand cases
 

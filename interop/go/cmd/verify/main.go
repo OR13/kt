@@ -27,6 +27,7 @@ import (
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
+	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
 // file mirrors what kt-interop-emit writes.
@@ -62,7 +63,21 @@ type caseEnvelope struct {
 	Searches []search `json:"searches"`
 	Proof    string   `json:"proof"`
 
+	// prefix-mutation
+	Added   []leaf `json:"added"`
+	Removed []leaf `json:"removed"`
+	Before  string `json:"before"`
+	After   string `json:"after"`
+
+	// auditor-update
+	Encoding string `json:"encoding"`
+
 	Root string `json:"root"`
+}
+
+type leaf struct {
+	VrfOutput  string `json:"vrf_output"`
+	Commitment string `json:"commitment"`
 }
 
 type search struct {
@@ -109,6 +124,10 @@ func main() {
 			err = checkLogTree(cs, c)
 		case "prefix-tree":
 			err = checkPrefixTree(cs, c)
+		case "prefix-mutation":
+			err = checkPrefixMutation(cs, c)
+		case "auditor-update":
+			err = checkAuditorUpdate(cs, c)
 		default:
 			fatalf("case %q: unknown kind %q", c.Name, c.Kind)
 		}
@@ -142,6 +161,101 @@ func main() {
 	if failures > 0 {
 		os.Exit(1)
 	}
+}
+
+// checkPrefixMutation replays a §15.2 update through katie's own EvaluateBeforeAfter and
+// requires it to land on both roots the Rust side computed.
+//
+// Only the shapes where the two implementations are known to agree are sent: katie does
+// not recognize §11.9's all-zero copath element as an empty subtree, and it refuses a
+// replacement outright, so those two are excluded by the emitter rather than expected to
+// fail here. Both are recorded in ../../vectors/prefix-mutation.json and written up in
+// ../../../docs/interop.md — this direction is for checking agreement, not for restating
+// a divergence the other direction already pins.
+func checkPrefixMutation(cs suites.CipherSuite, c caseEnvelope) error {
+	added, err := unhexLeaves(c.Added)
+	if err != nil {
+		return fmt.Errorf("added: %w", err)
+	}
+	removed, err := unhexLeaves(c.Removed)
+	if err != nil {
+		return fmt.Errorf("removed: %w", err)
+	}
+	wantBefore, err := hex.DecodeString(c.Before)
+	if err != nil {
+		return fmt.Errorf("before: %w", err)
+	}
+	wantAfter, err := hex.DecodeString(c.After)
+	if err != nil {
+		return fmt.Errorf("after: %w", err)
+	}
+	raw, err := hex.DecodeString(c.Proof)
+	if err != nil {
+		return fmt.Errorf("proof: %w", err)
+	}
+	buf := bytes.NewBuffer(raw)
+	proof, err := prefix.NewPrefixProof(cs, buf)
+	if err != nil {
+		return fmt.Errorf("parsing the proof: %w", err)
+	} else if buf.Len() != 0 {
+		return fmt.Errorf("%d bytes left after the proof", buf.Len())
+	}
+
+	before, after, err := prefix.EvaluateBeforeAfter(cs, added, removed, proof)
+	if err != nil {
+		return fmt.Errorf("evaluating: %w", err)
+	}
+	if !bytes.Equal(before, wantBefore) {
+		return errors.New("the root before the update does not match")
+	}
+	if !bytes.Equal(after, wantAfter) {
+		return errors.New("the root after the update does not match")
+	}
+	return nil
+}
+
+// checkAuditorUpdate parses an `AuditorUpdate` the Rust side encoded and re-marshals it,
+// which is the only direction that tests katie's *decoder* against our encoder. The
+// element-counted `PrefixLeaf added<0..2^16-1>` vectors are the reason to bother: a
+// decoder reading that bound as a byte count would still consume a plausible-looking
+// message off these bytes, just a different one.
+func checkAuditorUpdate(cs suites.CipherSuite, c caseEnvelope) error {
+	raw, err := hex.DecodeString(c.Encoding)
+	if err != nil {
+		return fmt.Errorf("encoding: %w", err)
+	}
+	buf := bytes.NewBuffer(raw)
+	update, err := structs.NewAuditorUpdate(cs, buf)
+	if err != nil {
+		return fmt.Errorf("parsing: %w", err)
+	} else if buf.Len() != 0 {
+		return fmt.Errorf("%d bytes left after the update", buf.Len())
+	}
+
+	var out bytes.Buffer
+	if err := update.Marshal(&out); err != nil {
+		return fmt.Errorf("re-marshalling: %w", err)
+	}
+	if !bytes.Equal(out.Bytes(), raw) {
+		return errors.New("re-marshalling produced different bytes")
+	}
+	return nil
+}
+
+func unhexLeaves(leaves []leaf) ([]prefix.Entry, error) {
+	out := make([]prefix.Entry, 0, len(leaves))
+	for i, l := range leaves {
+		vrfOutput, err := hex.DecodeString(l.VrfOutput)
+		if err != nil {
+			return nil, fmt.Errorf("leaf %d vrf_output: %w", i, err)
+		}
+		commitment, err := hex.DecodeString(l.Commitment)
+		if err != nil {
+			return nil, fmt.Errorf("leaf %d commitment: %w", i, err)
+		}
+		out = append(out, prefix.Entry{VrfOutput: vrfOutput, Commitment: commitment})
+	}
+	return out, nil
 }
 
 // checkLogTree runs one batch proof through katie's log verifier (draft §12.1).

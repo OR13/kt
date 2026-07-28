@@ -116,6 +116,16 @@ pub enum Error {
     },
     /// The proof evaluated to a different root than the one supplied.
     RootMismatch,
+    /// A change had to be applied inside a subtree the proof did not cover (§15.2).
+    ///
+    /// Reached when a removed leaf's sibling is an unknown copath hash: §3.3's
+    /// canonical form would promote that sibling, and an unknown cannot be promoted.
+    /// Returning a root computed without the collapse would be returning one that does
+    /// not match the tree the log built.
+    UncoveredSibling {
+        /// The depth at which the uncovered subtree sits.
+        depth: usize,
+    },
     /// A terminal node sits deeper than §12.2's `uint8 depth` can express.
     ///
     /// Reachable only when two search keys agree on their first 255 bits, which puts
@@ -163,6 +173,11 @@ impl fmt::Display for Error {
                 write!(f, "proof needs {expected} copath elements, got {actual}")
             }
             Self::RootMismatch => f.write_str("proof does not evaluate to the expected root"),
+            Self::UncoveredSibling { depth } => write!(
+                f,
+                "a change at depth {depth} falls in a subtree the proof does not cover, so \
+                 the resulting tree cannot be canonicalized"
+            ),
             Self::DepthOverflow { depth } => write!(
                 f,
                 "terminal node is at depth {depth}, which the uint8 depth field of §12.2 \
@@ -339,18 +354,13 @@ impl PrefixTree {
     ///
     /// # Errors
     ///
-    /// [`Error::DuplicateSearch`] if a key appears twice.
+    /// Any error [`PrefixTree::search`] reports.
     pub fn prove(&self, suite: CipherSuite, keys: &[HashValue]) -> Result<PrefixProof> {
-        for (i, key) in keys.iter().enumerate() {
-            if keys
-                .iter()
-                .skip(i.saturating_add(1))
-                .any(|other| other == key)
-            {
-                return Err(Error::DuplicateSearch { key: *key });
-            }
-        }
-
+        // Repeats are allowed and answered once per request. A plain batch search has no
+        // reason to send one, but a §15.2 update does: the proof covers `added` then
+        // `removed`, and a replacement names the same key in both. §12.2 pairs results
+        // with requests positionally, so the repeat costs an extra result and nothing
+        // else. The Go peer's prover does the same.
         let mut results = Vec::new();
         for key in keys {
             results.push(self.search(key)?);
@@ -547,21 +557,38 @@ pub fn evaluate(
     entries: &[SearchEntry],
     proof: &PrefixProof,
 ) -> Result<HashValue> {
+    Ok(build_skeleton(entries, proof, false)?.value(suite))
+}
+
+/// Reconstructs the partial tree a proof describes, with its copath filled in.
+///
+/// Shared by [`evaluate`] and [`evaluate_before_after`]: the second needs the skeleton
+/// itself rather than just its root, because it goes on to modify it.
+fn build_skeleton(
+    entries: &[SearchEntry],
+    proof: &PrefixProof,
+    allow_repeats: bool,
+) -> Result<Skeleton> {
     if entries.len() != proof.results.len() {
         return Err(Error::ResultCount {
             expected: entries.len(),
             actual: proof.results.len(),
         });
     }
-    for (i, entry) in entries.iter().enumerate() {
-        let repeated = entries
-            .iter()
-            .skip(i.saturating_add(1))
-            .any(|other| other.vrf_output == entry.vrf_output);
-        if repeated {
-            return Err(Error::DuplicateSearch {
-                key: entry.vrf_output,
-            });
+    // A plain batch search may not repeat a key — the mapping from results back to
+    // requests would be ambiguous. A §15.2 mutation may: "a VRF output in `added` is
+    // also allowed to be in `removed`", which is how a value is replaced.
+    if !allow_repeats {
+        for (i, entry) in entries.iter().enumerate() {
+            let repeated = entries
+                .iter()
+                .skip(i.saturating_add(1))
+                .any(|other| other.vrf_output == entry.vrf_output);
+            if repeated {
+                return Err(Error::DuplicateSearch {
+                    key: entry.vrf_output,
+                });
+            }
         }
     }
 
@@ -581,7 +608,7 @@ pub fn evaluate(
         });
     }
 
-    Ok(root.value(suite))
+    Ok(root)
 }
 
 /// Checks that `proof` proves `entries` against `root` (§12.2).
@@ -1178,10 +1205,13 @@ mod tests {
             evaluate(SUITE, &repeated, &proof),
             Err(Error::DuplicateSearch { key: keys[0] })
         );
-        assert_eq!(
-            tree.prove(SUITE, &[keys[0], keys[0]]),
-            Err(Error::DuplicateSearch { key: keys[0] })
-        );
+        // The prover answers a repeat rather than refusing it: §15.2 needs one, and
+        // §12.2 pairs results with requests positionally, so the extra result is
+        // unambiguous. Only [`evaluate`] refuses, above, because a plain batch search
+        // reading two results for one key cannot say which is the answer.
+        let doubled = tree.prove(SUITE, &[keys[0], keys[0]]).unwrap();
+        assert_eq!(doubled.results.len(), 2);
+        assert_eq!(doubled.results[0], doubled.results[1]);
     }
 }
 
@@ -1391,5 +1421,595 @@ mod error_tests {
         assert!(bit(&key, KEY_BITS - 1));
         assert!(!bit(&key, KEY_BITS));
         assert!(!bit(&key, usize::MAX));
+    }
+}
+
+/// The root of the tree before and after a batch of insertions and removals
+/// (§15.2 steps 6 and 7).
+///
+/// An auditor never holds the prefix tree. It is sent an `AuditorUpdate` — the leaves
+/// added, the leaves removed, and one batch proof covering all of their search keys in
+/// the *previous* log entry's tree — and from that it has to reconstruct two roots: the
+/// one it should already have, and the one the new log entry claims.
+///
+/// So this walks the same skeleton [`evaluate`] builds, hashes it once for the
+/// "before" root, then applies the changes to that skeleton and hashes it again.
+/// `proof.results` must cover the additions first and then the removals, in the order
+/// given (§15.2).
+///
+/// # Canonical form
+///
+/// Applying a change is not just replacing nodes: §3.3's tree has a canonical shape,
+/// where intermediate nodes exist only as far down as two keys share a prefix. So a
+/// leaf that gains a neighbour is pushed down until the keys diverge, and a parent left
+/// with one leaf and one empty child collapses back into the leaf. Skip the collapse and
+/// the root comes out wrong for anything but the simplest update.
+///
+/// # A limit worth knowing about
+///
+/// The collapse needs to *see* the sibling. If a removal empties a slot whose sibling is
+/// a bare copath hash, there is no way to tell whether that sibling is a leaf that should
+/// now be promoted — and §15.2's proof covers "all search keys referenced by `added` or
+/// `removed`", which never includes the sibling of a removed leaf. So for those updates
+/// the "after" root is not a function of the data the auditor holds. This returns the
+/// root that assumes no collapse, which is what the Go peer returns, and records the
+/// assumption in [`Mutation::assumed_no_collapse`] so a caller that cannot tolerate it
+/// can decline. It is not tolerable for an auditor: signing an `AuditorTreeHead` over a
+/// guessed root publishes a root no user can reproduce. Written up in `docs/interop.md`.
+///
+/// # Errors
+///
+/// [`Error::ResultCount`] if the proof does not answer every key, plus anything
+/// [`evaluate`] reports.
+pub fn evaluate_before_after(
+    suite: CipherSuite,
+    added: &[PrefixLeaf],
+    removed: &[PrefixLeaf],
+    proof: &PrefixProof,
+) -> Result<Mutation> {
+    // §15.2: the proof answers the additions first, then the removals. Both are
+    // searches of the tree *before* the update, so the commitment each entry
+    // contributes has to be the one that tree held. For a plain addition the result is
+    // a non-inclusion and the commitment goes unused. For a replacement -- the same
+    // key in `added` and `removed`, which §15.2 explicitly allows -- the result is an
+    // inclusion of the value being replaced, so the entry must carry the *removed*
+    // commitment. Taking it from `added` would reconstruct a "before" root the log
+    // never published.
+    let mut entries: Vec<SearchEntry> = Vec::new();
+    for leaf in added {
+        let previous = removed.iter().find(|old| old.vrf_output == leaf.vrf_output);
+        let commitment = previous.map_or(leaf.commitment, |old| old.commitment);
+        entries.push(SearchEntry::included(leaf.vrf_output, commitment));
+    }
+    for leaf in removed {
+        entries.push(SearchEntry::included(leaf.vrf_output, leaf.commitment));
+    }
+
+    let mut skeleton = build_skeleton(&entries, proof, true)?;
+    let before = skeleton.value(suite);
+
+    let removed_keys: Vec<HashValue> = removed.iter().map(|leaf| leaf.vrf_output).collect();
+    // An addition that is also a removal is a replacement, and §15.2 permits it: apply
+    // the removal first, then the addition, which is what recursing with both does.
+    let mut assumed_no_collapse = None;
+    apply(
+        &mut skeleton,
+        added,
+        &removed_keys,
+        0,
+        &mut assumed_no_collapse,
+    )?;
+    let after = skeleton.value(suite);
+
+    Ok(Mutation {
+        before,
+        after,
+        assumed_no_collapse,
+    })
+}
+
+/// The two roots a §15.2 update implies, and whether reaching the second one required
+/// an assumption the proof does not justify.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Mutation {
+    /// The root of the tree the proof was drawn from (§15.2 step 6).
+    pub before: HashValue,
+    /// The root of the tree the update produces (§15.2 step 7).
+    pub after: HashValue,
+    /// Set when a removal emptied a slot beside a sibling the proof does not identify,
+    /// to the shallowest depth at which that happened. `after` then assumes the sibling
+    /// is a parent, so that no §3.3 collapse is needed. When the sibling is in fact a
+    /// leaf the assumption is wrong and `after` is not the tree's root, which is why
+    /// [`Mutation::determined`] exists.
+    pub assumed_no_collapse: Option<usize>,
+}
+
+impl Mutation {
+    /// Whether `after` follows from the proof alone.
+    ///
+    /// An auditor must check this before signing: §15.2's structural checks say nothing
+    /// about it, and a signature over a guessed root is worse than no signature.
+    #[must_use]
+    pub const fn determined(&self) -> bool {
+        self.assumed_no_collapse.is_none()
+    }
+}
+
+/// Recognizes a copath element that identifies its subtree as empty. §11.9 represents
+/// an absent subtree by the all-zero stand-in, and no real node hash can be zero, so an
+/// `Unknown` holding it is not opaque after all. Resolving it matters for §15.2: it is
+/// the difference between knowing a removal emptied the last leaf under a parent and
+/// having to refuse the update.
+fn resolve_absent(node: &mut Skeleton) {
+    if let Skeleton::Unknown(value) = node {
+        if value.is_none() || *value == Some(HashValue::ZERO) {
+            *node = Skeleton::Empty;
+        }
+    }
+}
+
+/// Applies additions and removals to a reconstructed skeleton, keeping §3.3's
+/// canonical shape.
+fn apply(
+    node: &mut Skeleton,
+    add: &[PrefixLeaf],
+    remove: &[HashValue],
+    depth: usize,
+    assumed: &mut Option<usize>,
+) -> Result<()> {
+    if add.is_empty() && remove.is_empty() {
+        // Untouched: whatever it is, it hashes as it stands.
+        return Ok(());
+    }
+    if depth > KEY_BITS {
+        // Unreachable for distinct keys, which is guaranteed by the duplicate checks
+        // in `build_skeleton`.
+        return Err(Error::DepthOverflow { depth });
+    }
+
+    match node {
+        // The proof did not cover this subtree, so a change routed into it has nowhere
+        // to go. Unlike the canonicalization case below this one is not a judgement
+        // call: the update names a key the proof does not answer for, which §15.2
+        // requires it to.
+        Skeleton::Unknown(_) => Err(Error::UncoveredSibling { depth }),
+
+        Skeleton::Empty => {
+            match add.len() {
+                0 => Ok(()),
+                // §3.3: "a new leaf is simply added as the parent's missing child".
+                1 => {
+                    if let Some(leaf) = add.first() {
+                        *node = Skeleton::Leaf(*leaf);
+                    }
+                    Ok(())
+                }
+                // More than one key here, so they need separating first.
+                _ => {
+                    *node = Skeleton::Parent(Box::new(Skeleton::Empty), Box::new(Skeleton::Empty));
+                    apply(node, add, &[], depth, assumed)
+                }
+            }
+        }
+
+        Skeleton::Leaf(leaf) => {
+            let existing = *leaf;
+            if remove.contains(&existing.vrf_output) {
+                *node = Skeleton::Empty;
+                return apply(node, add, &[], depth, assumed);
+            }
+            if add.is_empty() {
+                return Ok(());
+            }
+            // Kept, but in the way: push it down a level and let the recursion sort
+            // the keys out (§3.3's "one or more intermediate nodes are added").
+            let (left, right) = if bit(&existing.vrf_output, depth) {
+                (Skeleton::Empty, Skeleton::Leaf(existing))
+            } else {
+                (Skeleton::Leaf(existing), Skeleton::Empty)
+            };
+            *node = Skeleton::Parent(Box::new(left), Box::new(right));
+            apply(node, add, &[], depth, assumed)
+        }
+
+        Skeleton::Parent(left, right) => {
+            resolve_absent(left);
+            resolve_absent(right);
+            let mut going_left = Vec::new();
+            let mut going_right = Vec::new();
+            for leaf in add {
+                if bit(&leaf.vrf_output, depth) {
+                    going_right.push(*leaf);
+                } else {
+                    going_left.push(*leaf);
+                }
+            }
+            let mut removing_left = Vec::new();
+            let mut removing_right = Vec::new();
+            for key in remove {
+                if bit(key, depth) {
+                    removing_right.push(*key);
+                } else {
+                    removing_left.push(*key);
+                }
+            }
+
+            let next = depth.saturating_add(1);
+            let removed_left = !removing_left.is_empty();
+            let removed_right = !removing_right.is_empty();
+            apply(left, &going_left, &removing_left, next, assumed)?;
+            apply(right, &going_right, &removing_right, next, assumed)?;
+
+            // A removal can empty one side while the other is a node the proof never
+            // identified. §3.3's canonical form promotes a lone leaf, so whether this
+            // parent survives depends on what that hash *is*, and the proof cannot say.
+            // Carry on assuming it is a parent — the same answer the Go peer gives —
+            // but record the depth so the caller knows the root was not derived.
+            //
+            // Before any removal the same shape is unambiguous: a canonical tree has no
+            // parent with one leaf and one empty child, so an unknown beside an empty
+            // slot must be a parent and the node stands as it is. That is why this only
+            // fires where a removal actually happened.
+            let emptied_beside_unknown = (removed_left
+                && matches!(left.as_ref(), Skeleton::Empty)
+                && matches!(right.as_ref(), Skeleton::Unknown(_)))
+                || (removed_right
+                    && matches!(right.as_ref(), Skeleton::Empty)
+                    && matches!(left.as_ref(), Skeleton::Unknown(_)));
+            if emptied_beside_unknown && assumed.is_none_or(|shallowest| depth < shallowest) {
+                *assumed = Some(depth);
+            }
+
+            // Canonicalize: §3.3 grows intermediate nodes only as far as two keys
+            // share a prefix, so a parent with nothing beside one leaf is that leaf.
+            let collapsed = match (left.as_ref(), right.as_ref()) {
+                (Skeleton::Leaf(only), Skeleton::Empty)
+                | (Skeleton::Empty, Skeleton::Leaf(only)) => Some(Skeleton::Leaf(*only)),
+                (Skeleton::Empty, Skeleton::Empty) => Some(Skeleton::Empty),
+                _ => None,
+            };
+            if let Some(replacement) = collapsed {
+                *node = replacement;
+            }
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod mutation_tests {
+    use super::tests::SUITE;
+    use super::*;
+
+    fn leaf(first: u8, second: u8, tag: u8, commitment: u8) -> PrefixLeaf {
+        let mut key = [0_u8; 32];
+        key[0] = first;
+        key[1] = second;
+        key[31] = tag;
+        PrefixLeaf {
+            vrf_output: HashValue::from_bytes(key),
+            commitment: HashValue::from_bytes([commitment; 32]),
+        }
+    }
+
+    fn tree_of(leaves: &[PrefixLeaf]) -> PrefixTree {
+        let mut tree = PrefixTree::new();
+        tree.extend(leaves.iter().copied()).unwrap();
+        tree
+    }
+
+    /// Additions: the "before" root is the tree the proof came from and the "after"
+    /// root is the tree with the new leaves in it, both checked by actually building
+    /// the two trees. That is the only way to know the reconstruction is right rather
+    /// than merely self-consistent.
+    #[test]
+    fn additions_reach_the_real_after_root() {
+        let existing = [leaf(0x00, 0, 1, 0xa1), leaf(0x80, 0, 2, 0xb2)];
+        let added = [leaf(0x40, 0, 3, 0xc3), leaf(0xc0, 0, 4, 0xd4)];
+
+        let before_tree = tree_of(&existing);
+        let mut after_leaves = existing.to_vec();
+        after_leaves.extend_from_slice(&added);
+        let after_tree = tree_of(&after_leaves);
+
+        let keys: Vec<HashValue> = added.iter().map(|l| l.vrf_output).collect();
+        let proof = before_tree.prove(SUITE, &keys).unwrap();
+
+        let got = evaluate_before_after(SUITE, &added, &[], &proof).unwrap();
+        assert_eq!(
+            got.before,
+            before_tree.root(SUITE),
+            "the tree the proof came from"
+        );
+        assert_eq!(
+            got.after,
+            after_tree.root(SUITE),
+            "the tree after the additions"
+        );
+        assert!(got.determined(), "an addition never needs a collapse");
+    }
+
+    /// An addition that pushes an existing leaf further down: §3.3 grows intermediate
+    /// nodes until the keys diverge, and skipping that gives a wrong root.
+    #[test]
+    fn an_addition_that_pushes_a_leaf_down() {
+        let existing = [leaf(0x00, 0x00, 1, 0xa1), leaf(0x80, 0, 9, 0xe5)];
+        let added = [leaf(0x00, 0x40, 2, 0xb2)];
+
+        let before_tree = tree_of(&existing);
+        let mut after_leaves = existing.to_vec();
+        after_leaves.extend_from_slice(&added);
+        let after_tree = tree_of(&after_leaves);
+
+        let keys: Vec<HashValue> = added.iter().map(|l| l.vrf_output).collect();
+        let proof = before_tree.prove(SUITE, &keys).unwrap();
+        let got = evaluate_before_after(SUITE, &added, &[], &proof).unwrap();
+        assert_eq!(got.before, before_tree.root(SUITE));
+        assert_eq!(got.after, after_tree.root(SUITE));
+        assert!(got.determined());
+    }
+
+    /// Removing the only leaf empties the tree, whose root is §11.9's stand-in.
+    #[test]
+    fn removing_the_only_leaf_empties_the_tree() {
+        let only = leaf(0x00, 0, 1, 0xa1);
+        let tree = tree_of(&[only]);
+        let proof = tree.prove(SUITE, &[only.vrf_output]).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &[only], &proof).unwrap();
+        assert_eq!(got.before, tree.root(SUITE));
+        assert_eq!(
+            got.after,
+            HashValue::ZERO,
+            "an empty prefix tree hashes to the stand-in"
+        );
+        assert!(got.determined(), "nothing was left beside the emptied slot");
+    }
+
+    /// Removing every leaf under a parent. Determinable, and the case where the Go peer
+    /// is wrong for a reason that has nothing to do with the ambiguity below: the
+    /// sibling slot here is supplied as a copath element equal to §11.9's all-zero
+    /// stand-in, which *does* identify it as empty, so the parent collapses away and the
+    /// tree is empty. Measured against katie at pin `00da5254`: it returns
+    /// `dc48a742…` where the tree's root is the stand-in, because it treats every
+    /// copath element as an opaque node that blocks the collapse.
+    #[test]
+    fn removing_every_leaf_empties_the_tree() {
+        let leaves = [leaf(0x00, 0, 1, 0xa1), leaf(0x40, 0, 2, 0xb2)];
+        let tree = tree_of(&leaves);
+        let keys: Vec<HashValue> = leaves.iter().map(|l| l.vrf_output).collect();
+        let proof = tree.prove(SUITE, &keys).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &leaves, &proof).unwrap();
+        assert_eq!(got.before, tree.root(SUITE));
+        assert_eq!(got.after, HashValue::ZERO);
+        assert!(
+            got.determined(),
+            "a zero copath element identifies an empty subtree"
+        );
+    }
+
+    /// A removal whose slot an addition refills. The slot never becomes empty, so no
+    /// canonicalization is in question and the reconstruction is exact even though the
+    /// sibling is a hash the proof does not identify.
+    #[test]
+    fn a_removal_whose_slot_an_addition_refills() {
+        let leaves = [
+            leaf(0x00, 0, 1, 0xa1),
+            leaf(0x40, 0, 2, 0xb2),
+            leaf(0x80, 0, 3, 0xc3),
+        ];
+        let before_tree = tree_of(&leaves);
+        let target = leaves[0];
+        // 0x20 shares the first two bits with 0x00, so it lands in the emptied slot.
+        let added = leaf(0x20, 0, 4, 0xd4);
+        let after_tree = tree_of(&[added, leaves[1], leaves[2]]);
+
+        // The batch searched 0x20 (absent) and 0x00 (present), in that order.
+        let proof = before_tree
+            .prove(SUITE, &[added.vrf_output, target.vrf_output])
+            .unwrap();
+        let got = evaluate_before_after(SUITE, &[added], &[target], &proof).unwrap();
+        assert_eq!(got.before, before_tree.root(SUITE));
+        assert_eq!(got.after, after_tree.root(SUITE));
+        assert!(got.determined());
+    }
+
+    /// A key that is both removed and added is a replacement, which §15.2 permits: "a
+    /// VRF output in `added` is also allowed to be in `removed`". The removal applies
+    /// first, and no collapse is needed because the slot does not become empty.
+    ///
+    /// katie cannot do this at all — its `EvaluateBeforeAfter` runs the combined
+    /// `added ++ removed` list through the duplicate check that a plain batch search
+    /// needs, and fails with "same vrf output present multiple times". Measured at pin
+    /// `00da5254`.
+    #[test]
+    fn replacing_a_leaf_keeps_its_position() {
+        let leaves = [
+            leaf(0x00, 0, 1, 0xa1),
+            leaf(0x40, 0, 2, 0xb2),
+            leaf(0x80, 0, 3, 0xc3),
+        ];
+        let before_tree = tree_of(&leaves);
+
+        let old = leaves[0];
+        let new = PrefixLeaf {
+            vrf_output: old.vrf_output,
+            commitment: HashValue::from_bytes([0xff; 32]),
+        };
+        let mut after_leaves = leaves.to_vec();
+        after_leaves[0] = new;
+        let after_tree = tree_of(&after_leaves);
+
+        // The same key appears in both lists, so the batch searched it once and the
+        // one result answers both entries.
+        let proof = before_tree.prove(SUITE, &[old.vrf_output]).unwrap();
+        let mut doubled = proof.clone();
+        doubled.results.push(proof.results[0]);
+
+        let got = evaluate_before_after(SUITE, &[new], &[old], &doubled)
+            .unwrap_or_else(|err| panic!("replacement should reconstruct: {err}"));
+        assert_eq!(got.before, before_tree.root(SUITE));
+        assert_eq!(got.after, after_tree.root(SUITE));
+        assert!(got.determined());
+
+        // A plain batch search still rejects the repeat: there the mapping from results
+        // back to requests would be ambiguous.
+        let entry = SearchEntry::included(old.vrf_output, old.commitment);
+        assert!(matches!(
+            evaluate(SUITE, &[entry, entry], &doubled),
+            Err(Error::DuplicateSearch { .. })
+        ));
+    }
+
+    /// The case §15.2 cannot express, and the one that matters. The removed leaf's
+    /// sibling is a leaf, so §3.3's canonical form would promote it — but the sibling is
+    /// a copath hash the proof does not identify, and there is no way to ask for it:
+    /// `proof.results` corresponds exactly to `added` then `removed`, so a node that is
+    /// neither can never appear.
+    ///
+    /// The root this returns is therefore *not* the tree's root, and neither is the Go
+    /// peer's: katie returns the same value we do here (measured at pin `00da5254`),
+    /// which is what makes this a specification problem rather than an implementation
+    /// bug. An auditor that signs it publishes an `AuditorTreeHead` over a root no user
+    /// can reproduce, so `determined()` is false and the auditor layer must decline.
+    #[test]
+    fn removing_a_leaf_beside_a_leaf_is_not_determined() {
+        let leaves = [
+            leaf(0x00, 0, 1, 0xa1),
+            leaf(0x40, 0, 2, 0xb2),
+            leaf(0x80, 0, 3, 0xc3),
+        ];
+        let before_tree = tree_of(&leaves);
+        let after_tree = tree_of(&leaves[1..]);
+        let target = leaves[0];
+        let proof = before_tree.prove(SUITE, &[target.vrf_output]).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &[target], &proof).unwrap();
+        assert_eq!(
+            got.before,
+            before_tree.root(SUITE),
+            "the before root is recoverable"
+        );
+        assert_eq!(
+            got.assumed_no_collapse,
+            Some(1),
+            "the emptied slot is at depth 2, so the parent that cannot collapse is at 1"
+        );
+        assert_ne!(
+            got.after,
+            after_tree.root(SUITE),
+            "and the assumed root is not the one the tree takes"
+        );
+    }
+
+    /// Removing a leaf beside an uncovered *parent*. The real tree needs no collapse
+    /// here, so assuming none happens to give the right root — but the proof does not
+    /// say that, and the identical shape one test up gives the wrong one. So the root
+    /// matches and `determined()` is still false: agreement here is luck, not evidence.
+    #[test]
+    fn removing_a_leaf_beside_a_parent_is_right_but_still_not_determined() {
+        let leaves = [
+            leaf(0x00, 0, 1, 0xa1),
+            leaf(0x40, 0, 2, 0xb2),
+            leaf(0x60, 0, 3, 0xc3),
+            leaf(0x80, 0, 4, 0xd4),
+        ];
+        let before_tree = tree_of(&leaves);
+        let after_tree = tree_of(&leaves[1..]);
+        let target = leaves[0];
+        let proof = before_tree.prove(SUITE, &[target.vrf_output]).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &[target], &proof).unwrap();
+        assert_eq!(got.before, before_tree.root(SUITE));
+        assert_eq!(got.after, after_tree.root(SUITE), "right by luck");
+        assert_eq!(got.assumed_no_collapse, Some(1), "but not derived");
+    }
+
+    /// Removing a key the tree does not have changes nothing. The auditor rejects such
+    /// an update at §15.2 step 4, but this layer is asked only what the tree would look
+    /// like, and the answer is "the same".
+    #[test]
+    fn removing_an_absent_key_is_a_no_op() {
+        let leaves = [leaf(0x00, 0, 1, 0xa1), leaf(0x80, 0, 2, 0xb2)];
+        let tree = tree_of(&leaves);
+        let absent = leaf(0x40, 0, 9, 0xe5);
+        let proof = tree.prove(SUITE, &[absent.vrf_output]).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &[absent], &proof).unwrap();
+        assert_eq!(got.before, tree.root(SUITE));
+        assert_eq!(got.after, tree.root(SUITE));
+        assert!(got.determined());
+    }
+
+    /// Two removals, each beside a sibling the proof does not identify, at different
+    /// depths. The shallowest is reported: it is the one that puts the most of the tree
+    /// in question, so it is what a caller weighing whether to trust the root needs.
+    #[test]
+    fn the_shallowest_assumption_is_reported() {
+        // 0x00 and 0x20 diverge at bit 2, so their parent sits at depth 2; 0x80 and 0xc0
+        // diverge at bit 1, so theirs sits at depth 1. Removing one leaf from each pair
+        // leaves both parents holding an uncovered sibling.
+        let leaves = [
+            leaf(0x00, 0, 1, 0xa1),
+            leaf(0x20, 0, 2, 0xb2),
+            leaf(0x80, 0, 3, 0xc3),
+            leaf(0xc0, 0, 4, 0xd4),
+        ];
+        let tree = tree_of(&leaves);
+        let removed = [leaves[0], leaves[2]];
+        let keys: Vec<HashValue> = removed.iter().map(|l| l.vrf_output).collect();
+        let proof = tree.prove(SUITE, &keys).unwrap();
+
+        let got = evaluate_before_after(SUITE, &[], &removed, &proof).unwrap();
+        assert_eq!(
+            got.assumed_no_collapse,
+            Some(1),
+            "the shallower of depths 1 and 2"
+        );
+    }
+
+    /// `apply` refuses to route a change into a node the proof left opaque. No proof
+    /// reaches it — `build_skeleton` builds a path for every key the update names, so
+    /// each one terminates in a node the results identified — so this drives `apply`
+    /// directly. The guard is here to keep that an invariant of `apply` rather than an
+    /// assumption it inherits from its only caller.
+    #[test]
+    fn applying_a_change_to_an_opaque_node_is_refused() {
+        let target = leaf(0x00, 0, 1, 0xa1);
+        let opaque = HashValue::from_bytes([0x11; 32]);
+
+        let mut node = Skeleton::Unknown(Some(opaque));
+        let mut assumed = None;
+        assert!(matches!(
+            apply(&mut node, &[], &[target.vrf_output], 0, &mut assumed),
+            Err(Error::UncoveredSibling { depth: 0 })
+        ));
+
+        let mut node = Skeleton::Unknown(Some(opaque));
+        assert!(matches!(
+            apply(&mut node, &[target], &[], 3, &mut assumed),
+            Err(Error::UncoveredSibling { depth: 3 })
+        ));
+    }
+
+    /// Two keys that agree on all 256 bits cannot be separated, so an update naming
+    /// both runs out of tree. §12.2's `uint8 depth` cannot express 256 either.
+    #[test]
+    fn an_update_that_runs_past_the_key_is_refused() {
+        let target = leaf(0x00, 0, 1, 0xa1);
+        let mut node = Skeleton::Empty;
+        let mut assumed = None;
+        assert!(matches!(
+            apply(&mut node, &[target], &[], KEY_BITS + 1, &mut assumed),
+            Err(Error::DepthOverflow { .. })
+        ));
     }
 }
