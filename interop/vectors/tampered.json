@@ -1,6 +1,6 @@
 {
   "primitive": "tampered",
-  "draft": "draft-ietf-keytrans-protocol-05 §11.6, §11.7, §12.1, §12.2",
+  "draft": "draft-ietf-keytrans-protocol-05 §11.2, §11.6, §11.7, §12.1, §12.2",
   "generator": {
     "impl": "katie",
     "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
@@ -408,6 +408,82 @@
       "expect": {
         "error": true,
         "tamper": "a different value opened against the same commitment"
+      }
+    },
+    {
+      "name": "tree-head-flipped-signature",
+      "input": {
+        "kind": "tree-head",
+        "max_ahead": 10000,
+        "max_behind": 10000,
+        "mode": 1,
+        "reasonable_monitoring_window": 604800000,
+        "root": "0808080808080808080808080808080808080808080808080808080808080808",
+        "signature": "d4cefc9b5fa202e3ba715c5ae0ca4a879a94fb7ac62c96ff2c8b6f5d5abf652558f562fc25d7965ec384ec130a88ee4e424b9016051f486de9a4fdd58067f90c",
+        "signature_public_key": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+        "tree_size": 8,
+        "vrf_public_key": "555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b3858609"
+      },
+      "expect": {
+        "error": true,
+        "tamper": "one bit flipped in the tree head signature"
+      }
+    },
+    {
+      "name": "tree-head-wrong-key",
+      "input": {
+        "kind": "tree-head",
+        "max_ahead": 10000,
+        "max_behind": 10000,
+        "mode": 1,
+        "reasonable_monitoring_window": 604800000,
+        "root": "0808080808080808080808080808080808080808080808080808080808080808",
+        "signature": "d5cefc9b5fa202e3ba715c5ae0ca4a879a94fb7ac62c96ff2c8b6f5d5abf652558f562fc25d7965ec384ec130a88ee4e424b9016051f486de9a4fdd58067f90c",
+        "signature_public_key": "b2a942ff4c98718bed76e255987f6d59b1a72d3b2cd2510003e6170ac63a9ffb",
+        "tree_size": 8,
+        "vrf_public_key": "555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b3858609"
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a valid signature checked against a different public key"
+      }
+    },
+    {
+      "name": "tree-head-signature-from-another-key",
+      "input": {
+        "kind": "tree-head",
+        "max_ahead": 10000,
+        "max_behind": 10000,
+        "mode": 1,
+        "reasonable_monitoring_window": 604800000,
+        "root": "0808080808080808080808080808080808080808080808080808080808080808",
+        "signature": "c0a2f3755c0527a3a16365923e4e94ca43b04138648a6c4239b1bbafb3314b17696693cad1d4f3ba549ce5dce1b7272b8b3a9c6b3430e584dd788a4b926d0d0c",
+        "signature_public_key": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+        "tree_size": 8,
+        "vrf_public_key": "555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b3858609"
+      },
+      "expect": {
+        "error": true,
+        "tamper": "the head signed by a key other than the one the configuration names"
+      }
+    },
+    {
+      "name": "tree-head-signed-over-the-other-reading-of-11-2",
+      "input": {
+        "kind": "tree-head",
+        "max_ahead": 10000,
+        "max_behind": 10000,
+        "mode": 1,
+        "reasonable_monitoring_window": 604800000,
+        "root": "0808080808080808080808080808080808080808080808080808080808080808",
+        "signature": "bc9e16c37ff7c1d471922600517ddcc101988eee8886debaf4852c744232b1e9252c51bbe8057f3a8285515c8fc5ab8c8cfa891779ece6a2d24797f47fe4c50c",
+        "signature_public_key": "e2fe2a39b7326642827d6d82d497622cd6c297fe78270eaa436b01f086b6f3cb",
+        "tree_size": 8,
+        "vrf_public_key": "555f469c22188e90015bdd85b889678d459f86bdf8f7bd34971b10b9b3858609"
+      },
+      "expect": {
+        "error": true,
+        "tamper": "a signature valid over the grouped-case reading of §11.2, where a contactMonitoring Configuration carries leaf_public_key; it must not verify against the reading katie and the draft's prose use"
       }
     }
   ]

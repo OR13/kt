@@ -395,6 +395,18 @@ pub fn coverage_table() -> Vec<Area> {
             &["log-tree.json", "tampered.json"],
         ),
         verified(
+            "§11.2, §11.4",
+            "Configuration, TreeHead, and FullTreeHead verification",
+            "kt-crypto::signature",
+            &["tree-head.json"],
+        ),
+        verified(
+            "§11.3",
+            "AuditorTreeHead verification",
+            "kt-crypto::signature",
+            &["tree-head.json"],
+        ),
+        verified(
             "§3.3, §11.9, §12.2",
             "Prefix tree: root, membership and non-membership proofs",
             "kt-tree::prefix",

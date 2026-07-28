@@ -80,6 +80,7 @@ func main() {
 		{"vrf.json", vrfVectors},
 		{"log-tree.json", logTreeVectors},
 		{"prefix-tree.json", prefixTreeVectors},
+		{"tree-head.json", headVectors},
 		{"tampered.json", tamperedVectors},
 	}
 

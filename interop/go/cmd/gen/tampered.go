@@ -27,6 +27,7 @@ import (
 
 	"github.com/Bren2010/katie/crypto/commitments"
 	"github.com/Bren2010/katie/crypto/suites"
+	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
@@ -37,7 +38,7 @@ import (
 func tamperedVectors(sha string) (*File, error) {
 	f := &File{
 		Primitive:   "tampered",
-		Draft:       draftRev + " §11.6, §11.7, §12.1, §12.2",
+		Draft:       draftRev + " §11.2, §11.6, §11.7, §12.1, §12.2",
 		Generator:   Generator{Impl: "katie", SHA: sha},
 		CipherSuite: 0x0002, // KT_128_SHA256_Ed25519
 		Notes: "Proofs and openings that must be rejected. Each was built by katie, " +
@@ -73,6 +74,12 @@ func tamperedVectors(sha string) (*File, error) {
 		return nil, err
 	}
 	f.Cases = append(f.Cases, commitmentCases...)
+
+	headCases, err := tamperedHeadCases()
+	if err != nil {
+		return nil, err
+	}
+	f.Cases = append(f.Cases, headCases...)
 
 	return f, nil
 }
@@ -558,3 +565,150 @@ func clonePrefixProof(p *prefix.PrefixProof) *prefix.PrefixProof {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// tamperedHeadCases covers §11.2 and §11.4: signatures that must not verify.
+//
+// The last case is the interesting one. It is a signature that is perfectly valid
+// over the *other* reading of §11.2 — the grouped-case reading, where a
+// contactMonitoring Configuration carries leaf_public_key — presented to a verifier
+// that uses katie's reading. If the working group resolves the ambiguity the other
+// way, this case starts failing, which is exactly the signal you want: a vector that
+// turns a documentation question into a test result.
+func tamperedHeadCases() ([]Case, error) {
+	cs := suites.KTSha256Ed25519{}
+	out := make([]Case, 0)
+
+	logKey, err := cs.ParseSigningPrivateKey(repeat(0x71, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the log signing key: %w", err)
+	}
+	otherKey, err := cs.ParseSigningPrivateKey(repeat(0x7f, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the second signing key: %w", err)
+	}
+	leafKey, err := cs.ParseSigningPrivateKey(repeat(0x73, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the leaf signing key: %w", err)
+	}
+	vrfKey, err := edwards25519.NewPrivateKey(repeat(0x74, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the VRF key: %w", err)
+	}
+
+	public := &structs.PublicConfig{
+		SignatureKey: logKey.Public(),
+		VrfKey:       vrfKey.PublicKey(),
+		Config: structs.Config{
+			Suite:                      cs,
+			Mode:                       structs.ContactMonitoring,
+			MaxAhead:                   10000,
+			MaxBehind:                  10000,
+			ReasonableMonitoringWindow: 604800000,
+		},
+	}
+	configBytes, err := structs.Marshal(public)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling the configuration: %w", err)
+	}
+
+	const size uint64 = 8
+	root := repeat(byte(size), 32)
+	tbs := &bytes.Buffer{}
+	tbs.Write(configBytes)
+	writeNumericTo(tbs, size)
+	tbs.Write(root)
+	honest, err := logKey.Sign(tbs.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("signing: %w", err)
+	}
+
+	// A signature over a Configuration built the other way: the same fields, plus a
+	// length-prefixed leaf_public_key after the VRF key, which is where §11.2's
+	// grouped-case reading would put it.
+	alternative := &bytes.Buffer{}
+	alternative.Write(configBytes[:2])                      // cipher suite
+	alternative.WriteByte(configBytes[2])                   // mode
+	alternative.Write(configBytes[3 : 3+2+32])              // signature public key
+	alternative.Write(configBytes[3+2+32 : 3+2+32+2+32])    // vrf public key
+	writeUint16Bytes(alternative, leafKey.Public().Bytes()) // the disputed field
+	alternative.Write(configBytes[3+2+32+2+32:])            // durations and optional
+	altTbs := &bytes.Buffer{}
+	altTbs.Write(alternative.Bytes())
+	writeNumericTo(altTbs, size)
+	altTbs.Write(root)
+	altSignature, err := logKey.Sign(altTbs.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("signing the alternative reading: %w", err)
+	}
+
+	type variant struct {
+		name      string
+		tamper    string
+		publicKey []byte
+		signature []byte
+	}
+	variants := []variant{
+		{
+			name:      "tree-head-flipped-signature",
+			tamper:    "one bit flipped in the tree head signature",
+			publicKey: public.SignatureKey.Bytes(),
+			signature: flipByte(honest, 0),
+		},
+		{
+			name:      "tree-head-wrong-key",
+			tamper:    "a valid signature checked against a different public key",
+			publicKey: otherKey.Public().Bytes(),
+			signature: dup(honest),
+		},
+		{
+			name:      "tree-head-signature-from-another-key",
+			tamper:    "the head signed by a key other than the one the configuration names",
+			publicKey: public.SignatureKey.Bytes(),
+			signature: mustSign(otherKey, tbs.Bytes()),
+		},
+		{
+			name: "tree-head-signed-over-the-other-reading-of-11-2",
+			tamper: "a signature valid over the grouped-case reading of §11.2, where a " +
+				"contactMonitoring Configuration carries leaf_public_key; it must not " +
+				"verify against the reading katie and the draft's prose use",
+			publicKey: public.SignatureKey.Bytes(),
+			signature: altSignature,
+		},
+	}
+
+	for _, v := range variants {
+		parsed, err := cs.ParseSigningPublicKey(v.publicKey)
+		if err != nil {
+			return nil, fmt.Errorf("case %q: parsing the public key: %w", v.name, err)
+		}
+		if parsed.Verify(tbs.Bytes(), v.signature) {
+			return nil, fmt.Errorf("case %q: katie accepted it, so it is not a negative case", v.name)
+		}
+		out = append(out, Case{
+			Name: v.name,
+			Input: map[string]any{
+				"kind":                         "tree-head",
+				"mode":                         uint8(structs.ContactMonitoring),
+				"signature_public_key":         hex.EncodeToString(v.publicKey),
+				"vrf_public_key":               hex.EncodeToString(public.VrfKey.Bytes()),
+				"max_ahead":                    public.MaxAhead,
+				"max_behind":                   public.MaxBehind,
+				"reasonable_monitoring_window": public.ReasonableMonitoringWindow,
+				"tree_size":                    size,
+				"root":                         hex.EncodeToString(root),
+				"signature":                    hex.EncodeToString(v.signature),
+			},
+			Expect: map[string]any{"error": true, "tamper": v.tamper},
+		})
+	}
+
+	return out, nil
+}
+
+func mustSign(key suites.SigningPrivateKey, message []byte) []byte {
+	sig, err := key.Sign(message)
+	if err != nil {
+		return nil
+	}
+	return sig
+}

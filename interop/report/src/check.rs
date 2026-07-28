@@ -11,9 +11,13 @@ use std::path::{Path, PathBuf};
 
 use kt_crypto::commitment::{self, Commitment};
 use kt_crypto::suite::CipherSuite;
-use kt_crypto::vrf;
+use kt_crypto::{signature, vrf};
 use kt_tree::{ibst, ladder, log, prefix};
 use kt_wire::codec::Decoder;
+use kt_wire::heads::{
+    AuditorConfig, AuditorTreeHead, AuditorTreeHeadTBS, Configuration, FullTreeHead, TreeHead,
+    TreeHeadTBS,
+};
 use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
 use kt_wire::structs::{
     CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue, VrfInput,
@@ -21,19 +25,20 @@ use kt_wire::structs::{
 
 use crate::report::{Case, Check, Generator, Suite};
 use crate::vectors::{
-    CommitmentExpect, CommitmentInput, IbstExpect, IbstInput, LadderExpect, LadderInput,
-    LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, TamperedExpect, TamperedInput,
-    VectorFile, VrfCaseInput, VrfExpect,
+    CommitmentExpect, CommitmentInput, HeadExpect, HeadInput, IbstExpect, IbstInput, LadderExpect,
+    LadderInput, LogTreeExpect, LogTreeInput, PrefixTreeExpect, PrefixTreeInput, TamperedExpect,
+    TamperedInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 7] = [
+pub const FILES: [&str; 8] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
     "vrf.json",
     "log-tree.json",
     "prefix-tree.json",
+    "tree-head.json",
     "tampered.json",
 ];
 
@@ -147,6 +152,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         vrf_suite(dir)?,
         log_tree_suite(dir)?,
         prefix_tree_suite(dir)?,
+        head_suite(dir)?,
         tampered_suite(dir)?,
     ])
 }
@@ -1174,6 +1180,50 @@ fn tampered_suite(dir: &Path) -> Result<Suite, Error> {
                 };
                 ("vrf verify rejects it (§11.7)", got)
             }
+            TamperedInput::TreeHead {
+                mode,
+                signature_public_key,
+                vrf_public_key,
+                max_ahead,
+                max_behind,
+                reasonable_monitoring_window,
+                tree_size,
+                root,
+                signature,
+            } => {
+                let mode = DeploymentMode::from_u8(*mode).map_err(|_| Error::Computation {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    detail: format!("unknown deployment mode {mode}"),
+                })?;
+                let config = Configuration {
+                    cipher_suite: suite.code(),
+                    mode,
+                    signature_public_key: unhex(
+                        FILE,
+                        name,
+                        "signature_public_key",
+                        signature_public_key,
+                    )?,
+                    vrf_public_key: unhex(FILE, name, "vrf_public_key", vrf_public_key)?,
+                    leaf_public_key: None,
+                    auditor: None,
+                    max_ahead: *max_ahead,
+                    max_behind: *max_behind,
+                    reasonable_monitoring_window: *reasonable_monitoring_window,
+                    maximum_lifetime: None,
+                };
+                let head = TreeHead {
+                    tree_size: *tree_size,
+                    signature: unhex(FILE, name, "signature", signature)?,
+                };
+                let root = hash_field(FILE, name, "root", root)?;
+                let got = match signature::verify_tree_head(&config, &head, root) {
+                    Err(err) => format!("rejected: {err}"),
+                    Ok(()) => "accepted".to_owned(),
+                };
+                ("signature::verify_tree_head rejects it (§11.2)", got)
+            }
             TamperedInput::Commitment {
                 opening,
                 label,
@@ -1219,6 +1269,217 @@ fn tampered_suite(dir: &Path) -> Result<Suite, Error> {
     Ok(Suite {
         primitive: file.primitive,
         title: "Must reject".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// §11.2, §11.3, §11.4: the configuration and the signatures over it.
+fn head_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "tree-head.json";
+    let file: VectorFile<HeadInput, HeadExpect> = load(dir, FILE)?;
+
+    let code = file.cipher_suite.unwrap_or_default();
+    let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
+        file: FILE.to_owned(),
+        value: code,
+    })?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let mode = DeploymentMode::from_u8(case.input.mode).map_err(|_| Error::Computation {
+            file: FILE.to_owned(),
+            case: name.to_owned(),
+            detail: format!("unknown deployment mode {}", case.input.mode),
+        })?;
+
+        let config = Configuration {
+            cipher_suite: code,
+            mode,
+            signature_public_key: unhex(
+                FILE,
+                name,
+                "signature_public_key",
+                &case.input.signature_public_key,
+            )?,
+            vrf_public_key: unhex(FILE, name, "vrf_public_key", &case.input.vrf_public_key)?,
+            leaf_public_key: match &case.input.leaf_public_key {
+                None => None,
+                Some(key) => Some(unhex(FILE, name, "leaf_public_key", key)?),
+            },
+            auditor: match &case.input.auditor_public_key {
+                None => None,
+                Some(key) => Some(AuditorConfig {
+                    max_auditor_lag: case.input.max_auditor_lag.unwrap_or_default(),
+                    auditor_start_pos: case.input.auditor_start_pos.unwrap_or_default(),
+                    auditor_public_key: unhex(FILE, name, "auditor_public_key", key)?,
+                }),
+            },
+            max_ahead: case.input.max_ahead,
+            max_behind: case.input.max_behind,
+            reasonable_monitoring_window: case.input.reasonable_monitoring_window,
+            maximum_lifetime: None,
+        };
+        let root = hash_field(FILE, name, "root", &case.input.root)?;
+
+        // The configuration's encoding, which every signature depends on. This is
+        // the check that pins §11.2's grouped-case ambiguity: under contact
+        // monitoring the two readings differ by a length-prefixed key, so a
+        // mismatch here is not a detail.
+        let mut checks = vec![Check::new(
+            "Configuration encoding (§11.2)",
+            case.expect.configuration.clone(),
+            render_result(kt_wire::codec::encode(&config), hex::encode),
+        )];
+
+        // And the peer's own bytes must decode back to the same configuration.
+        let peer_config = unhex(
+            FILE,
+            name,
+            "expect.configuration",
+            &case.expect.configuration,
+        )?;
+        checks.push(Check::new(
+            "decoding the peer's Configuration gives the same value",
+            "round-trips",
+            match kt_wire::codec::decode::<Configuration>(&peer_config) {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(decoded) if decoded == config => "round-trips".to_owned(),
+                Ok(_) => "decoded to a different configuration".to_owned(),
+            },
+        ));
+
+        let tbs = TreeHeadTBS {
+            config: config.clone(),
+            tree_size: case.input.tree_size,
+            root,
+        };
+        checks.push(Check::new(
+            "TreeHeadTBS encoding — the bytes signed (§11.2)",
+            case.expect.tree_head_tbs.clone(),
+            render_result(kt_wire::codec::encode(&tbs), hex::encode),
+        ));
+
+        let head = TreeHead {
+            tree_size: case.input.tree_size,
+            signature: unhex(FILE, name, "expect.signature", &case.expect.signature)?,
+        };
+        checks.push(Check::new(
+            "TreeHead encoding (§11.2)",
+            case.expect.tree_head.clone(),
+            render_result(kt_wire::codec::encode(&head), hex::encode),
+        ));
+
+        // The signature itself: the peer signed, we verify.
+        checks.push(Check::new(
+            "the peer's tree head signature verifies (§11.2)",
+            "accepted",
+            match signature::verify_tree_head(&config, &head, root) {
+                Ok(()) => "accepted".to_owned(),
+                Err(err) => format!("rejected: {err}"),
+            },
+        ));
+
+        // The auditor's head, where the mode has one (§11.3).
+        if let (Some(expected_tbs), Some(expected_head), Some(timestamp)) = (
+            case.expect.auditor_tree_head_tbs.as_deref(),
+            case.expect.auditor_tree_head.as_deref(),
+            case.input.auditor_timestamp,
+        ) {
+            let auditor_tbs = AuditorTreeHeadTBS {
+                config: config.clone(),
+                timestamp,
+                tree_size: case.input.tree_size,
+                root,
+            };
+            checks.push(Check::new(
+                "AuditorTreeHeadTBS encoding (§11.3)",
+                expected_tbs,
+                render_result(kt_wire::codec::encode(&auditor_tbs), hex::encode),
+            ));
+
+            let bytes = unhex(FILE, name, "expect.auditor_tree_head", expected_head)?;
+            let parsed = kt_wire::codec::decode::<AuditorTreeHead>(&bytes);
+            checks.push(Check::new(
+                "the auditor's signature verifies (§11.3)",
+                "accepted",
+                match &parsed {
+                    Err(err) => format!("decode failed: {err}"),
+                    Ok(auditor) => match signature::verify_auditor_tree_head(
+                        &config,
+                        auditor,
+                        case.input.tree_size,
+                        root,
+                    ) {
+                        Ok(()) => "accepted".to_owned(),
+                        Err(err) => format!("rejected: {err}"),
+                    },
+                },
+            ));
+
+            // And the whole FullTreeHead, which is what a client actually receives.
+            if let Ok(auditor) = parsed {
+                let full = FullTreeHead::Updated {
+                    tree_head: head.clone(),
+                    auditor_tree_head: Some(auditor),
+                };
+                let verified = signature::verify_full_tree_head(
+                    &config,
+                    &full,
+                    signature::Advertised::default(),
+                    |size| (size == case.input.tree_size).then_some(root),
+                );
+                checks.push(Check::new(
+                    "FullTreeHead verification accepts the peer's heads (§11.4)",
+                    "accepted",
+                    match verified {
+                        Ok(Some(_)) => "accepted".to_owned(),
+                        Ok(None) => "accepted but returned no head".to_owned(),
+                        Err(err) => format!("rejected: {err}"),
+                    },
+                ));
+            }
+        } else {
+            // In the other modes a FullTreeHead carries no auditor head.
+            let full = FullTreeHead::Updated {
+                tree_head: head.clone(),
+                auditor_tree_head: None,
+            };
+            let verified = signature::verify_full_tree_head(
+                &config,
+                &full,
+                signature::Advertised::default(),
+                |size| (size == case.input.tree_size).then_some(root),
+            );
+            checks.push(Check::new(
+                "FullTreeHead verification accepts the peer's head (§11.4)",
+                "accepted",
+                match verified {
+                    Ok(Some(_)) => "accepted".to_owned(),
+                    Ok(None) => "accepted but returned no head".to_owned(),
+                    Err(err) => format!("rejected: {err}"),
+                },
+            ));
+        }
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!("{mode:?}, tree size {}", case.input.tree_size),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Tree head signatures".to_owned(),
         draft_section: section_of(&file.draft),
         file: FILE.to_owned(),
         generator: Generator {

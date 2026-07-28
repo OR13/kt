@@ -76,10 +76,10 @@ Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 `from-kt.json` goes the other way: proofs we build, verified by katie via
 `interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
 
-`kt-tree::combined`, `kt-crypto::signature`, and all of `kt-client` are still
-stubs, as is `ECVRF-P256-SHA256-TAI` for the P-256 suite. Next is the combined
-tree (§3.4, §12.3) and the tree head signatures (§11.2–§11.4), which together are
-the first point where a `FullTreeHead` can be verified end to end.
+`kt-tree::combined` and all of `kt-client` are still stubs. Signatures (§11.2–§11.4)
+are done and pinned in all three deployment modes, so what remains before a
+`FullTreeHead` verifies against a real log is the combined tree (§3.4, §12.3) and
+Appendix C's `CombinedTreeProof` serialization.
 
 Verified facts worth not rediscovering:
 
@@ -116,6 +116,12 @@ Verified facts worth not rediscovering:
   `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike
   every other integer in this protocol. RFC 9381's Appendix B vectors are in
   `kt-crypto::vrf`'s tests and are what adjudicate both.
+- §11.2's `Configuration` is where the two Go peers disagree: `leaf_public_key`
+  under `contactMonitoring`. We follow the draft's prose and katie (omit it). Since
+  every `TreeHeadTBS` starts with a `Configuration`, this decides whether any
+  signature verifies in that mode — `kt_wire::heads::Configuration::leaf_public_key_modes`
+  is the single place it lives, and `tampered.json` has a case that fails if the
+  resolution changes. Written up in `docs/interop.md`.
 - §12.2's `depth` is a `uint8`, so a prefix tree whose leaves sit at depth 256 — two
   search keys agreeing on 255 bits — cannot be described by a proof at all.
   `kt-tree::prefix` errors instead of saturating the field. Unreachable in practice

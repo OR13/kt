@@ -118,6 +118,7 @@ Three primitives implemented and verified against the Go peer, byte for byte:
 | VRF, ECVRF-EDWARDS25519-SHA512-TAI (`kt-crypto::vrf`) | §11.7 | [RFC 9381 App. B](https://www.rfc-editor.org/rfc/rfc9381.html) vectors **and** [`vrf.json`](interop/vectors/vrf.json) — 10 positive, 1 negative |
 | Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs |
 | Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
+| `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — all three deployment modes |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
@@ -141,8 +142,34 @@ encoding of a `VrfInput` (§11.7), and that the 64-byte output is truncated to 3
 (§17.1). Two conforming ECVRF implementations can still fail to interoperate on
 exactly those two decisions.
 
-Not implemented: the combined tree (§3.4, §12.3), signatures (§11.2–§11.4), and the
-client algorithms (§6–§10, §13).
+### A disagreement between the two Go implementations
+
+§11.2 writes `Configuration`'s mode-dependent part with grouped cases:
+
+```tls-presentation
+select (Configuration.mode) {
+  case contactMonitoring:
+  case thirdPartyManagement:
+    opaque leaf_public_key<0..2^16-1>;
+```
+
+Read the C way the presentation language inherits, `leaf_public_key` belongs to
+**both** modes. `katie` emits it only under `thirdPartyManagement`;
+`keytrans-verification` annotates the field "Only for Contact monitoring or
+ThirdParty". Since a `TreeHeadTBS` begins with the whole `Configuration`, the two
+readings differ by 34 bytes in contact-monitoring mode — so **no tree head signature
+verifies across them**.
+
+The draft's prose settles it: `leaf_public_key` verifies "the Service Operator's
+signature on modifications", and §11.5 gives `UpdateSuffix` a signature only under
+`thirdPartyManagement`, so under contact monitoring the key would have nothing to
+verify. This implementation follows the prose and katie, and
+[`tampered.json`](interop/vectors/tampered.json) carries a signature valid under the
+*other* reading that must be rejected — so if the working group resolves it the other
+way, a test starts failing rather than a document going stale.
+
+Not implemented: the combined tree (§3.4, §12.3) and the client algorithms
+(§6–§10, §13).
 
 Deliberately out of scope: the `KT_128_SHA256_P256` suite. `KT_128_SHA256_Ed25519`
 is supported by both Go peers, and one suite implemented properly is worth more here

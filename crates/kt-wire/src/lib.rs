@@ -34,6 +34,7 @@
 extern crate alloc;
 
 pub mod codec;
+pub mod heads;
 pub mod proofs;
 pub mod structs;
 

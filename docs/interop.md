@@ -93,7 +93,7 @@ disagrees:
 | 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | **agrees**, both directions |
 | 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | **agrees**, both directions |
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
-| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | todo |
+| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | signatures **agree** (§11.2–§11.4); combined tree todo |
 | 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | todo |
 
 Steps 1 through 6 are done. `commitment.json`, `ibst.json`,
@@ -110,6 +110,43 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### The two Go implementations disagree about §11.2
+
+The most consequential finding so far, and the one that needed both peers to see.
+§11.2 writes `Configuration`'s mode-dependent part as grouped cases:
+
+```tls-presentation
+select (Configuration.mode) {
+  case contactMonitoring:
+  case thirdPartyManagement:
+    opaque leaf_public_key<0..2^16-1>;
+```
+
+On the C-derived reading the presentation language inherits, `leaf_public_key` is
+present in **both** modes. `katie` emits it only under `thirdPartyManagement`.
+`keytrans-verification`'s `Configuration` annotates the field "Only for Contact
+monitoring or ThirdParty" — the other reading. So the two independent Go
+implementations have taken opposite positions.
+
+It is not a detail. A `TreeHeadTBS` begins with the entire `Configuration`, so in
+contact-monitoring mode the two readings produce inputs differing by 34 bytes (a
+two-byte length prefix and a 32-byte key), measured from the generated vectors: 96
+bytes against 130, and a TBS of 136 against 170. **No signature produced by one
+verifies for the other**, in one of the three deployment modes, for every tree head
+the log has ever signed.
+
+The draft's own prose resolves it in katie's favour: `leaf_public_key` verifies "the
+Service Operator's signature on modifications", and §11.5 gives `UpdateSuffix` a
+signature only under `thirdPartyManagement` — so under contact monitoring the key
+would have nothing to verify. The `case contactMonitoring:` label reads like an
+editing slip. This implementation follows the prose, and `tampered.json` carries a
+signature that is valid under the other reading and must be rejected, so the
+resolution is pinned by a test rather than by a paragraph.
+
+This is exactly the case this document predicted: "where katie and
+keytrans-verification disagree, the draft is ambiguous and that is worth an upstream
+issue."
 
 ### Asking a verifier to say no
 
