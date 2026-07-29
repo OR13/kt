@@ -94,14 +94,21 @@ enum Case {
         /// The root after it, hex.
         after: String,
     },
-    /// A `CombinedTreeProof` for the peer's own §6.3 to consume (§12.3.2).
+    /// A `CombinedTreeProof` for one of the peer's own algorithms to consume (§12.3).
     CombinedSearch {
         name: String,
         expect: &'static str,
+        /// Which algorithm the peer should run: `greatest-version`, `fixed-version`, or
+        /// `contact-monitor`.
+        operation: &'static str,
         /// The log's size.
         size: u64,
-        /// The claimed greatest version, which is also the search target.
+        /// The target version: the claimed greatest for a greatest-version search, the requested
+        /// one for a fixed-version search, unused for monitoring.
         greatest: u32,
+        /// The monitoring map, for `contact-monitor`.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        map: Vec<MapEntryOut>,
         /// Every log entry's timestamp, by position.
         timestamps: Vec<u64>,
         /// The versions the peer needs search keys for.
@@ -127,6 +134,13 @@ enum Case {
         /// The root the proof should verify against, hex.
         root: String,
     },
+}
+
+/// One entry of a monitoring map, for the peer's contact monitoring state.
+#[derive(Clone, Serialize)]
+struct MapEntryOut {
+    position: u64,
+    version: u32,
 }
 
 /// A version's search key and commitment, as the peer's proof handle wants them.
@@ -379,6 +393,8 @@ fn search_cases() -> Result<Vec<Case>, String> {
     let mut cases = vec![Case::CombinedSearch {
         name: "combined-greatest-version-search".to_owned(),
         expect: ACCEPT,
+        operation: "greatest-version",
+        map: Vec::new(),
         size: SIZE,
         greatest: GREATEST,
         timestamps: timestamps.clone(),
@@ -394,6 +410,8 @@ fn search_cases() -> Result<Vec<Case>, String> {
     cases.push(Case::CombinedSearch {
         name: "combined-search-extra-timestamp".to_owned(),
         expect: REJECT,
+        operation: "greatest-version",
+        map: Vec::new(),
         size: SIZE,
         greatest: GREATEST,
         timestamps: timestamps.clone(),
@@ -406,6 +424,8 @@ fn search_cases() -> Result<Vec<Case>, String> {
     cases.push(Case::CombinedSearch {
         name: "combined-search-missing-prefix-proof".to_owned(),
         expect: REJECT,
+        operation: "greatest-version",
+        map: Vec::new(),
         size: SIZE,
         greatest: GREATEST,
         timestamps: timestamps.clone(),
@@ -418,6 +438,8 @@ fn search_cases() -> Result<Vec<Case>, String> {
     cases.push(Case::CombinedSearch {
         name: "combined-search-proofs-out-of-order".to_owned(),
         expect: REJECT,
+        operation: "greatest-version",
+        map: Vec::new(),
         size: SIZE,
         greatest: GREATEST,
         timestamps: timestamps.clone(),
@@ -430,11 +452,222 @@ fn search_cases() -> Result<Vec<Case>, String> {
     cases.push(Case::CombinedSearch {
         name: "combined-search-timestamps-backwards".to_owned(),
         expect: REJECT,
+        operation: "greatest-version",
+        map: Vec::new(),
         size: SIZE,
         greatest: GREATEST,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&backwards)?,
+    });
+
+    // §7.2 over the same log: a binary search from the root rather than a walk along the frontier,
+    // so the proof it needs is a different shape and the peer's own FixedVersionSearch is a
+    // different reader of it.
+    let target = 2_u32;
+    let mut fixed_proofs = Vec::new();
+    let mut fixed_timestamps: Vec<u64> = Vec::new();
+    let mut seen: Vec<u64> = Vec::new();
+    let record =
+        |position: u64, timestamps: &mut Vec<u64>, seen: &mut Vec<u64>| -> Result<(), String> {
+            if !seen.contains(&position) {
+                timestamps.push(stamp_at(position)?);
+                seen.push(position);
+            }
+            Ok(())
+        };
+    // §12.3.1's view update comes first for a first-time user: the frontier's timestamps, in
+    // frontier order. Only then does §7.2 start asking — and its first question, §7.1's rightmost
+    // timestamp, is already answered, which is why nothing extra appears for it here.
+    for position in &frontier {
+        record(*position, &mut fixed_timestamps, &mut seen)?;
+    }
+    let mut established: Vec<(u64, Vec<u32>, Vec<u32>)> = Vec::new();
+    let mut current = ibst::root(SIZE).map_err(|err| format!("root: {err}"))?;
+    loop {
+        record(current, &mut fixed_timestamps, &mut seen)?;
+        let local = u32::try_from(current).unwrap_or(0);
+        let (mut left_inclusion, mut right_non_inclusion) = (Vec::new(), Vec::new());
+        for (at, included, absent) in &established {
+            if *at < current {
+                left_inclusion.extend(included.iter().copied());
+            }
+            if *at > current {
+                right_non_inclusion.extend(absent.iter().copied());
+            }
+        }
+        left_inclusion.sort_unstable();
+        left_inclusion.dedup();
+        right_non_inclusion.sort_unstable();
+        right_non_inclusion.dedup();
+        let versions =
+            ladder::search_binary_ladder(target, local, &left_inclusion, &right_non_inclusion)
+                .map_err(|err| format!("ladder at {current}: {err}"))?;
+        let tree = tree_at(current)?;
+        let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+        let proof = tree
+            .prove(SUITE, &searches)
+            .map_err(|err| format!("proving at {current}: {err}"))?;
+        let (mut included, mut absent) = (Vec::new(), Vec::new());
+        for (version, result) in versions.iter().zip(proof.results.iter()) {
+            if result.is_inclusion() {
+                included.push(*version);
+            } else {
+                absent.push(*version);
+            }
+        }
+        established.push((current, included, absent));
+        fixed_proofs.push(proof);
+        match local.cmp(&target) {
+            core::cmp::Ordering::Less => match ibst::right(current, SIZE) {
+                Ok(child) => current = child,
+                Err(_) => break,
+            },
+            core::cmp::Ordering::Greater => match ibst::left(current) {
+                Ok(child) => current = child,
+                Err(_) => break,
+            },
+            core::cmp::Ordering::Equal => break,
+        }
+    }
+    // Everything with a timestamp but no proof is owed a prefix root, left to right.
+    let mut owed: Vec<u64> = seen
+        .iter()
+        .copied()
+        .filter(|position| !established.iter().any(|(at, _, _)| at == position))
+        .collect();
+    owed.sort_unstable();
+    let mut fixed_roots = Vec::new();
+    for position in &owed {
+        fixed_roots.push(tree_at(*position)?.root(SUITE));
+    }
+    let mut fixed_inspected: Vec<u64> = seen.clone();
+    fixed_inspected.sort_unstable();
+    let fixed = CombinedTreeProof {
+        timestamps: fixed_timestamps,
+        prefix_proofs: fixed_proofs,
+        prefix_roots: fixed_roots,
+        inclusion: log::prove(SUITE, &leaves, &fixed_inspected, None)
+            .map_err(|err| format!("log proof: {err}"))?,
+    };
+    cases.push(Case::CombinedSearch {
+        name: "combined-fixed-version-search".to_owned(),
+        expect: ACCEPT,
+        operation: "fixed-version",
+        map: Vec::new(),
+        size: SIZE,
+        greatest: target,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&fixed)?,
+    });
+
+    let mut fixed_short = fixed.clone();
+    fixed_short.timestamps.pop();
+    cases.push(Case::CombinedSearch {
+        name: "combined-fixed-version-missing-timestamp".to_owned(),
+        expect: REJECT,
+        operation: "fixed-version",
+        map: Vec::new(),
+        size: SIZE,
+        greatest: target,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&fixed_short)?,
+    });
+
+    // §8.2 over the same log, for a map entry that has an ancestor to its right and is not itself
+    // distinguished — the only shape where contact monitoring inspects anything.
+    let monitored_position = 2_u64;
+    let monitored_version = 2_u32;
+    let mut monitor_timestamps: Vec<u64> = Vec::new();
+    let mut monitor_seen: Vec<u64> = Vec::new();
+    for position in &frontier {
+        record(*position, &mut monitor_timestamps, &mut monitor_seen)?;
+    }
+    // The descent §12.3.4 provides: the path from the root to the map entry's parent, which is what
+    // tells the verifier which entries are distinguished.
+    record(SIZE - 1, &mut monitor_timestamps, &mut monitor_seen)?;
+    let mut chain =
+        ibst::direct_path(monitored_position, SIZE).map_err(|err| format!("direct path: {err}"))?;
+    chain.reverse();
+    for position in &chain {
+        record(*position, &mut monitor_timestamps, &mut monitor_seen)?;
+    }
+    // Step 2's list: the direct path to the right, cut after the first distinguished entry — which
+    // with a week-long window is the root.
+    let inspect: Vec<u64> = chain
+        .iter()
+        .copied()
+        .filter(|position| *position > monitored_position)
+        .collect();
+    let mut monitor_proofs = Vec::new();
+    let mut proved: Vec<u64> = Vec::new();
+    for position in inspect.iter().take(1) {
+        let ladder = ladder::monitoring_binary_ladder(monitored_version, &[]);
+        let searches: Vec<HashValue> = ladder.iter().map(|v| key_for(*v)).collect();
+        monitor_proofs.push(
+            tree_at(*position)?
+                .prove(SUITE, &searches)
+                .map_err(|err| format!("proving at {position}: {err}"))?,
+        );
+        proved.push(*position);
+    }
+    let mut monitor_owed: Vec<u64> = monitor_seen
+        .iter()
+        .copied()
+        .filter(|position| !proved.contains(position))
+        .collect();
+    monitor_owed.sort_unstable();
+    let mut monitor_roots = Vec::new();
+    for position in &monitor_owed {
+        monitor_roots.push(tree_at(*position)?.root(SUITE));
+    }
+    let mut monitor_inspected: Vec<u64> = monitor_seen.clone();
+    monitor_inspected.sort_unstable();
+    let monitor = CombinedTreeProof {
+        timestamps: monitor_timestamps,
+        prefix_proofs: monitor_proofs,
+        prefix_roots: monitor_roots,
+        inclusion: log::prove(SUITE, &leaves, &monitor_inspected, None)
+            .map_err(|err| format!("log proof: {err}"))?,
+    };
+    let map = vec![MapEntryOut {
+        position: monitored_position,
+        version: monitored_version,
+    }];
+    cases.push(Case::CombinedSearch {
+        name: "combined-contact-monitor".to_owned(),
+        expect: ACCEPT,
+        operation: "contact-monitor",
+        map: map.clone(),
+        size: SIZE,
+        greatest: monitored_version,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&monitor)?,
+    });
+
+    // A monitoring ladder with a lookup that shows non-inclusion is the failure monitoring exists
+    // to catch: a version the user has already been shown is no longer there.
+    let mut rolled_back = monitor.clone();
+    let ladder = ladder::monitoring_binary_ladder(monitored_version, &[]);
+    let searches: Vec<HashValue> = ladder.iter().map(|v| key_for(*v)).collect();
+    rolled_back.prefix_proofs = vec![
+        tree_at(0)?
+            .prove(SUITE, &searches)
+            .map_err(|err| format!("proving the rollback: {err}"))?,
+    ];
+    cases.push(Case::CombinedSearch {
+        name: "combined-contact-monitor-rolled-back".to_owned(),
+        expect: REJECT,
+        operation: "contact-monitor",
+        map,
+        size: SIZE,
+        greatest: monitored_version,
         timestamps,
         versions,
-        proof: encoded(&backwards)?,
+        proof: encoded(&rolled_back)?,
     });
 
     Ok(cases)

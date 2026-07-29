@@ -165,7 +165,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `tree-head.json` | configuration, signatures, and `FullTreeHead` bytes | §11.2–§11.4 | 9, all three modes |
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
-| `from-kt.json` | must accept / must reject, in reverse | as above | 214, roughly half negative |
+| `from-kt.json` | must accept / must reject, in reverse | as above | 218, roughly half negative |
 
 ## Two kinds of agreement
 
