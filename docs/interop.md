@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Seventeen vector files pass from the Rust side — 6674 checks across 781 cases — and
+Eighteen vector files pass from the Rust side — 6689 checks across 786 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.

@@ -25,7 +25,9 @@ use kt_wire::requests::{
     BinaryLadderStep, ContactMonitorRequest, LabelValue, MonitorMapEntry, OwnerInitRequest,
     OwnerMonitorRequest, SearchRequest, UpdateInfo, UpdateRequest, UpdateTBS,
 };
-use kt_wire::responses::SearchResponse;
+use kt_wire::responses::{
+    ContactMonitorResponse, OwnerInitResponse, OwnerMonitorResponse, SearchResponse,
+};
 use kt_wire::structs::{
     CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue, VrfInput,
 };
@@ -35,13 +37,14 @@ use crate::vectors::{
     AppendExpect, AppendInput, AuditorExpect, AuditorInput, CommitmentExpect, CommitmentInput,
     DistinguishedExpect, DistinguishedInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
     InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
-    LogMathInput, LogTreeExpect, LogTreeInput, MutationExpect, MutationInput, PrefixTreeExpect,
-    PrefixTreeInput, RequestExpect, RequestInput, SearchExpect, SearchInput, TamperedExpect,
-    TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
+    LogMathInput, LogTreeExpect, LogTreeInput, MonitorExpect, MonitorInput, MutationExpect,
+    MutationInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, SearchExpect,
+    SearchInput, TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile,
+    VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 17] = [
+pub const FILES: [&str; 18] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -56,6 +59,7 @@ pub const FILES: [&str; 17] = [
     "prefix-mutation.json",
     "auditor-update.json",
     "search.json",
+    "monitor.json",
     "tree-head.json",
     "requests.json",
     "tampered.json",
@@ -179,6 +183,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         mutation_suite(dir)?,
         auditor_suite(dir)?,
         search_suite(dir)?,
+        monitor_suite(dir)?,
         head_suite(dir)?,
         request_suite(dir)?,
         tampered_suite(dir)?,
@@ -1355,6 +1360,129 @@ fn replay_fixed_version(
         .finish()
         .map(|()| format!("every element read, none left over{note}"))
         .map_err(|err| format!("§12.3: {err}"))
+}
+
+/// §13.2–§13.4: the monitoring responses a running log serves.
+fn monitor_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "monitor.json";
+    let file: VectorFile<MonitorInput, MonitorExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let mode = DeploymentMode::from_u8(case.input.mode).map_err(|err| Error::Computation {
+            file: FILE.to_owned(),
+            case: name.to_owned(),
+            detail: alloc_string(&err),
+        })?;
+        let bytes = unhex(FILE, name, "expect.response", &case.expect.response)?;
+
+        // Each operation has its own structure, and two of them are byte-identical for the same
+        // contents — a contact monitor response and an owner monitor response are both a head
+        // and a proof. Only the request says which algorithm ordered the proof inside, which is
+        // why the decoders are separate and why this dispatches on the recorded operation
+        // rather than on anything in the bytes.
+        let mut dec = Decoder::new(&bytes);
+        let reencoded = match case.input.operation.as_str() {
+            "contact" => ContactMonitorResponse::decode_with(&mut dec, mode)
+                .and_then(|value| kt_wire::codec::encode(&value)),
+            "owner-monitor" => OwnerMonitorResponse::decode_with(&mut dec, mode)
+                .and_then(|value| kt_wire::codec::encode(&value)),
+            "owner-init" => OwnerInitResponse::decode_with(&mut dec, mode, suite.np())
+                .and_then(|value| kt_wire::codec::encode(&value)),
+            other => {
+                return Err(Error::Computation {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    detail: format!("unknown operation {other}"),
+                });
+            }
+        };
+        let trailing = dec.remaining();
+
+        let mut checks = vec![
+            Check::new(
+                "response round-trips through the operation's context (§13.2–§13.4)",
+                case.expect.response.clone(),
+                match &reencoded {
+                    Ok(bytes) => hex::encode(bytes),
+                    Err(err) => format!("decode or re-encode failed: {err}"),
+                },
+            ),
+            Check::new(
+                "the whole response is consumed",
+                "0 bytes left",
+                format!("{trailing} bytes left"),
+            ),
+        ];
+
+        // The proof's three vectors, whose lengths are decided by §12.3.4–§12.3.6 rather than by
+        // anything in the bytes. Recorded per case because the monitoring orderings iterate the
+        // user's map from rightmost to leftmost, which is the opposite of the search orderings.
+        checks.push(Check::new(
+            "CombinedTreeProof shape: timestamps, proofs, roots, inclusion (§12.3)",
+            format!(
+                "{} / {} / {} / {}",
+                case.expect.timestamps.len(),
+                case.expect.prefix_proofs.len(),
+                case.expect.prefix_roots.len(),
+                case.expect.inclusion.len()
+            ),
+            match &reencoded {
+                Err(_) => "decode failed".to_owned(),
+                Ok(_) => {
+                    let mut again = Decoder::new(&bytes);
+                    let proof = match case.input.operation.as_str() {
+                        "owner-init" => {
+                            OwnerInitResponse::decode_with(&mut again, mode, suite.np())
+                                .map(|value| value.init)
+                        }
+                        "owner-monitor" => OwnerMonitorResponse::decode_with(&mut again, mode)
+                            .map(|value| value.monitor),
+                        _ => ContactMonitorResponse::decode_with(&mut again, mode)
+                            .map(|value| value.monitor),
+                    };
+                    match proof {
+                        Err(err) => format!("decode failed: {err}"),
+                        Ok(proof) => format!(
+                            "{} / {} / {} / {}",
+                            proof.timestamps.len(),
+                            proof.prefix_proofs.len(),
+                            proof.prefix_roots.len(),
+                            proof.inclusion.elements.len()
+                        ),
+                    }
+                }
+            },
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{} · {} map entries, {} timestamps, {} proofs",
+                case.input.operation,
+                case.input.entries.len(),
+                case.expect.timestamps.len(),
+                case.expect.prefix_proofs.len()
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Monitoring responses from a running log".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
 }
 
 /// §6.1: which log entries are distinguished.
