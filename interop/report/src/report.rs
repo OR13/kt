@@ -507,10 +507,15 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-wire::responses",
             &["monitor.json"],
         ),
+        verified(
+            "§8.2, §12.3.4",
+            "Contact monitoring, replayed against a running log's responses",
+            "kt-tree::combined",
+            &["monitor.json"],
+        ),
         todo(
-            "§8.2, §8.3",
-            "Contact and owner monitoring algorithms, and the §12.3.4–§12.3.6 orderings they \
-             impose",
+            "§8.3, §12.3.5–§12.3.6",
+            "Owner initialization and owner monitoring algorithms",
         ),
         todo("§9, §13.5", "Updating a label"),
         todo(

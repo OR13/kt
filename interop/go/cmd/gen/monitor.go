@@ -30,7 +30,11 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/Bren2010/katie/crypto/commitments"
 	"github.com/Bren2010/katie/crypto/suites"
+	"github.com/Bren2010/katie/crypto/vrf"
+	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
+	"github.com/Bren2010/katie/tree/transparency"
 	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
@@ -125,7 +129,22 @@ func monitorVectors(sha string) (*File, error) {
 			return nil, fmt.Errorf("case %q: marshalling the head: %w", spec.name, err)
 		}
 
+		// What a monitoring client already holds. §8.2 says the map is populated from a search,
+		// so by the time a user monitors they have the VRF output and the commitment for every
+		// version they are tracking — a monitoring response carries neither, because there would
+		// be no point in sending them again. Recording them here is what lets a verifier replay
+		// the algorithm; deriving them is not possible from the public key alone, which is the
+		// whole reason a monitoring response is as small as it is.
+		vrfPrivate, err := edwards25519.NewPrivateKey(repeat(0x74, 32))
+		if err != nil {
+			return nil, fmt.Errorf("case %q: parsing the VRF key: %w", spec.name, err)
+		}
+		known, kerr := knownVersions(cs, tree, vrfPrivate, []byte(spec.label), spec.entries)
+		if kerr != nil {
+			return nil, fmt.Errorf("case %q: %w", spec.name, kerr)
+		}
 		input := map[string]any{
+			"known_versions":       known,
 			"operation":            operation,
 			"mutations":            mutationsJSON(spec.log.mutations),
 			"label":                hex.EncodeToString([]byte(spec.label)),
@@ -212,6 +231,20 @@ func monitorCases() []monitorCase {
 			entries:   []mapEntry{{position: 5, version: 5}},
 		},
 		{
+			// The shape §8.2 actually does work for: entry 2 has an ancestor to its right and is
+			// not itself distinguished. Two nearby shapes do nothing at all — an entry on the
+			// frontier has no ancestors to its right, and a left descendant like entry 1 keeps a
+			// left bracket of zero and so is always distinguished — which is why
+			// `contact-one-version` above carries no prefix proofs. Having both recorded is the
+			// point: the degenerate case is the common one, and a verifier that only ever sees it
+			// never exercises the algorithm.
+			name:      "contact-inspects-an-ancestor",
+			operation: "contact",
+			log:       growing,
+			label:     alice,
+			entries:   []mapEntry{{position: 2, version: 2}},
+		},
+		{
 			name:      "contact-two-versions",
 			operation: "contact",
 			log:       growing,
@@ -243,6 +276,61 @@ func monitorCases() []monitorCase {
 			greatestVersion: ptr(uint32(6)),
 		},
 	}
+}
+
+// knownVersions returns, for every version up to the greatest in the monitoring map, the VRF
+// output and the commitment a client would hold from having searched for it.
+//
+// The VRF output comes from the log's own key. The commitment comes from a fixed-version search,
+// which is how a client gets it: the response carries the opening and the value, and the client
+// recomputes the commitment from them. Going through the search rather than reaching into the
+// tree keeps this to exported API and to the path a real client takes.
+func knownVersions(
+	cs suites.CipherSuite,
+	tree *transparency.Tree,
+	vrfKey vrf.PrivateKey,
+	label []byte,
+	entries []mapEntry,
+) ([]map[string]any, error) {
+	greatest := uint32(0)
+	for _, entry := range entries {
+		if entry.version > greatest {
+			greatest = entry.version
+		}
+	}
+
+	out := make([]map[string]any, 0, int(greatest)+1)
+	for version := uint32(0); version <= greatest; version++ {
+		alpha, err := structs.Marshal(&structs.VrfInput{Label: label, Version: version})
+		if err != nil {
+			return nil, fmt.Errorf("marshalling the VRF input for version %d: %w", version, err)
+		}
+		output, _ := vrfKey.Prove(alpha)
+
+		target := version
+		res, err := tree.Search(context.Background(), &structs.SearchRequest{
+			Label:   label,
+			Version: &target,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("searching for version %d: %w", version, err)
+		}
+		commitmentValue, err := structs.Marshal(&structs.CommitmentValue{
+			Label:   label,
+			Version: version,
+			Update:  res.Value,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshalling the commitment value for version %d: %w", version, err)
+		}
+		out = append(out, map[string]any{
+			"version":    version,
+			"vrf_output": hex.EncodeToString(output),
+			"commitment": hex.EncodeToString(
+				commitments.Commit(cs, res.Opening, commitmentValue)),
+		})
+	}
+	return out, nil
 }
 
 func mutationsJSON(mutations [][]labelValue) []map[string]any {

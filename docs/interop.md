@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Eighteen vector files pass from the Rust side — 6689 checks across 786 cases — and
+Eighteen vector files pass from the Rust side — 6696 checks across 787 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -180,6 +180,31 @@ enumerate the distinguished set, because that needs timestamps for entries the s
 visits. It does not have to. §6.1 brackets a node by the timestamps of the entries either side
 of it in the search tree, and a descent maintains exactly those bounds as it goes — so
 distinguishedness along a search path is decidable from the path itself.
+
+### Monitoring mostly does nothing, which is the part to get right
+
+§8.2 moves a user's map up the tree as new intermediate nodes are built over the versions they
+have been shown. Implementing it turned up something that is not a finding but is worth writing
+down, because it decides whether a test exercises the algorithm at all: for most map entries the
+algorithm inspects **nothing**.
+
+Two shapes are degenerate, for different reasons. An entry on the log's frontier has no ancestors
+to its right, so §8.2 step 2.2 removes every candidate. And a left descendant keeps a left
+bracket of zero — §6.1's initial value — so its gap to the right bracket is the whole age of the
+log and it is always distinguished, which step 1 leaves alone. The shape that does work is an
+entry with an ancestor to its right that is not itself distinguished, and in a seven-entry log
+there are few of them.
+
+That mattered twice. The first recorded case used a frontier entry and consumed a proof with no
+prefix proofs in it, so it passed while testing nothing; adding a case with an ancestor to inspect
+then caught a real bug in the descent — §6.1's brackets depend on the *direction* of each step,
+and descending to a left child lowers the right bracket rather than raising the left one. The
+first implementation only ever raised the left, which made every left descendant look
+non-distinguished. That is the same mistake in the same place as §7.2's, where the descent got it
+right, and it took a non-degenerate case to expose it here.
+
+Both shapes are now recorded, deliberately: the degenerate one is the common case, and a verifier
+that only ever meets it never runs the algorithm.
 
 ### Bytes that do not say what they are for
 
@@ -444,11 +469,26 @@ over a 131×131 grid at generation time and refuses to emit vectors if it ever
 fails, and `kt-tree` asserts it again from the Rust side. So katie-generated
 ladder vectors are a valid oracle for a draft-shaped implementation.
 
-**[NOTE-02] katie's monitoring ladder predates draft-05's deduplication parameter.**
-Appendix B's `monitoring_binary_ladder(t, left_inclusion)` drops lookups already
-proven to the left; katie's `MonitoringBinaryLadder(t)` takes only `t`. Monitoring
-vectors are therefore emitted with an empty set only, and the deduplication is
-covered by Rust-side tests. Not a disagreement, just a pin that is behind.
+**[DRAFT-09] nothing says when a monitoring ladder deduplicates, and the two readings do not
+interoperate.** §8.1's prose defines a monitoring binary ladder as §5's series "omitting any
+lookup for a version greater than the target version" and mentions no deduplication. Appendix B
+defines `monitoring_binary_ladder(t, left_inclusion = [])`, which also filters
+`v not in left_inclusion`. §8.2 step 3.2 says to obtain one and verify "all expected lookups are
+present", without saying what `left_inclusion` should be — and step 3.1 already handles
+cross-entry duplication by a different mechanism, which makes the parameter's purpose harder to
+guess rather than easier.
+
+Because the check is on an exact count, the two readings fail against each other: a verifier
+that deduplicates expects fewer lookups than a log that does not sends, on every monitoring
+response where a version was already proven to the left. katie cannot settle it —
+`MonitoringBinaryLadder(t)` takes only the target, so it always uses the default — and that is an
+implementation choice rather than evidence about intent.
+
+This one **is filed**, because it is the first finding that could not be resolved either by
+reading the specification or by measuring the peer:
+[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48). This
+implementation uses the empty-set reading, which is what interoperates today, and §8.2's three
+recorded cases consume their proofs exactly under it.
 
 **[DRAFT-02] §12.2 leaves two things implicit about prefix proofs.** First, what `depth`
 counts for a `nonInclusionParent` result: §12.2 calls the terminal node "a parent
@@ -608,9 +648,13 @@ is stable.
 
 ## Findings register
 
-Nothing is filed upstream. That is a standing project decision, not an oversight: findings
-are tracked here, and each one is pinned by a committed vector so a filing can point at
-reproducible bytes whenever the decision changes.
+Findings are tracked here rather than filed, with one exception. The rule is that a finding gets
+filed when it is a **blocker** — something that cannot be resolved either by reading the
+specification or by measuring the peer, so that no amount of further work here will settle it.
+`DRAFT-09` is the first to meet that bar and is filed as
+[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48). Everything
+else is resolved: the behaviour is known, a committed vector pins it, and a filing would be a
+courtesy rather than a necessity.
 
 | ID | What | Belongs to | Pinned by | Status |
 |---|---|---|---|---|
@@ -627,7 +671,7 @@ reproducible bytes whenever the decision changes.
 | `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | tracked locally |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
 | `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
-| `NOTE-02` | katie's monitoring ladder predates draft-05's deduplication parameter | katie | `binary-ladder.json` empty-set cases only | no action |
+| `DRAFT-09` | Nothing says when a monitoring ladder deduplicates against `left_inclusion`; the two readings fail against each other | draft | `monitor.json`, three §8.2 replays under the empty-set reading | **filed**: [draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48) |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
 Two ground rules for anything added here. A finding is only a finding once a committed
