@@ -325,6 +325,8 @@ pub struct SearchInput {
     pub max_behind: u64,
     /// The Reasonable Monitoring Window.
     pub monitoring_window: u64,
+    /// The log's maximum lifetime (§7.1), zero if it defines none.
+    pub maximum_lifetime: u64,
     /// Every log entry's timestamp, indexed by position, as the log stamped them.
     ///
     /// §12.3 omits the ones a user who advertised a tree size is expected to have retained, so
@@ -355,26 +357,42 @@ pub struct SearchLabelValue {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchExpect {
+    /// Why the log refused, for requests it does not answer at all.
+    ///
+    /// A refusal is a result: §7.2's "expired" and "does not exist" outcomes can be reached by
+    /// the log itself, in which case there is no proof to verify and nothing for a client to
+    /// accept. The remaining fields are absent for those cases.
+    #[serde(default)]
+    pub error: Option<String>,
     /// The whole encoded `SearchResponse`, hex.
+    #[serde(default)]
     pub response: String,
     /// Its `FullTreeHead`, hex.
+    #[serde(default)]
     pub full_tree_head: String,
     /// The target version's commitment opening, hex.
+    #[serde(default)]
     pub opening: String,
     /// The greatest version, present only for a greatest-version search.
     #[serde(default)]
     pub version: Option<u32>,
     /// One step per ladder version.
+    #[serde(default)]
     pub binary_ladder: Vec<LadderStepExpect>,
     /// The `CombinedTreeProof`'s timestamps, in request order.
+    #[serde(default)]
     pub timestamps: Vec<u64>,
     /// Its prefix proofs, in request order.
+    #[serde(default)]
     pub prefix_proofs: Vec<PrefixProofExpect>,
     /// Its prefix roots, hex.
+    #[serde(default)]
     pub prefix_roots: Vec<String>,
     /// Its log tree inclusion elements, hex.
+    #[serde(default)]
     pub inclusion: Vec<String>,
     /// The log's tree size when the response was served.
+    #[serde(default)]
     pub tree_size: u64,
 }
 

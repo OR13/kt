@@ -495,16 +495,12 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::combined",
             &["search.json"],
         ),
-        Area {
-            section: "§7.1".to_owned(),
-            name: "Log entry expiry, and the distinguished-entry conditions it triggers".to_owned(),
-            module: Some("kt-tree::combined".to_owned()),
-            // Implemented and unit-tested, including §7.2's steps 5.2 and 6.2, but the peer's
-            // recorded responses come from a log that defines no maximum lifetime, so nothing
-            // in them expires. Calling this verified would claim evidence that does not exist.
-            coverage: Coverage::ImplementedUnverified,
-            evidence: Vec::new(),
-        },
+        verified(
+            "§7.1",
+            "Log entry expiry, and the distinguished-entry conditions it triggers",
+            "kt-tree::combined",
+            &["search.json"],
+        ),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),
         todo(

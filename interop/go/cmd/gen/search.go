@@ -42,6 +42,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"time"
+
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/db/memory"
@@ -99,6 +101,26 @@ func searchVectors(sha string) (*File, error) {
 		}
 		if spec.expectError != "" {
 			return nil, fmt.Errorf("case %q: expected the search to fail", spec.name)
+		}
+
+		// A case configured for expiry has to actually produce some, and has to leave
+		// something unexpired for the search to land on. Either way round the case would
+		// otherwise pass while testing nothing.
+		if spec.lifetime != 0 {
+			rightmost := entryTimestamps[len(entryTimestamps)-1]
+			expired, unexpired := 0, 0
+			for _, ts := range entryTimestamps {
+				if rightmost-ts >= spec.lifetime {
+					expired++
+				} else {
+					unexpired++
+				}
+			}
+			if expired == 0 || unexpired == 0 {
+				return nil, fmt.Errorf(
+					"case %q: %d entries expired and %d not; the case needs both", spec.name,
+					expired, unexpired)
+			}
 		}
 
 		var buf bytes.Buffer
@@ -161,6 +183,7 @@ func searchInput(spec searchCase, config *structs.PublicConfig) map[string]any {
 	}
 	input := map[string]any{
 		"mutations":            mutations,
+		"maximum_lifetime":     spec.lifetime,
 		"label":                hex.EncodeToString([]byte(spec.label)),
 		"mode":                 uint8(config.Mode),
 		"signature_public_key": hex.EncodeToString(config.SignatureKey.Bytes()),
@@ -192,6 +215,20 @@ type searchCase struct {
 	last      *uint64
 	// expectError records that the log refuses this request, and with what.
 	expectError string
+
+	// lifetime is the log's maximum lifetime (§7.1), zero for a log that defines none. Setting
+	// it is the only way to exercise §7.2's expiry branches: an expired entry gets no binary
+	// ladder at all, so the response is a different shape.
+	lifetime uint64
+	// window overrides the Reasonable Monitoring Window. §7.1 requires the lifetime to exceed
+	// it, and since the lifetime has to be small enough for entries to expire during
+	// generation, the window has to be smaller still.
+	window uint64
+	// spacing is how long to wait between mutations, in milliseconds. katie stamps each entry
+	// with time.Now(), so without a wait the whole log lands inside one or two milliseconds and
+	// nothing can expire. The absolute timestamps are not reproducible either way; the point is
+	// to make the *relative* structure — which entries are expired — deterministic.
+	spacing time.Duration
 }
 
 func searchCases() []searchCase {
@@ -278,6 +315,48 @@ func searchCases() []searchCase {
 			label:     alice,
 			version:   ptr(uint32(99)),
 		},
+		// §7.1's expiry, which needs a log that defines a maximum lifetime and entries far
+		// enough apart to fall outside it. A hundred milliseconds between mutations with a
+		// lifetime of 250ms puts the older entries outside it, so §7.2 step 1 skips them
+		// without a ladder and the response comes out a different shape.
+		//
+		// The margins are wide on purpose. The timestamps are wall-clock, so which entries
+		// expire depends on how long the sleeps actually take; at ten milliseconds' spacing a
+		// loaded machine could flip an entry either way. At a hundred there is 50ms of slack on
+		// each side of every boundary, and the generator asserts the resulting structure below
+		// rather than trusting it.
+		{
+			name:      "fixed-version-with-expired-entries",
+			mutations: growing,
+			label:     alice,
+			version:   ptr(uint32(5)),
+			lifetime:  250,
+			window:    50,
+			spacing:   100 * time.Millisecond,
+		},
+		{
+			// The log refuses this one rather than answering: version 0 is old enough that
+			// every entry proving it was the greatest has expired, which is §7.2's
+			// ErrLabelExpired reached from the server side. Worth recording as the refusal it
+			// is — a client asking for a version the log has pruned past gets no proof at all,
+			// not a proof it must reject.
+			name:        "fixed-version-expired-target",
+			mutations:   growing,
+			label:       alice,
+			version:     ptr(uint32(0)),
+			lifetime:    250,
+			window:      50,
+			spacing:     100 * time.Millisecond,
+			expectError: "requested version of label has expired",
+		},
+		{
+			name:      "greatest-version-with-expired-entries",
+			mutations: growing,
+			label:     alice,
+			lifetime:  250,
+			window:    50,
+			spacing:   100 * time.Millisecond,
+		},
 	}
 }
 
@@ -294,6 +373,10 @@ func buildLog(
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("parsing the VRF key: %w", err)
 	}
+	window := uint64(604800000)
+	if spec.window != 0 || spec.lifetime != 0 {
+		window = spec.window
+	}
 	private := structs.PrivateConfig{
 		SignatureKey: logKey,
 		VrfKey:       vrfKey,
@@ -302,8 +385,14 @@ func buildLog(
 			Mode:                       structs.ContactMonitoring,
 			MaxAhead:                   10000,
 			MaxBehind:                  10000,
-			ReasonableMonitoringWindow: 604800000,
+			ReasonableMonitoringWindow: window,
+			MaximumLifetime:            spec.lifetime,
 		},
+	}
+	if spec.lifetime != 0 && spec.lifetime <= window {
+		return nil, nil, nil, fmt.Errorf(
+			"§7.1 requires the maximum lifetime (%d) to exceed the monitoring window (%d)",
+			spec.lifetime, window)
 	}
 
 	tree, err := transparency.NewTree(private, memory.NewTransparencyStore(), nil)
@@ -322,6 +411,9 @@ func buildLog(
 				Label: entry.label,
 				Value: structs.UpdateValue{Value: entry.value},
 			})
+		}
+		if i > 0 && spec.spacing > 0 {
+			time.Sleep(spec.spacing)
 		}
 		update, err := tree.Mutate(add, nil)
 		if err != nil {
