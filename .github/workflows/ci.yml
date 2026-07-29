@@ -94,5 +94,18 @@ jobs:
         run: go run ./cmd/verify -in ../vectors/from-kt.json
         working-directory: interop/go
 
+      # Everything the Rust side checks, run against the vectors that were just
+      # regenerated rather than the committed ones. For the deterministic files this is
+      # the same bytes; for search.json it is bytes nobody has ever seen, because katie
+      # stamps each log entry with the wall clock and picks a fresh random commitment
+      # opening per version. That makes this the stronger check of the two: a change in
+      # how the peer shapes a response fails here even though the committed file still
+      # passes in the `rust` job.
+      - name: The checks must pass against freshly generated vectors
+        run: cargo run -p kt-interop --bin kt-interop-report -- --vectors interop/vectors --out "$RUNNER_TEMP/fresh"
+
+      # search.json is excluded because it cannot be reproducible: see interop/README.md.
+      # Every other file must regenerate to the same bytes, so an upstream bump that
+      # changes behaviour shows up as a diff rather than as a silent pass.
       - name: Vectors must be reproducible
-        run: git diff --exit-code -- interop/vectors
+        run: git diff --exit-code -- interop/vectors ':(exclude)interop/vectors/search.json'

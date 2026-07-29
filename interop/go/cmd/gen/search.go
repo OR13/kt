@@ -27,6 +27,13 @@
 // `response` is the encoded SearchResponse. The pieces are also broken out so a mismatch can
 // be localized: getting the `CombinedTreeProof`'s three counts right while getting the ladder
 // wrong is a different bug from reading the whole structure at the wrong offset.
+//
+// Unlike every other file in this directory, this one is not reproducible, and cannot be:
+// katie stamps each log entry with time.Now() and generates a fresh random opening for every
+// commitment, so every commitment, prefix root, log root and signature below differs run to
+// run. CI therefore runs the whole Rust check suite against a freshly generated copy — against
+// bytes nobody has seen — rather than diffing this file against a regeneration of it. See
+// ../../README.md.
 package main
 
 import (
