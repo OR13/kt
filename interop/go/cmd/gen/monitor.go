@@ -13,6 +13,11 @@
 // each timestamp be at least every timestamp to its *left* — is checked against entries that
 // have not been read yet.
 //
+// Like search.json, this file is not reproducible and cannot be: the log stamps each entry with
+// time.Now() and draws a fresh random opening per commitment. CI runs the whole check suite
+// against a freshly generated copy rather than diffing this one against a regeneration; see
+// ../../README.md.
+//
 // The monitoring map in each request is the state a user would hold after a search: a position
 // mapped to the version proven to exist there. katie validates that each position is the entry
 // that first contained the version or on its right direct path, so these are the maps a real
