@@ -436,27 +436,32 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::prefix",
             &["prefix-tree.json", "tampered.json"],
         ),
-        Area {
-            section: "§11.1, §17.1".to_owned(),
-            name: "Cipher suite registry".to_owned(),
-            module: Some("kt-crypto::suite".to_owned()),
-            coverage: Coverage::ImplementedUnverified,
-            evidence: Vec::new(),
-        },
-        Area {
-            section: "§11.1".to_owned(),
-            name: "Cipher suite hash function".to_owned(),
-            module: Some("kt-crypto::hash".to_owned()),
-            coverage: Coverage::ImplementedUnverified,
-            evidence: Vec::new(),
-        },
-        Area {
-            section: "§11.2".to_owned(),
-            name: "DeploymentMode".to_owned(),
-            module: Some("kt-wire::structs".to_owned()),
-            coverage: Coverage::ImplementedUnverified,
-            evidence: Vec::new(),
-        },
+        verified(
+            "§11.1, §17.1",
+            "Cipher suite registry: the code on the wire and the parameters it selects",
+            "kt-crypto::suite",
+            // Not an implicit claim: every Configuration katie encodes begins with the suite
+            // code, so `tree-head.json` pins `0x0002` as bytes, and the `Nc`, `Hash.Nh` and
+            // `VRF.Np` the registry attaches to it are what every other file's lengths depend
+            // on. A wrong registry entry would fail there rather than here.
+            &["tree-head.json", "commitment.json", "vrf.json"],
+        ),
+        verified(
+            "§11.1",
+            "Cipher suite hash function: SHA-256 for this suite, everywhere it is used",
+            "kt-crypto::hash",
+            // Selecting the wrong hash changes every commitment, every tree root and every
+            // signature input, so the files that pin those pin this.
+            &["commitment.json", "log-tree.json", "prefix-tree.json"],
+        ),
+        verified(
+            "§11.2",
+            "DeploymentMode, and the fields each mode adds to a Configuration",
+            "kt-wire::structs",
+            // All three modes, with three distinct Configuration encodings: the mode byte sits
+            // right after the suite code, and what follows it differs per mode.
+            &["tree-head.json"],
+        ),
         // Not a gap: the Ed25519 suite is the target, and both Go peers support it.
         Area {
             section: "§11.7, §17.1".to_owned(),
