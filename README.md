@@ -127,6 +127,7 @@ Implemented and verified against the Go peer, byte for byte:
 | Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
 | Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/distinguished.json) — 42 size/window/timestamp shapes |
 | `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/search.json) — 10 responses from a running log |
+| Greatest-version and fixed-version search (`kt-tree::combined`) | §6.3, §7.2, §12.3 | [`search.json`](interop/vectors/search.json) — all 10 replayed, each consuming its proof exactly |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
