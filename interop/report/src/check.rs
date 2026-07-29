@@ -1467,6 +1467,13 @@ fn monitor_suite(dir: &Path) -> Result<Suite, Error> {
                 replay_contact_monitor(case, &bytes, mode).unwrap_or_else(|detail| detail),
             ));
         }
+        if case.input.operation == "owner-monitor" {
+            checks.push(Check::new(
+                "replaying §8.3's second algorithm reads the proof to exhaustion (§12.3.6)",
+                "the walk ran to the end of the proof",
+                replay_owner_monitor(case, &bytes, mode).unwrap_or_else(|detail| detail),
+            ));
+        }
         if case.input.operation == "owner-init" {
             checks.push(Check::new(
                 "replaying §8.3's first algorithm consumes the proof exactly (§12.3.5)",
@@ -1537,16 +1544,21 @@ fn replay_contact_monitor(
             .and_then(|bytes| {
                 HashValue::from_slice(&bytes).map_err(|err| format!("vrf_output: {err}"))
             })?;
-        let commitment = hex::decode(&known.commitment)
-            .map_err(|err| format!("version {}: commitment: {err}", known.version))
-            .and_then(|bytes| {
-                HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
-            })?;
+        let commitment = match &known.commitment {
+            None => None,
+            Some(value) => Some(
+                hex::decode(value)
+                    .map_err(|err| format!("version {}: commitment: {err}", known.version))
+                    .and_then(|bytes| {
+                        HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
+                    })?,
+            ),
+        };
         keys.insert(
             known.version,
             combined::LadderKey {
                 vrf_output,
-                commitment: Some(commitment),
+                commitment,
             },
         );
     }
@@ -1707,6 +1719,121 @@ fn replay_owner_init(
     reader
         .finish()
         .map(|()| "every element read, none left over".to_owned())
+        .map_err(|err| format!("§12.3: {err}"))
+}
+
+/// Replays §8.3's second algorithm over a recorded owner monitoring response.
+///
+/// The check here is weaker than for the other algorithms, and says so. §8.3 step 4 makes
+/// exhaustion the user's stop condition, so the walk consumes whatever it is given by
+/// construction and §12.3's exact-count rule cannot reveal a misreading. What can is the ladders:
+/// an element attributed to the wrong entry evaluates to a prefix tree root that entry never had,
+/// and the root check catches it.
+fn replay_owner_monitor(
+    case: &crate::vectors::Case<MonitorInput, MonitorExpect>,
+    bytes: &[u8],
+    mode: DeploymentMode,
+) -> Result<String, String> {
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+    let mut dec = Decoder::new(bytes);
+    let response = OwnerMonitorResponse::decode_with(&mut dec, mode)
+        .map_err(|err| format!("decode failed: {err}"))?;
+
+    let greatest = case
+        .input
+        .greatest_version
+        .ok_or_else(|| "the request advertised no greatest version".to_owned())?;
+
+    // An owner holds the search keys and commitments for the versions it knows about, exactly as a
+    // contact monitor does — a monitoring response carries neither.
+    let mut keys = BTreeMap::new();
+    for known in &case.input.known_versions {
+        let vrf_output = hex::decode(&known.vrf_output)
+            .map_err(|err| format!("version {}: vrf_output: {err}", known.version))
+            .and_then(|bytes| {
+                HashValue::from_slice(&bytes).map_err(|err| format!("vrf_output: {err}"))
+            })?;
+        let commitment = match &known.commitment {
+            None => None,
+            Some(value) => Some(
+                hex::decode(value)
+                    .map_err(|err| format!("version {}: commitment: {err}", known.version))
+                    .and_then(|bytes| {
+                        HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
+                    })?,
+            ),
+        };
+        keys.insert(
+            known.version,
+            combined::LadderKey {
+                vrf_output,
+                commitment,
+            },
+        );
+    }
+
+    let size = case.expect.tree_size;
+    let retained = combined::Retained::none();
+    let mut reader = combined::Reader::new(&response.monitor, &retained);
+    for position in ibst::frontier(size).map_err(|err| format!("frontier: {err}"))? {
+        reader
+            .timestamp(position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    // §13.4's proof is §8.2's algorithm followed by §8.3's second, so the contact half runs first
+    // over the same map the request carried.
+    let map: Vec<combined::MapEntry> = case
+        .input
+        .entries
+        .iter()
+        .map(|entry| combined::MapEntry {
+            position: entry.position,
+            version: entry.version,
+        })
+        .collect();
+    combined::contact_monitor(
+        suite,
+        size,
+        case.input.monitoring_window,
+        &map,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§8.2 half: {err}"))?;
+
+    // §8.3 step 5 targets the greatest version the owner expects at each entry, from its own
+    // record of when it created them. In this log version `v` went in at entry `v`, so an owner
+    // that knows up to `greatest` expects `min(entry, greatest)` — which is the local state a real
+    // owner has because it made the updates.
+    let expected = |entry: u64| {
+        u32::try_from(entry)
+            .map(|version| version.min(greatest))
+            .unwrap_or(greatest)
+    };
+    let monitored = combined::owner_monitor(
+        suite,
+        size,
+        case.input.monitoring_window,
+        case.input.start,
+        &expected,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§8.3: {err}"))?;
+
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
+    // How far the walk got is reported in the case's description rather than compared: §8.3 lets
+    // the log truncate, so "reached entry N" is the log's choice of response size, not a claim a
+    // verifier can check.
+    let _ = monitored.reached;
+    reader
+        .finish()
+        .map(|()| "the walk ran to the end of the proof".to_owned())
         .map_err(|err| format!("§12.3: {err}"))
 }
 

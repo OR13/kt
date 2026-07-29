@@ -519,9 +519,11 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::combined",
             &["monitor.json"],
         ),
-        todo(
+        verified(
             "§8.3 second algorithm, §12.3.6",
             "Owner monitoring: the recursive walk over recent distinguished entries",
+            "kt-tree::combined",
+            &["monitor.json"],
         ),
         todo("§9, §13.5", "Updating a label"),
         todo(

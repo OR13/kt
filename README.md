@@ -131,6 +131,7 @@ Implemented and verified against the Go peer, byte for byte:
 | Monitoring response structures (`kt-wire::responses`) | §13.2–§13.4 | [`monitor.json`](interop/vectors/monitor.json) — contact, owner init, owner monitor |
 | Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/monitor.json) — 4 replayed, each consuming its proof exactly |
 | Owner initialization (`kt-tree::combined`) | §8.3, §12.3.5 | [`monitor.json`](interop/vectors/monitor.json) — replayed, consuming its proof exactly |
+| Owner monitoring (`kt-tree::combined`) | §8.3, §12.3.6 | [`monitor.json`](interop/vectors/monitor.json) — replayed to exhaustion, §8.2 and §8.3 composed |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
@@ -198,7 +199,7 @@ against regression, not a target: what it mostly bought was covering every error
 type's `Display` — the text a verifier emits when it rejects something — which turned
 up one real inconsistency, a wrapped error that did not chain to its cause.
 
-Interop work has turned up three bugs in the Go peer and nine gaps or ambiguities in
+Interop work has turned up three bugs in the Go peer and ten gaps or ambiguities in
 the draft, one of them filed upstream because it cannot be settled from either source. Each is written up and given a stable identifier in
 [`docs/interop.md`](docs/interop.md), whose findings register is the tracker — nothing is
 filed upstream, by decision, and every entry is pinned by a committed vector so a filing

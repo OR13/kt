@@ -469,8 +469,10 @@ pub struct KnownVersion {
     pub version: u32,
     /// Its VRF output — the prefix tree search key, hex.
     pub vrf_output: String,
-    /// The commitment to the label's value at that version, hex.
-    pub commitment: String,
+    /// The commitment to the label's value at that version, hex — absent for versions that do not
+    /// exist, which a ladder still looks up in order to prove their absence.
+    #[serde(default)]
+    pub commitment: Option<String>,
 }
 
 /// `monitor.json` expectations.
