@@ -157,7 +157,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `log-append.json` | log tree grown one leaf at a time | §3.2, §11.8 | 64 sizes |
 | `prefix-mutation.json` | prefix tree before/after an audited update | §15.2, §3.3 | 8 update shapes |
 | `auditor-update.json` | `AuditorUpdate` bytes, the auditor's verdict, and the root it would sign | §15.2, §11.3 | 14, 8 negative |
-| `search.json` | responses served by a real in-memory log | §12.3, §13.1 | 10 requests |
+| `search.json` | responses served by a real in-memory log | §6.3, §7.1–§7.2, §12.3, §13.1 | 13 requests, 1 refused |
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `distinguished.json` | distinguished log entries | §6.1 | 42 size/window/timestamp shapes |
@@ -195,6 +195,13 @@ bump changing behaviour fails loudly instead of passing quietly. `search.json` i
 exception, and it is not fixable: katie stamps each log entry with `time.Now()` and generates a
 fresh random opening for every commitment, with no injection point for either. Every
 commitment, prefix root, log root and signature in a response therefore differs run to run.
+
+Its expiry cases lean on that same clock deliberately. §7.1's expiry is relative to the
+rightmost entry's timestamp, so the only way to produce an expired entry is to space the
+mutations out in real time — a hundred milliseconds apart, against a 250ms lifetime. The
+margins are wide because the structure has to survive a loaded machine, and the generator
+asserts that some entries expired and some did not rather than trusting that they did: a case
+where everything or nothing expired would pass while testing nothing.
 
 The alternative to giving up the property was to weaken it — compare the regenerated file
 structurally, ignoring the values that move. That would have checked less than what is done

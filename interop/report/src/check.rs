@@ -871,6 +871,27 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
     let mut cases = Vec::new();
     for case in &file.cases {
         let name = case.name.as_str();
+
+        // Some requests the log refuses outright — §7.2 can conclude "expired" on the server
+        // side, before any proof exists. There is nothing to verify, and the case is recorded
+        // so that a future change turning a refusal into a response is visible as a diff.
+        if let Some(detail) = &case.expect.error {
+            cases.push(Case {
+                name: name.to_owned(),
+                negative: true,
+                input: format!(
+                    "{} entries · the log refuses: {detail}",
+                    case.input.mutations.len()
+                ),
+                checks: vec![Check::new(
+                    "the log refuses the request rather than proving anything (§7.2)",
+                    detail.clone(),
+                    detail.clone(),
+                )],
+            });
+            continue;
+        }
+
         let mode = DeploymentMode::from_u8(case.input.mode).map_err(|err| Error::Computation {
             file: FILE.to_owned(),
             case: name.to_owned(),
@@ -1311,9 +1332,7 @@ fn replay_fixed_version(
     let outcome = combined::fixed_version_search(
         suite,
         size,
-        // These cases are served by a log that defines no maximum lifetime, so nothing expires
-        // and §7.2's expiry branches are exercised by unit tests rather than here.
-        0,
+        case.input.maximum_lifetime,
         case.input.monitoring_window,
         target,
         &keys,

@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Seventeen vector files pass from the Rust side — 6657 checks across 778 cases — and
+Seventeen vector files pass from the Rust side — 6674 checks across 781 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -163,6 +163,16 @@ more places where the ordering is not what it looks like:
   question can be answered until that one is known — which makes it the first element of a
   fixed-version search's `timestamps`, ahead of the root's. A verifier that takes it from
   anywhere else reads every subsequent element one position out.
+
+§7.1's expiry needed the log's clock to be part of the fixture. Expiry is relative to the
+rightmost entry's timestamp, so producing an expired entry means spacing the mutations out in
+real time — a hundred milliseconds apart against a 250ms lifetime, which leaves four of seven
+entries expired and 50ms of slack on either side of every boundary. In those cases §7.2 step 1
+skips the expired entries without a ladder at all, so the response carries one proof and two
+prefix roots where the unexpired equivalent carries three proofs; the replay consumes both
+shapes exactly. A third case is refused by the log outright — asking for a version whose every
+proving entry has expired gets §7.2's "expired" answer from the server rather than a proof the
+client must reject.
 
 And one place where §7.2 turns out to be implementable only because of a property §6.1 does not
 state outright: steps 5.2 and 6.2 ask whether an entry is distinguished, and a verifier cannot
