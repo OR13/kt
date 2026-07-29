@@ -69,6 +69,20 @@ impl CipherSuite {
         NH
     }
 
+    /// `VRF.Np`: the size in bytes of a VRF proof.
+    ///
+    /// §17.1 gives 80 for `KT_128_SHA256_Ed25519` and 81 for `KT_128_SHA256_P256`. It is a
+    /// registry parameter rather than a property of the encoding, and it has to be known
+    /// out of band: a `BinaryLadderStep`'s proof is `Np` bytes with no length prefix, so a
+    /// decoder that assumes the wrong suite reads the next field out of the proof.
+    #[must_use]
+    pub const fn np(self) -> usize {
+        match self {
+            Self::Kt128Sha256P256 => 81,
+            Self::Kt128Sha256Ed25519 => 80,
+        }
+    }
+
     /// `Kc`: the fixed byte string used in commitments.
     #[must_use]
     pub const fn kc(self) -> &'static [u8] {

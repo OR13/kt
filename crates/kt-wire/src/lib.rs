@@ -16,7 +16,7 @@
 //! opaque types; then the structs: `TreeHead` (§11.2), `AuditorTreeHead`
 //! (§11.3), `FullTreeHead` (§11.4), `UpdateValue` (§11.5), `CommitmentValue`
 //! (§11.6), `VrfInput` (§11.7), the proof types (§12), the request/response
-//! types (§13), and `AuditorUpdate` (§15.2).
+//! types (§13), `CombinedTreeProof` (§12.3), and `AuditorUpdate` (§15.2).
 //!
 //! # Invariants
 //!
@@ -38,6 +38,7 @@ pub mod codec;
 pub mod heads;
 pub mod proofs;
 pub mod requests;
+pub mod responses;
 pub mod structs;
 
 /// The draft revision this crate targets.

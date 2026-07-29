@@ -157,6 +157,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `log-append.json` | log tree grown one leaf at a time | §3.2, §11.8 | 64 sizes |
 | `prefix-mutation.json` | prefix tree before/after an audited update | §15.2, §3.3 | 8 update shapes |
 | `auditor-update.json` | `AuditorUpdate` bytes, the auditor's verdict, and the root it would sign | §15.2, §11.3 | 14, 8 negative |
+| `search.json` | responses served by a real in-memory log | §12.3, §13.1 | 10 requests |
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `distinguished.json` | distinguished log entries | §6.1 | 42 size/window/timestamp shapes |

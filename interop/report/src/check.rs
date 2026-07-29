@@ -25,6 +25,7 @@ use kt_wire::requests::{
     BinaryLadderStep, ContactMonitorRequest, LabelValue, MonitorMapEntry, OwnerInitRequest,
     OwnerMonitorRequest, SearchRequest, UpdateInfo, UpdateRequest, UpdateTBS,
 };
+use kt_wire::responses::SearchResponse;
 use kt_wire::structs::{
     CommitmentValue, DeploymentMode, HashValue, LogEntry, UpdateSuffix, UpdateValue, VrfInput,
 };
@@ -35,12 +36,12 @@ use crate::vectors::{
     DistinguishedExpect, DistinguishedInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
     InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
     LogMathInput, LogTreeExpect, LogTreeInput, MutationExpect, MutationInput, PrefixTreeExpect,
-    PrefixTreeInput, RequestExpect, RequestInput, TamperedExpect, TamperedInput, UpdateViewExpect,
-    UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
+    PrefixTreeInput, RequestExpect, RequestInput, SearchExpect, SearchInput, TamperedExpect,
+    TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 16] = [
+pub const FILES: [&str; 17] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -54,6 +55,7 @@ pub const FILES: [&str; 16] = [
     "prefix-tree.json",
     "prefix-mutation.json",
     "auditor-update.json",
+    "search.json",
     "tree-head.json",
     "requests.json",
     "tampered.json",
@@ -176,6 +178,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         prefix_tree_suite(dir)?,
         mutation_suite(dir)?,
         auditor_suite(dir)?,
+        search_suite(dir)?,
         head_suite(dir)?,
         request_suite(dir)?,
         tampered_suite(dir)?,
@@ -855,6 +858,209 @@ fn prefix_tree_suite(dir: &Path) -> Result<Suite, Error> {
             sha: file.generator.sha,
         },
         cipher_suite: None,
+        cases,
+    })
+}
+
+/// §12.3 and §13.1: what a running log actually sends back.
+fn search_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "search.json";
+    let file: VectorFile<SearchInput, SearchExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let mode = DeploymentMode::from_u8(case.input.mode).map_err(|err| Error::Computation {
+            file: FILE.to_owned(),
+            case: name.to_owned(),
+            detail: alloc_string(&err),
+        })?;
+
+        // The response is read with the context §13.1 requires and nothing else: the mode,
+        // the suite's Nc and VRF.Np, and whether the request named a version. Getting any of
+        // them wrong shifts every field after it.
+        let bytes = unhex(FILE, name, "expect.response", &case.expect.response)?;
+        let mut dec = Decoder::new(&bytes);
+        let parsed = SearchResponse::decode_with(
+            &mut dec,
+            mode,
+            suite.nc(),
+            suite.np(),
+            case.input.version.is_some(),
+        )
+        .and_then(|response| {
+            // Trailing bytes would mean the structure was read too short, which byte
+            // equality alone would not catch.
+            if dec.is_empty() {
+                Ok(response)
+            } else {
+                Err(kt_wire::codec::Error::TrailingBytes {
+                    remaining: dec.remaining(),
+                })
+            }
+        });
+
+        let mut checks = vec![Check::new(
+            "SearchResponse round-trips through the request's context (§13.1)",
+            case.expect.response.clone(),
+            match &parsed {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(response) => render_result(kt_wire::codec::encode(response), hex::encode),
+            },
+        )];
+
+        // And the pieces, so a mismatch says which field drifted rather than only that the
+        // bytes differ. The CombinedTreeProof's three vectors are the interesting ones: their
+        // lengths are decided by the algorithm and by what the user advertised, not by
+        // anything in the bytes.
+        checks.push(Check::new(
+            "greatest version reported (§13.1)",
+            case.expect
+                .version
+                .map_or_else(|| "absent".to_owned(), |value| value.to_string()),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => response
+                    .version
+                    .map_or_else(|| "absent".to_owned(), |value| value.to_string()),
+            },
+        ));
+        checks.push(Check::new(
+            "binary ladder steps, and which carry a commitment (§13.1)",
+            render_list(
+                &case
+                    .expect
+                    .binary_ladder
+                    .iter()
+                    .map(|step| {
+                        step.commitment
+                            .as_ref()
+                            .map_or_else(|| "-".to_owned(), |value| value[..8].to_owned())
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => render_list(
+                    &response
+                        .binary_ladder
+                        .iter()
+                        .map(|step| {
+                            step.commitment.as_ref().map_or_else(
+                                || "-".to_owned(),
+                                |value| hex::encode(&value.as_bytes()[..4]),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "CombinedTreeProof timestamps, in the algorithm's request order (§12.3)",
+            render_list(
+                &case
+                    .expect
+                    .timestamps
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => render_list(
+                    &response
+                        .search
+                        .timestamps
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "CombinedTreeProof prefix proofs (§12.3)",
+            render_list(
+                &case
+                    .expect
+                    .prefix_proofs
+                    .iter()
+                    .map(|proof| proof.encoding.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => render_list(
+                    &response
+                        .search
+                        .prefix_proofs
+                        .iter()
+                        .map(|proof| render_result(kt_wire::codec::encode(proof), hex::encode))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "CombinedTreeProof prefix roots — the entries with a timestamp but no proof (§12.3)",
+            render_list(&case.expect.prefix_roots),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => render_list(
+                    &response
+                        .search
+                        .prefix_roots
+                        .iter()
+                        .map(|root| hex::encode(root.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "CombinedTreeProof log tree inclusion elements (§12.3)",
+            render_list(&case.expect.inclusion),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(response) => render_list(
+                    &response
+                        .search
+                        .inclusion
+                        .elements
+                        .iter()
+                        .map(|element| hex::encode(element.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+
+        let entries: usize = case.input.mutations.len();
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{entries}-entry log, {} · {} ladder steps, {} timestamps, {} proofs, {} roots",
+                case.input.version.map_or_else(
+                    || "greatest version".to_owned(),
+                    |version| format!("version {version}")
+                ),
+                case.expect.binary_ladder.len(),
+                case.expect.timestamps.len(),
+                case.expect.prefix_proofs.len(),
+                case.expect.prefix_roots.len(),
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Search responses from a running log".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
         cases,
     })
 }
