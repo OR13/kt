@@ -129,7 +129,8 @@ Implemented and verified against the Go peer, byte for byte:
 | `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/search.json) — 10 responses from a running log |
 | Greatest-version and fixed-version search (`kt-tree::combined`) | §6.3, §7.1, §7.2, §12.3 | [`search.json`](interop/vectors/search.json) — all 12 replayed, each consuming its proof exactly |
 | Monitoring response structures (`kt-wire::responses`) | §13.2–§13.4 | [`monitor.json`](interop/vectors/monitor.json) — contact, owner init, owner monitor |
-| Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/monitor.json) — 3 replayed, each consuming its proof exactly |
+| Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/monitor.json) — 4 replayed, each consuming its proof exactly |
+| Owner initialization (`kt-tree::combined`) | §8.3, §12.3.5 | [`monitor.json`](interop/vectors/monitor.json) — replayed, consuming its proof exactly |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that

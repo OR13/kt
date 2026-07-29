@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Eighteen vector files pass from the Rust side — 6696 checks across 787 cases — and
+Eighteen vector files pass from the Rust side — 6697 checks across 787 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -180,6 +180,25 @@ enumerate the distinguished set, because that needs timestamps for entries the s
 visits. It does not have to. §6.1 brackets a node by the timestamps of the entries either side
 of it in the search tree, and a descent maintains exactly those bounds as it goes — so
 distinguishedness along a search path is decidable from the path itself.
+
+### An owner looks backwards, everyone else looks forward
+
+§8.3's first algorithm is the one operation that walks *left*. A searcher descends toward a
+version, contact monitoring follows its versions up and to the right as new nodes are built over
+them, and an auditor moves forward one entry at a time. An owner adopting a label is doing
+something else: it is accepting a history it has not seen, so step 1's list is the starting
+position followed by "the log entries that are on the starting position's direct path and to its
+left, ending just before the first expired log entry".
+
+Two consequences fall out of that direction. The ladders are full — step 5 says "without omitting
+redundant lookups", unlike §6.3 and §7.2 — because there is no earlier entry for a later ladder to
+lean on when the walk is going backwards. And the response carries a greatest version *per entry*
+rather than one target, with §8.3 step 2 requiring each to be no greater than the one before: a
+label's version count only grows, so a list running backwards through the log that rises is a log
+lying about one of the two entries. That check has no analogue in any other operation.
+
+`monitor.json`'s `owner-init` case replays and consumes its proof exactly, and the version
+ordering, the expired-start refusal and the too-many-versions case are covered by Rust tests.
 
 ### Monitoring mostly does nothing, which is the part to get right
 

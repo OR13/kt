@@ -39,6 +39,7 @@
 
 use crate::{distinguished, ibst, ladder, prefix};
 use alloc::collections::BTreeMap;
+use alloc::vec;
 use alloc::vec::Vec;
 use kt_crypto::suite::CipherSuite;
 use kt_wire::proofs::{CombinedTreeProof, PrefixProof, PrefixSearchResult};
@@ -2651,6 +2652,622 @@ mod monitor_tests {
             assert!(!error.to_string().is_empty(), "{error:?}");
         }
         assert!(core::error::Error::source(&errors[5]).is_some());
+        assert!(core::error::Error::source(&errors[0]).is_none());
+    }
+}
+
+/// What owner initialization established (§8.3's first algorithm).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Initialized {
+    /// The entries inspected, left to right, with the prefix tree root each proof computed.
+    pub inspected: Vec<(u64, HashValue)>,
+    /// The greatest version the owner should now consider itself to hold, if the label existed at
+    /// the starting position.
+    pub greatest: Option<u32>,
+}
+
+/// Runs §8.3's first algorithm: a label owner initializing state at a distinguished entry.
+///
+/// An owner is in a different position from a searcher or a contact. A searcher asks about one
+/// version; an owner is claiming the label, and has to establish what the log thinks the *whole
+/// history* looks like as of the entry it is starting from. So the response carries a greatest
+/// version per inspected entry rather than one ladder, and this checks that those versions
+/// descend as the entries go back in time — a label's version count can only grow, so seeing it
+/// grow backwards means the log is lying about one of them.
+///
+/// `start` is the requested starting position, which §13.3 requires to be unexpired and
+/// distinguished. `greatest_versions` is the response's list, which may be *shorter* than the
+/// list of entries inspected: §13.3 says it ends "at the first log entry where the label doesn't
+/// exist", and entries past that are searched for version zero instead.
+///
+/// The ladders here are full: §8.3 step 5 says "without omitting redundant lookups", unlike §6.3
+/// and §7.2. An owner is establishing history rather than locating one version, so there is
+/// nothing for a later ladder to lean on.
+///
+/// # Errors
+///
+/// [`InitError`] where the proof does not establish what §8.3 requires.
+pub fn owner_init(
+    suite: CipherSuite,
+    size: u64,
+    lifetime: u64,
+    start: u64,
+    greatest_versions: &[u32],
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<Initialized, InitError> {
+    let last = size.saturating_sub(1);
+    let rightmost = reader.timestamp(last)?;
+
+    // §12.3.5: "the timestamp of each log entry on the path from the root to the user's requested
+    // starting position". The timestamps are what let both sides check that the start is
+    // unexpired and distinguished, which is the precondition the whole operation rests on.
+    let mut chain = ibst::direct_path(start, size)?;
+    chain.reverse();
+    for entry in &chain {
+        reader.timestamp(*entry)?;
+    }
+    let start_timestamp = reader.timestamp(start)?;
+    if expired(lifetime, start_timestamp, rightmost) {
+        return Err(InitError::StartExpired {
+            start,
+            timestamp: start_timestamp,
+            rightmost,
+        });
+    }
+
+    // Step 1: the starting position, then the entries on its direct path and to its left, ending
+    // just before the first expired one. Left, because an owner is looking *backwards* through
+    // the history it is adopting — the opposite direction from contact monitoring, which follows
+    // its versions forward.
+    let mut list = vec![start];
+    let mut path = ibst::direct_path(start, size)?;
+    path.retain(|entry| *entry < start);
+    path.sort_unstable_by_key(|entry| core::cmp::Reverse(*entry));
+    for entry in path {
+        let timestamp = reader.timestamp(entry)?;
+        if expired(lifetime, timestamp, rightmost) {
+            break;
+        }
+        list.push(entry);
+    }
+
+    // Step 2's check: the greatest version cannot grow as the entries go back in time.
+    for pair in greatest_versions.windows(2) {
+        if let [earlier, later] = pair {
+            if later > earlier {
+                return Err(InitError::VersionsNotDescending {
+                    earlier: *earlier,
+                    later: *later,
+                });
+            }
+        }
+    }
+    if greatest_versions.len() > list.len() {
+        return Err(InitError::TooManyVersions {
+            supplied: greatest_versions.len(),
+            inspected: list.len(),
+        });
+    }
+
+    // Step 5: one full ladder per inspected entry, targeting that entry's greatest version — or
+    // zero where the label did not exist there, which is what a list shorter than the entries
+    // means.
+    let mut inspected = Vec::new();
+    for (index, entry) in list.iter().enumerate() {
+        let target = greatest_versions.get(index).copied().unwrap_or(0);
+        let versions = ladder::search_binary_ladder(target, target, &[], &[])?;
+        let proof = reader.prefix_proof(*entry)?;
+        let used = versions
+            .get(..proof.results.len())
+            .ok_or(InitError::LadderLength {
+                position: *entry,
+                expected: versions.len(),
+                actual: proof.results.len(),
+            })?;
+
+        let ordering = ladder::interpret_search_ladder(used, target, &proof.results)?;
+        let exists = greatest_versions.get(index).is_some();
+        // A ladder for an entry where the label exists must place the greatest version *at* the
+        // claim. Where it does not exist, version zero must be absent — that is what "no value is
+        // provided" in step 2 has to mean for the proof to say anything.
+        let expected = if exists {
+            core::cmp::Ordering::Equal
+        } else {
+            core::cmp::Ordering::Less
+        };
+        if ordering != expected {
+            return Err(InitError::LadderInconsistent {
+                position: *entry,
+                claimed: target,
+                exists,
+            });
+        }
+
+        let mut entries = Vec::new();
+        for (version, result) in used.iter().zip(proof.results.iter()) {
+            let key = keys.get(version).ok_or(InitError::MissingLadderKey {
+                position: *entry,
+                version: *version,
+            })?;
+            entries.push(if result.is_inclusion() {
+                prefix::SearchEntry::included(
+                    key.vrf_output,
+                    key.commitment.ok_or(InitError::MissingCommitment {
+                        position: *entry,
+                        version: *version,
+                    })?,
+                )
+            } else {
+                prefix::SearchEntry::absent(key.vrf_output)
+            });
+        }
+        let root = prefix::evaluate(suite, &entries, proof)?;
+        reader.establish_root(*entry, root)?;
+        inspected.push((*entry, root));
+    }
+
+    Ok(Initialized {
+        inspected,
+        greatest: greatest_versions.first().copied(),
+    })
+}
+
+/// Why owner initialization rejected a proof (§8.3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InitError {
+    /// The requested starting position is expired, which §13.3 forbids.
+    StartExpired {
+        /// The position asked for.
+        start: u64,
+        /// Its timestamp.
+        timestamp: u64,
+        /// The rightmost entry's timestamp, which expiry is relative to.
+        rightmost: u64,
+    },
+    /// The greatest versions do not descend (§8.3 step 2, §13.3 step 1).
+    ///
+    /// A label's version count only grows, so a later entry in this list — which goes backwards
+    /// through the log — cannot hold a greater version than an earlier one.
+    VersionsNotDescending {
+        /// The version at the earlier position in the list.
+        earlier: u32,
+        /// The greater version that followed it.
+        later: u32,
+    },
+    /// More greatest versions were supplied than there are entries to inspect (§13.3 step 1).
+    TooManyVersions {
+        /// How many the response carried.
+        supplied: usize,
+        /// How many entries §8.3 step 1 computes.
+        inspected: usize,
+    },
+    /// An entry's proof carried more results than its ladder specifies.
+    LadderLength {
+        /// The log entry.
+        position: u64,
+        /// How many lookups the ladder specifies.
+        expected: usize,
+        /// How many the proof carried.
+        actual: usize,
+    },
+    /// An entry's ladder does not place the greatest version where the response claims.
+    LadderInconsistent {
+        /// The log entry.
+        position: u64,
+        /// The version claimed greatest there, or zero where the label was claimed absent.
+        claimed: u32,
+        /// Whether the response claimed the label existed at this entry.
+        exists: bool,
+    },
+    /// No search key was available for a version the ladder looks up.
+    MissingLadderKey {
+        /// The log entry.
+        position: u64,
+        /// The version.
+        version: u32,
+    },
+    /// No commitment was available for a version the ladder proves present.
+    MissingCommitment {
+        /// The log entry.
+        position: u64,
+        /// The version.
+        version: u32,
+    },
+    /// The proof could not be read as §12.3 requires.
+    Proof(Error),
+    /// A prefix tree proof did not evaluate.
+    Prefix(prefix::Error),
+    /// The search tree could not be navigated.
+    Ibst(ibst::Error),
+    /// A ladder could not be computed.
+    Ladder(ladder::Error),
+}
+
+impl From<Error> for InitError {
+    fn from(err: Error) -> Self {
+        Self::Proof(err)
+    }
+}
+
+impl From<prefix::Error> for InitError {
+    fn from(err: prefix::Error) -> Self {
+        Self::Prefix(err)
+    }
+}
+
+impl From<ibst::Error> for InitError {
+    fn from(err: ibst::Error) -> Self {
+        Self::Ibst(err)
+    }
+}
+
+impl From<ladder::Error> for InitError {
+    fn from(err: ladder::Error) -> Self {
+        Self::Ladder(err)
+    }
+}
+
+impl core::fmt::Display for InitError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::StartExpired {
+                start,
+                timestamp,
+                rightmost,
+            } => write!(
+                f,
+                "the requested starting entry {start} is expired: its timestamp {timestamp} \
+                 against a rightmost of {rightmost}"
+            ),
+            Self::VersionsNotDescending { earlier, later } => write!(
+                f,
+                "the greatest versions do not descend: {later} follows {earlier}, but a label's \
+                 version count only grows"
+            ),
+            Self::TooManyVersions {
+                supplied,
+                inspected,
+            } => write!(
+                f,
+                "the response carried {supplied} greatest versions for {inspected} inspected \
+                 entries"
+            ),
+            Self::LadderLength {
+                position,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "log entry {position}'s ladder should have at most {expected} lookups, the proof \
+                 has {actual}"
+            ),
+            Self::LadderInconsistent {
+                position,
+                claimed,
+                exists,
+            } => {
+                if *exists {
+                    write!(
+                        f,
+                        "log entry {position}'s ladder does not show version {claimed} as the \
+                         greatest that exists"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "log entry {position} is claimed not to hold the label, but its ladder \
+                         does not show version 0 absent"
+                    )
+                }
+            }
+            Self::MissingLadderKey { position, version } => write!(
+                f,
+                "no search key for version {version}, looked up at log entry {position}"
+            ),
+            Self::MissingCommitment { position, version } => write!(
+                f,
+                "no commitment for version {version}, proven present at log entry {position}"
+            ),
+            Self::Proof(err) => write!(f, "reading the proof: {err}"),
+            Self::Prefix(err) => write!(f, "evaluating a prefix tree proof: {err}"),
+            Self::Ibst(err) => write!(f, "walking the search tree: {err}"),
+            Self::Ladder(err) => write!(f, "computing a binary ladder: {err}"),
+        }
+    }
+}
+
+impl core::error::Error for InitError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Proof(err) => Some(err),
+            Self::Prefix(err) => Some(err),
+            Self::Ibst(err) => Some(err),
+            Self::Ladder(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod init_tests {
+    use super::search_tests::{commitment_for, key_for, tree_at};
+    use super::*;
+    use kt_wire::proofs::InclusionProof;
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    fn keys_upto(greatest: u32) -> BTreeMap<u32, LadderKey> {
+        let mut keys = BTreeMap::new();
+        for version in 0..=greatest.saturating_add(16) {
+            keys.insert(
+                version,
+                LadderKey {
+                    vrf_output: key_for(version),
+                    commitment: (version <= greatest).then(|| commitment_for(version)),
+                },
+            );
+        }
+        keys
+    }
+
+    fn stamps(size: u64) -> Vec<u64> {
+        (0..size).map(|i| 1_700_000_000_000 + i).collect()
+    }
+
+    /// The list §8.3 step 1 computes, and the proof a log would serve for it.
+    fn build_init(
+        size: u64,
+        start: u64,
+        lifetime: u64,
+        stamps: &[u64],
+    ) -> (CombinedTreeProof, Vec<u32>) {
+        let last = size - 1;
+        let rightmost = stamps[last as usize];
+        let mut timestamps: Vec<u64> = Vec::new();
+        let mut seen: Vec<u64> = Vec::new();
+        let push = |entry: u64, timestamps: &mut Vec<u64>, seen: &mut Vec<u64>| {
+            if !seen.contains(&entry) {
+                timestamps.push(stamps[entry as usize]);
+                seen.push(entry);
+            }
+        };
+
+        // The view update supplies the frontier's timestamps first.
+        for entry in ibst::frontier(size).unwrap() {
+            push(entry, &mut timestamps, &mut seen);
+        }
+        // §12.3.5: the path from the root to the starting position.
+        let mut chain = ibst::direct_path(start, size).unwrap();
+        chain.reverse();
+        for entry in &chain {
+            push(*entry, &mut timestamps, &mut seen);
+        }
+        push(start, &mut timestamps, &mut seen);
+
+        // Step 1's list, and the timestamps the walk reads deciding where it ends.
+        let mut list = vec![start];
+        let mut path = ibst::direct_path(start, size).unwrap();
+        path.retain(|entry| *entry < start);
+        path.sort_unstable_by_key(|entry| core::cmp::Reverse(*entry));
+        for entry in path {
+            push(entry, &mut timestamps, &mut seen);
+            if expired(lifetime, stamps[entry as usize], rightmost) {
+                break;
+            }
+            list.push(entry);
+        }
+
+        // In this log version `v` was added at entry `v`, so the greatest version at an entry is
+        // its own index — which descends as the list goes back in time, as step 2 requires.
+        let greatest_versions: Vec<u32> = list
+            .iter()
+            .map(|entry| u32::try_from(*entry).unwrap())
+            .collect();
+
+        let mut proofs = Vec::new();
+        for (index, entry) in list.iter().enumerate() {
+            let target = greatest_versions[index];
+            let versions = ladder::search_binary_ladder(target, target, &[], &[]).unwrap();
+            let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+            proofs.push(tree_at(*entry).prove(SUITE, &searches).unwrap());
+        }
+
+        let mut owed: Vec<u64> = seen
+            .iter()
+            .copied()
+            .filter(|entry| !list.contains(entry))
+            .collect();
+        owed.sort_unstable();
+        let prefix_roots = owed
+            .iter()
+            .map(|entry| tree_at(*entry).root(SUITE))
+            .collect();
+
+        (
+            CombinedTreeProof {
+                timestamps,
+                prefix_proofs: proofs,
+                prefix_roots,
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+            greatest_versions,
+        )
+    }
+
+    /// An owner adopting the history at entry 5 of a seven-entry log. Step 1's list is the start
+    /// plus its ancestors to the *left* — backwards through the history being adopted, which is
+    /// the opposite direction from contact monitoring.
+    #[test]
+    fn an_owner_initializes_and_consumes_the_proof_exactly() {
+        let size = 7_u64;
+        let start = 5_u64;
+        let clock = stamps(size);
+        let (proof, versions) = build_init(size, start, 0, &clock);
+        assert!(versions.len() > 1, "the list should reach past the start");
+        assert!(
+            versions.windows(2).all(|pair| pair[0] >= pair[1]),
+            "descending: {versions:?}"
+        );
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let initialized =
+            owner_init(SUITE, size, 0, start, &versions, &keys_upto(6), &mut reader).unwrap();
+        assert_eq!(initialized.greatest, Some(5));
+        assert_eq!(initialized.inspected.len(), versions.len());
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// Step 2's ordering check. A version count only grows, so a list going backwards through the
+    /// log cannot rise — a log claiming otherwise is lying about one of the two entries.
+    #[test]
+    fn greatest_versions_must_descend() {
+        let size = 7_u64;
+        let start = 5_u64;
+        let clock = stamps(size);
+        let (proof, _) = build_init(size, start, 0, &clock);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        assert_eq!(
+            owner_init(SUITE, size, 0, start, &[3, 5], &keys_upto(6), &mut reader),
+            Err(InitError::VersionsNotDescending {
+                earlier: 3,
+                later: 5
+            })
+        );
+    }
+
+    /// §13.3 step 1: no more versions than there are entries to inspect.
+    #[test]
+    fn more_versions_than_entries_is_refused() {
+        let size = 7_u64;
+        let start = 5_u64;
+        let clock = stamps(size);
+        let (proof, _) = build_init(size, start, 0, &clock);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let refused = owner_init(
+            SUITE,
+            size,
+            0,
+            start,
+            &[5, 4, 3, 2, 1, 0],
+            &keys_upto(6),
+            &mut reader,
+        );
+        assert!(
+            matches!(refused, Err(InitError::TooManyVersions { .. })),
+            "expected too many versions, got {refused:?}"
+        );
+    }
+
+    /// §13.3 requires the starting position to be unexpired, and it is the one precondition a
+    /// client can check for itself rather than taking on trust.
+    #[test]
+    fn an_expired_starting_position_is_refused() {
+        let size = 7_u64;
+        let start = 5_u64;
+        let day = 86_400_000_u64;
+        let clock: Vec<u64> = (0..size).map(|i| 1_700_000_000_000 + i * day).collect();
+        let lifetime = day; // entry 5 is a day behind entry 6, so exactly at the boundary
+        let (proof, versions) = build_init(size, start, lifetime, &clock);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        assert!(matches!(
+            owner_init(
+                SUITE,
+                size,
+                lifetime,
+                start,
+                &versions,
+                &keys_upto(6),
+                &mut reader
+            ),
+            Err(InitError::StartExpired { .. })
+        ));
+    }
+
+    #[test]
+    fn init_errors_describe_themselves() {
+        use alloc::string::ToString;
+        let errors = [
+            InitError::StartExpired {
+                start: 5,
+                timestamp: 1,
+                rightmost: 9,
+            },
+            InitError::VersionsNotDescending {
+                earlier: 1,
+                later: 2,
+            },
+            InitError::TooManyVersions {
+                supplied: 3,
+                inspected: 2,
+            },
+            InitError::LadderLength {
+                position: 5,
+                expected: 2,
+                actual: 3,
+            },
+            InitError::LadderInconsistent {
+                position: 5,
+                claimed: 3,
+                exists: true,
+            },
+            InitError::LadderInconsistent {
+                position: 5,
+                claimed: 0,
+                exists: false,
+            },
+            InitError::MissingLadderKey {
+                position: 5,
+                version: 1,
+            },
+            InitError::MissingCommitment {
+                position: 5,
+                version: 1,
+            },
+            InitError::from(Error::Exhausted {
+                array: "timestamps",
+                position: 5,
+            }),
+            InitError::from(prefix::Error::DepthOverflow { depth: 256 }),
+            InitError::from(ibst::Error::EmptyLog),
+            InitError::from(ladder::Error::UnrepresentableRung {
+                rung: 1 << 32,
+                greatest: u32::MAX,
+            }),
+        ];
+        for error in &errors {
+            assert!(!error.to_string().is_empty(), "{error:?}");
+        }
+        assert!(core::error::Error::source(&errors[8]).is_some());
         assert!(core::error::Error::source(&errors[0]).is_none());
     }
 }

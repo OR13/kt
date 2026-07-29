@@ -1467,6 +1467,13 @@ fn monitor_suite(dir: &Path) -> Result<Suite, Error> {
                 replay_contact_monitor(case, &bytes, mode).unwrap_or_else(|detail| detail),
             ));
         }
+        if case.input.operation == "owner-init" {
+            checks.push(Check::new(
+                "replaying §8.3's first algorithm consumes the proof exactly (§12.3.5)",
+                "every element read, none left over",
+                replay_owner_init(case, &bytes, mode, suite).unwrap_or_else(|detail| detail),
+            ));
+        }
 
         cases.push(Case {
             name: name.to_owned(),
@@ -1597,6 +1604,106 @@ fn replay_contact_monitor(
     }
     let _ = monitored;
 
+    reader
+        .finish()
+        .map(|()| "every element read, none left over".to_owned())
+        .map_err(|err| format!("§12.3: {err}"))
+}
+
+/// Replays §8.3's first algorithm over a recorded owner initialization response.
+///
+/// Unlike a monitoring response, this one carries its own ladder — an owner is adopting a history
+/// it has not seen, so the log has to supply the VRF proofs and commitments for every version
+/// involved. §13.3 step 2 requires a commitment for each version in `greatest_versions`, and
+/// notes that "the existence of a version does not require the existence of all lesser versions",
+/// so the commitments are not a prefix of the ladder.
+fn replay_owner_init(
+    case: &crate::vectors::Case<MonitorInput, MonitorExpect>,
+    bytes: &[u8],
+    mode: DeploymentMode,
+    suite: CipherSuite,
+) -> Result<String, String> {
+    let mut dec = Decoder::new(bytes);
+    let response = OwnerInitResponse::decode_with(&mut dec, mode, suite.np())
+        .map_err(|err| format!("decode failed: {err}"))?;
+
+    let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
+    let vrf_key =
+        hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
+    let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
+        .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
+        .and_then(|value| vrf::PublicKey::from_bytes(value).map_err(|err| err.to_string()))?;
+
+    // §8.3 step 3: the ladder covers version zero and every version a search ladder for any of
+    // the greatest versions would look up. Recovering which version each step is for means
+    // reproducing that set in the same order the log built it — ascending, per §13.3.
+    let mut wanted: Vec<u32> = vec![0];
+    for greatest in &response.greatest_versions {
+        for version in ladder::search_binary_ladder(*greatest, *greatest, &[], &[])
+            .map_err(|err| format!("ladder for version {greatest}: {err}"))?
+        {
+            if !wanted.contains(&version) {
+                wanted.push(version);
+            }
+        }
+    }
+    wanted.sort_unstable();
+    if wanted.len() != response.binary_ladder.len() {
+        return Err(format!(
+            "the response's ladder has {} steps; §8.3 step 3 calls for {} ({wanted:?})",
+            response.binary_ladder.len(),
+            wanted.len()
+        ));
+    }
+
+    let mut keys = BTreeMap::new();
+    for (version, step) in wanted.iter().zip(response.binary_ladder.iter()) {
+        let input = kt_wire::structs::VrfInput {
+            label: label.clone(),
+            version: *version,
+        };
+        let proof = vrf::Proof::from_slice(&step.proof)
+            .map_err(|err| format!("version {version}: {err}"))?;
+        let output = vrf_key
+            .verify(suite, &input, &proof)
+            .map_err(|err| format!("version {version}: the VRF proof does not verify: {err}"))?;
+        keys.insert(
+            *version,
+            combined::LadderKey {
+                vrf_output: output.search_key(),
+                commitment: step.commitment,
+            },
+        );
+    }
+
+    let size = case.expect.tree_size;
+    let retained = combined::Retained::none();
+    let mut reader = combined::Reader::new(&response.init, &retained);
+
+    // §12.3.1's view update first, as everywhere else.
+    for position in ibst::frontier(size).map_err(|err| format!("frontier: {err}"))? {
+        reader
+            .timestamp(position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let initialized = combined::owner_init(
+        suite,
+        size,
+        case.input.maximum_lifetime,
+        case.input.start,
+        &response.greatest_versions,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§8.3: {err}"))?;
+    let _ = initialized;
+
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
     reader
         .finish()
         .map(|()| "every element read, none left over".to_owned())
