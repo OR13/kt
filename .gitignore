@@ -2,7 +2,14 @@
 **/*.rs.bk
 Cargo.lock.orig
 
-# Go interop harness build output
+# Go interop harness build output. `go build ./cmd/gen` writes the binary into the
+# working directory, so these are easy to commit by accident — and they must not be,
+# for a licensing reason rather than a tidiness one: they link katie, so a committed
+# binary would make this repository distribute an AGPL derivative work. The whole
+# point of keeping upstream/ as submodules is that this repository ships none of that
+# code. See docs/licensing.md.
+/interop/go/gen
+/interop/go/verify
 /interop/go/bin/
 /interop/go/*.test
 

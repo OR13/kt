@@ -558,11 +558,21 @@ response where a version was already proven to the left. katie cannot settle it 
 `MonitoringBinaryLadder(t)` takes only the target, so it always uses the default — and that is an
 implementation choice rather than evidence about intent.
 
-This one **is filed**, because it is the first finding that could not be resolved either by
+This one **was filed**, because it was the first finding that could not be resolved either by
 reading the specification or by measuring the peer:
-[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48). This
-implementation uses the empty-set reading, which is what interoperates today, and §8.2's three
-recorded cases consume their proofs exactly under it.
+[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48).
+
+**Answered, and the answer was that the appendix is wrong.** The draft's editor replied that the
+prose explaining how to use `left_inclusion` for monitoring ladders was removed deliberately —
+it "became finicky and a security risk" — and that the parameter left behind in Appendix B is a
+leftover. So the empty-set reading is not merely the one that interoperates, it is the intended
+one, and §8.1's prose was right all along. Fix sent as
+[draft-protocol#49](https://github.com/ietf-wg-keytrans/draft-protocol/pull/49).
+
+Worth noting what settled it: not more measurement. katie could never have answered this, because
+katie implements the parameter-free version either way — the question was what the specification
+meant, and only its author could say. That is the distinction the register's filing rule was
+drawing, and this is the case that shows the rule earning its keep.
 
 **[DRAFT-02] §12.2 leaves two things implicit about prefix proofs.** First, what `depth`
 counts for a `nonInclusionParent` result: §12.2 calls the terminal node "a parent
@@ -760,7 +770,7 @@ courtesy rather than a necessity.
 | `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | tracked locally |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
 | `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
-| `DRAFT-09` | Nothing says when a monitoring ladder deduplicates against `left_inclusion`; the two readings fail against each other | draft | `monitor.json`, §8.2 replays under the empty-set reading | **filed**: [draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48) |
+| `DRAFT-09` | Appendix B's `monitoring_binary_ladder` keeps a `left_inclusion` parameter whose prose was removed; the two readings fail against each other | draft | `monitor.json`, §8.2 replays under the empty-set reading | **resolved**: the appendix is wrong ([#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48)); fix sent as [#49](https://github.com/ietf-wg-keytrans/draft-protocol/pull/49) |
 | `DRAFT-10` | §12.3.6 omits the timestamp of an entry that reaches step 5 without recursing, so its own proof cannot be rooted | draft | `monitor.json` `owner-monitor-reaches-step-5` | tracked locally; resolved by measurement |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 

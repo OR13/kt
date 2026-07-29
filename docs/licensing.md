@@ -26,6 +26,13 @@ relicense it permissively even though he would like to. The boundary here theref
 stays where it is — read, do not link — and it is not a temporary state waiting on
 an answer.
 
+**Compiled binaries count as shipping the code.** `go build ./cmd/gen` writes its output
+into the working directory, and such a binary links katie — so committing one would make
+this repository distribute an AGPL derivative work, which is exactly what the submodule
+arrangement exists to avoid. Two were committed by accident and removed in
+`interop/go/gen` and `interop/go/verify`; both paths are now in `.gitignore` with the
+reason attached, because "untidy" is not why they must stay out.
+
 Submodules are references, not copies: this repository records a URL and a
 commit SHA, and ships none of that code. That is deliberate — a vendored
 `upstream/katie/` inside the tree would put AGPL source in every distribution of
