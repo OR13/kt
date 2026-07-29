@@ -527,6 +527,32 @@ impl<'a> Decoder<'a> {
         Ok(items)
     }
 
+    /// Reads a variable-length vector whose elements need context to decode.
+    ///
+    /// Several §13 structures have one: a `BinaryLadderStep`'s proof is `VRF.Np` bytes with
+    /// no length prefix of its own, and an `UpdateInfo` needs both `Nc` and the deployment
+    /// mode. Their elements cannot implement [`Decode`], because [`Decode`] has nowhere to
+    /// put the context — so the count is read here and each element is decoded by `element`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::VectorTooLong`] if the prefix exceeds `spec`'s ceiling, plus anything
+    /// `element` reports.
+    pub fn vector_with<T>(
+        &mut self,
+        spec: VectorSpec,
+        mut element: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<Vec<T>> {
+        let count = self.length(spec)?;
+        // Not `with_capacity`, for the same reason as `vector`: the count is
+        // attacker-chosen and need not bear any relation to the bytes that follow.
+        let mut items = Vec::new();
+        for _ in 0..count {
+            items.push(element(self)?);
+        }
+        Ok(items)
+    }
+
     /// Reads an `optional<T>` (§2.1.1).
     ///
     /// # Errors

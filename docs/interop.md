@@ -106,13 +106,13 @@ disagrees:
 | 4 | Log tree (§3.2, §11.8) | leaf sequence → root, inclusion/consistency proofs | katie's `tree/log/math` is a good oracle for node indexing. | **agrees**, both directions |
 | 5 | Prefix tree (§3.3, §11.9) | insert sequence → root, membership proofs | The subtlest hashing rules in the draft. | **agrees**, both directions |
 | 6 | IBST + ladders (§4.1, §5) | tree size → node sequence; version → ladder | Pure integer math, cheap and high-yield; the draft ships pseudocode in App. A/B. | **agrees** below version `2^31-1`; see the finding below |
-| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | **agrees**: signatures and `FullTreeHead` bytes in all three modes; combined tree todo |
-| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | §6.1's distinguished entries **agree** across 42 shapes; the rest todo |
+| 7 | Combined tree + full head (§3.4, §11.4) | full `FullTreeHead` verification | First point where signatures enter. | **agrees**: signatures, `FullTreeHead` bytes in all three modes, and §3.4's log entries |
+| 8 | Algorithms (§6-§10, §13) | search / monitor / update transcripts | Composite; only meaningful once 1–7 agree. | §6.1 and the §12.3/§13.1 response structures **agree**; the algorithms that consume them are todo |
 | 9 | Auditing (§15.2) | `AuditorUpdate` bytes; before/after prefix roots; accept-or-reject; the log root signed | Sits on the prefix tree, and the auditor is the one role whose whole job is a verdict. | **agrees** on all 14 verdicts across steps 1–7, every encoding, and every log root; three divergences recorded, see below |
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Sixteen vector files pass from the Rust side — 6577 checks across 768 cases — and
+Seventeen vector files pass from the Rust side — 6647 checks across 778 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -124,6 +124,35 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### Bytes that do not say what they are for
+
+§12.3's `CombinedTreeProof` is the only structure in the draft whose contents cannot be
+interpreted from the bytes. It carries `timestamps`, `prefix_proofs` and `prefix_roots` with
+nothing saying which log entry each element belongs to — they arrive "in the order that the
+algorithm the user is executing would request them". So the same bytes mean different things
+depending on which algorithm is running, whether the user advertised a previous tree size,
+and which timestamps they are expected to have retained already.
+
+That makes it the one structure a hand-built vector cannot pin. `search.json` therefore builds
+a real katie log in memory, mutates it seven times, and records the `SearchResponse` bytes it
+serves — and the cases vary exactly what changes the ordering: a first-time search against one
+that advertises an earlier size (2 timestamps and 1 inclusion element instead of 3 and 3,
+because §12.3 omits what the user retained); a greatest-version search, which carries a
+`version` field, against a fixed-version one, which does not; a label with seven versions
+against one with a single version against one that does not exist at all.
+
+What is pinned is the wire layer: 10 responses that decode with the request's context and
+re-encode byte-for-byte, with the ladder, the three proof vectors and the inclusion elements
+checked individually so a mismatch says which field drifted. What is *not* pinned is the
+meaning of the ordering, and the coverage table says so in its own row — reading the structure
+is not the same as verifying it, and one should not be allowed to stand in for the other.
+
+Two things measured along the way, both against expectations that turned out to be wrong. A
+search for a label that has no versions does not fail: katie answers with a one-step ladder
+for version 0, proving nothing exists. Nor does a fixed-version search above the greatest
+version — it answers with a fourteen-step ladder. Both had been written as expected errors
+before the generator was run.
 
 ### The one check that is about the log's past
 

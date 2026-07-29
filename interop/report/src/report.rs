@@ -465,8 +465,33 @@ pub fn coverage_table() -> Vec<Area> {
             coverage: Coverage::OutOfScope,
             evidence: Vec::new(),
         },
-        todo("§3.4, §12.3", "Combined tree and CombinedTreeProof"),
-        todo("§6, §7, §13.1", "Greatest-version and fixed-version search"),
+        verified(
+            "§3.4",
+            "Combined tree: log entries committing to prefix tree roots",
+            "kt-wire::structs, kt-tree::log",
+            &["log-tree.json", "log-append.json", "auditor-update.json"],
+        ),
+        verified(
+            "§12.3, §13.1",
+            "CombinedTreeProof and SearchResponse, as a running log serves them",
+            "kt-wire::proofs, kt-wire::responses",
+            &["search.json"],
+        ),
+        Area {
+            section: "§12.3".to_owned(),
+            name: "CombinedTreeProof element ordering — which element belongs to which entry"
+                .to_owned(),
+            module: None,
+            // The bytes are pinned; what they *mean* is decided by the algorithm consuming
+            // them, and the algorithms are the rows below. Reading the structure is not the
+            // same as verifying it, and the table should not let one stand in for the other.
+            coverage: Coverage::NotImplemented,
+            evidence: Vec::new(),
+        },
+        todo(
+            "§6.3, §7.2",
+            "Greatest-version and fixed-version search: consuming a CombinedTreeProof",
+        ),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),
         todo(

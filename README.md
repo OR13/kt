@@ -126,6 +126,7 @@ Implemented and verified against the Go peer, byte for byte:
 | `AuditorUpdate` + every auditor check on one entry, steps 1–7 (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 14 cases through katie's own auditor |
 | Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
 | Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/distinguished.json) — 42 size/window/timestamp shapes |
+| `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/search.json) — 10 responses from a running log |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that

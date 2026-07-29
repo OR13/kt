@@ -284,6 +284,73 @@ impl Decode for PrefixProof {
     }
 }
 
+/// Everything a user needs from the log entries an algorithm inspects (§12.3).
+///
+/// ```text
+/// struct {
+///   uint64 timestamps<0..2^8-1>;
+///   PrefixProof prefix_proofs<0..2^8-1>;
+///   HashValue prefix_roots<0..2^8-1>;
+///
+///   InclusionProof inclusion;
+/// } CombinedTreeProof;
+/// ```
+///
+/// The unusual thing about this structure is that its bytes do not say what they are for.
+/// There is no field naming the log entry a timestamp or a proof belongs to: the elements
+/// arrive "in the order that the algorithm the user is executing would request them", so the
+/// same bytes mean different things depending on which algorithm is running and what the
+/// user advertised. Decoding it is therefore only half of reading it, and the half that can
+/// go wrong silently — a decoder that gets the order right by luck on one request will get
+/// it wrong on the next.
+///
+/// The rules that make it verifiable rather than merely parseable are §12.3's, and they live
+/// with the algorithms rather than here: a timestamp appears only the first time its entry is
+/// referenced, timestamps the user already retained are omitted, `prefix_roots` covers the
+/// entries that got a timestamp but no proof, two proofs for the same entry must agree on
+/// its root, the counts must come out exact, and the timestamps together with the retained
+/// ones must be monotonic.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CombinedTreeProof {
+    /// Timestamps of the entries the algorithm asked about, in request order.
+    pub timestamps: Vec<u64>,
+    /// Prefix tree search proofs, in request order.
+    pub prefix_proofs: Vec<PrefixProof>,
+    /// Prefix tree roots for entries that have a timestamp but no proof, left to right.
+    pub prefix_roots: Vec<HashValue>,
+    /// The log tree nodes needed to root everything above.
+    pub inclusion: InclusionProof,
+}
+
+impl CombinedTreeProof {
+    /// `uint64 timestamps<0..2^8-1>`, and the same bound for the other two vectors.
+    pub const ELEMENTS: VectorSpec = VectorSpec::new((1 << 8) - 1);
+}
+
+impl Encode for CombinedTreeProof {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.vector(Self::ELEMENTS, &self.timestamps)?;
+        enc.vector(Self::ELEMENTS, &self.prefix_proofs)?;
+        enc.vector(Self::ELEMENTS, &self.prefix_roots)?;
+        self.inclusion.encode(enc)
+    }
+}
+
+impl Decode for CombinedTreeProof {
+    fn decode(dec: &mut Decoder<'_>) -> Result<Self> {
+        let timestamps = dec.vector(Self::ELEMENTS)?;
+        let prefix_proofs = dec.vector(Self::ELEMENTS)?;
+        let prefix_roots = dec.vector(Self::ELEMENTS)?;
+        let inclusion = InclusionProof::decode(dec)?;
+        Ok(Self {
+            timestamps,
+            prefix_proofs,
+            prefix_roots,
+            inclusion,
+        })
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::indexing_slicing,

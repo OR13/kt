@@ -299,6 +299,102 @@ pub struct MutationExpect {
     pub peer_error: Option<String>,
 }
 
+/// `search.json` input (§12.3, §13.1).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchInput {
+    /// One log entry per element, each adding the label-value pairs listed.
+    pub mutations: Vec<SearchMutation>,
+    /// The label searched for, hex.
+    pub label: String,
+    /// The version requested, absent for a greatest-version search.
+    #[serde(default)]
+    pub version: Option<u32>,
+    /// The tree size the user advertised, if any.
+    #[serde(default)]
+    pub last: Option<u64>,
+    /// The deployment mode, which the response's shape depends on.
+    pub mode: u8,
+    /// The log's signature key, hex.
+    pub signature_public_key: String,
+    /// The log's VRF key, hex.
+    pub vrf_public_key: String,
+    /// Clock tolerance ahead, milliseconds.
+    pub max_ahead: u64,
+    /// Clock tolerance behind, milliseconds.
+    pub max_behind: u64,
+    /// The Reasonable Monitoring Window.
+    pub monitoring_window: u64,
+}
+
+/// One log entry's worth of additions.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchMutation {
+    /// Label-value pairs added in this entry.
+    pub add: Vec<SearchLabelValue>,
+}
+
+/// A label and the value it gained.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchLabelValue {
+    /// The label, hex.
+    pub label: String,
+    /// The value, hex.
+    pub value: String,
+}
+
+/// `search.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchExpect {
+    /// The whole encoded `SearchResponse`, hex.
+    pub response: String,
+    /// Its `FullTreeHead`, hex.
+    pub full_tree_head: String,
+    /// The target version's commitment opening, hex.
+    pub opening: String,
+    /// The greatest version, present only for a greatest-version search.
+    #[serde(default)]
+    pub version: Option<u32>,
+    /// One step per ladder version.
+    pub binary_ladder: Vec<LadderStepExpect>,
+    /// The `CombinedTreeProof`'s timestamps, in request order.
+    pub timestamps: Vec<u64>,
+    /// Its prefix proofs, in request order.
+    pub prefix_proofs: Vec<PrefixProofExpect>,
+    /// Its prefix roots, hex.
+    pub prefix_roots: Vec<String>,
+    /// Its log tree inclusion elements, hex.
+    pub inclusion: Vec<String>,
+    /// The log's tree size when the response was served.
+    pub tree_size: u64,
+}
+
+/// One `BinaryLadderStep` in a response.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LadderStepExpect {
+    /// The VRF proof, hex.
+    pub proof: String,
+    /// The commitment, absent for versions that do not exist and for the target.
+    #[serde(default)]
+    pub commitment: Option<String>,
+}
+
+/// One `PrefixProof` inside a `CombinedTreeProof`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrefixProofExpect {
+    /// Its wire encoding, hex.
+    pub encoding: String,
+    /// Its results.
+    pub results: Vec<PrefixResultExpect>,
+    /// Its copath elements, hex.
+    pub elements: Vec<String>,
+}
+
 /// `distinguished.json` input (§6.1).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
