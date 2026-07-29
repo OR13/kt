@@ -71,7 +71,7 @@ func searchVectors(sha string) (*File, error) {
 	}
 
 	for _, spec := range searchCases() {
-		tree, config, err := buildLog(cs, spec)
+		tree, config, entryTimestamps, err := buildLog(cs, spec)
 		if err != nil {
 			return nil, fmt.Errorf("case %q: building the log: %w", spec.name, err)
 		}
@@ -86,9 +86,11 @@ func searchVectors(sha string) (*File, error) {
 			if spec.expectError == "" {
 				return nil, fmt.Errorf("case %q: searching: %w", spec.name, err)
 			}
+			input := searchInput(spec, config)
+			input["entry_timestamps"] = indices(entryTimestamps)
 			f.Cases = append(f.Cases, Case{
 				Name:  spec.name,
-				Input: searchInput(spec, config),
+				Input: input,
 				Expect: map[string]any{
 					"error": err.Error(),
 				},
@@ -133,9 +135,11 @@ func searchVectors(sha string) (*File, error) {
 			expect["version"] = *res.Version
 		}
 
+		input := searchInput(spec, config)
+		input["entry_timestamps"] = indices(entryTimestamps)
 		f.Cases = append(f.Cases, Case{
 			Name:   spec.name,
-			Input:  searchInput(spec, config),
+			Input:  input,
 			Expect: expect,
 		})
 	}
@@ -281,14 +285,14 @@ func searchCases() []searchCase {
 // configuration a client would have.
 func buildLog(
 	cs suites.CipherSuite, spec searchCase,
-) (*transparency.Tree, *structs.PublicConfig, error) {
+) (*transparency.Tree, *structs.PublicConfig, []uint64, error) {
 	logKey, err := cs.ParseSigningPrivateKey(repeat(0x71, 32))
 	if err != nil {
-		return nil, nil, fmt.Errorf("parsing the log signing key: %w", err)
+		return nil, nil, nil, fmt.Errorf("parsing the log signing key: %w", err)
 	}
 	vrfKey, err := edwards25519.NewPrivateKey(repeat(0x74, 32))
 	if err != nil {
-		return nil, nil, fmt.Errorf("parsing the VRF key: %w", err)
+		return nil, nil, nil, fmt.Errorf("parsing the VRF key: %w", err)
 	}
 	private := structs.PrivateConfig{
 		SignatureKey: logKey,
@@ -304,8 +308,13 @@ func buildLog(
 
 	tree, err := transparency.NewTree(private, memory.NewTransparencyStore(), nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating the tree: %w", err)
+		return nil, nil, nil, fmt.Errorf("creating the tree: %w", err)
 	}
+	// Each Mutate hands back the AuditorUpdate for the entry it created, which carries that
+	// entry's timestamp. Recording them is not a convenience: §12.3 omits the timestamps a
+	// user is expected to have retained, so a verifier replaying one of these responses has to
+	// be given them, and they are wall-clock values that cannot be reconstructed.
+	timestamps := make([]uint64, 0, len(spec.mutations))
 	for i, mutation := range spec.mutations {
 		add := make([]transparency.LabelValue, 0, len(mutation))
 		for _, entry := range mutation {
@@ -314,11 +323,13 @@ func buildLog(
 				Value: structs.UpdateValue{Value: entry.value},
 			})
 		}
-		if _, err := tree.Mutate(add, nil); err != nil {
-			return nil, nil, fmt.Errorf("mutation %d: %w", i, err)
+		update, err := tree.Mutate(add, nil)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("mutation %d: %w", i, err)
 		}
+		timestamps = append(timestamps, update.Timestamp)
 	}
-	return tree, private.Public(), nil
+	return tree, private.Public(), timestamps, nil
 }
 
 // prefixProofsJSON renders each PrefixProof as its results and copath, plus its encoded

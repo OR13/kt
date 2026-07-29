@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use kt_crypto::commitment::{self, Commitment};
 use kt_crypto::suite::CipherSuite;
 use kt_crypto::{signature, vrf};
-use kt_tree::{audit, ibst, ladder, log, prefix};
+use kt_tree::{audit, combined, ibst, ladder, log, prefix};
 use kt_wire::audit::AuditorUpdate;
 use kt_wire::codec::Decoder;
 use kt_wire::heads::{
@@ -1032,6 +1032,28 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
             },
         ));
 
+        // §6.3, for the responses that are greatest-version searches. This is the check that
+        // pins the *ordering* rather than the encoding: §12.3 requires the proof to hold
+        // exactly the elements the algorithm asks for, so replaying the algorithm over
+        // katie's response has to consume every timestamp and every prefix proof with nothing
+        // left over. An implementation that reads §12.3's order differently does not compute
+        // something subtly wrong — it finishes holding elements it never used.
+        if case.input.version.is_none() {
+            checks.push(Check::new(
+                "replaying §6.3 consumes the proof exactly (§12.3)",
+                if case.name == "label-does-not-exist" {
+                    "every element read, none left over (the label has no versions)"
+                } else {
+                    "every element read, none left over"
+                },
+                match &parsed {
+                    Err(err) => format!("decode failed: {err}"),
+                    Ok(response) => replay_greatest_version(FILE, name, case, response)
+                        .unwrap_or_else(|detail| detail),
+                },
+            ));
+        }
+
         let entries: usize = case.input.mutations.len();
         cases.push(Case {
             name: name.to_owned(),
@@ -1065,6 +1087,161 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
     })
 }
 
+/// Replays §6.3 over a recorded response and reports whether the proof came out exact.
+///
+/// The search keys come from the response's own binary ladder: each step's VRF proof is
+/// verified against the log's public key for the label-version pair it claims, which is the
+/// only thing that ties a step to a version. The target version's commitment is recomputed
+/// from `opening` and `value`, because §13.1 deliberately omits it from the ladder.
+fn replay_greatest_version(
+    file: &str,
+    case_name: &str,
+    case: &crate::vectors::Case<SearchInput, SearchExpect>,
+    response: &SearchResponse,
+) -> Result<String, String> {
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+    let claimed = response
+        .version
+        .ok_or_else(|| "the response carried no version".to_owned())?;
+    let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
+    let vrf_key =
+        hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
+    let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
+        .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
+        .and_then(|bytes| vrf::PublicKey::from_bytes(bytes).map_err(|err| err.to_string()))?;
+
+    // The ladder the response carries is the one for the target version, in §5's order, so its
+    // steps line up with the versions that algorithm outputs.
+    let versions = ladder::search_binary_ladder(claimed, claimed, &[], &[])
+        .map_err(|err| format!("ladder: {err}"))?;
+    // The response's ladder can be *shorter* than §5's full sequence for the target, for the
+    // same reason a per-entry ladder can be: the sequence stops as soon as it has established
+    // where the greatest version sits. For a label with no versions at all the log sends a
+    // single lookup for version 0. So the steps pair with a prefix of the sequence.
+    if response.binary_ladder.len() > versions.len() {
+        return Err(format!(
+            "the response's ladder has {} steps, more than the {} §5 gives for version {claimed}",
+            response.binary_ladder.len(),
+            versions.len()
+        ));
+    }
+    let versions = versions
+        .get(..response.binary_ladder.len())
+        .ok_or_else(|| "the response's ladder is longer than §5's sequence".to_owned())?;
+
+    // §13.1: the target version's commitment is not in the ladder — it is recomputed from the
+    // `opening` and `value` the response carries, which is what makes the response's claim
+    // about the value binding rather than merely asserted.
+    let target_commitment = {
+        let opening = hex::decode(&case.expect.opening).map_err(|err| format!("opening: {err}"))?;
+        let value = kt_wire::structs::CommitmentValue {
+            opening,
+            label: label.clone(),
+            version: claimed,
+            update: response.value.clone(),
+        };
+        commitment::commit(suite, &value).map_err(|err| format!("commitment: {err}"))?
+    };
+
+    let mut keys = BTreeMap::new();
+    for (version, step) in versions.iter().zip(response.binary_ladder.iter()) {
+        let input = kt_wire::structs::VrfInput {
+            label: label.clone(),
+            version: *version,
+        };
+        let proof = vrf::Proof::from_slice(&step.proof)
+            .map_err(|err| format!("version {version}: {err}"))?;
+        let output = vrf_key
+            .verify(suite, &input, &proof)
+            .map_err(|err| format!("version {version}: the VRF proof does not verify: {err}"))?;
+        let mut commitment = step.commitment;
+        if *version == claimed {
+            if commitment.is_some() {
+                return Err(format!(
+                    "§13.1 forbids a commitment for the target version, but version {version}                      carries one"
+                ));
+            }
+            commitment = Some(HashValue::from_bytes(*target_commitment.as_bytes()));
+        }
+        keys.insert(
+            *version,
+            combined::LadderKey {
+                vrf_output: output.search_key(),
+                commitment,
+            },
+        );
+    }
+
+    // What the user retained: §12.3 omits the timestamps their previous view covered, which
+    // are the frontier entries of the size they advertised. The values are the log's own,
+    // recorded by the generator — a placeholder will not do, because the timestamps decide
+    // which entries are distinguished and therefore where §6.3 starts.
+    let size = case.expect.tree_size;
+    let mut retained = combined::Retained::none();
+    if let Some(advertised) = case.input.last {
+        for position in ibst::frontier(advertised).map_err(|err| format!("frontier: {err}"))? {
+            let timestamp = usize::try_from(position)
+                .ok()
+                .and_then(|index| case.input.entry_timestamps.get(index))
+                .copied()
+                .ok_or_else(|| format!("no recorded timestamp for log entry {position}"))?;
+            retained.timestamps.insert(position, timestamp);
+        }
+    }
+
+    let mut reader = combined::Reader::new(&response.search, &retained);
+
+    // §12.3.1 first: the view update supplies timestamps for the frontier, or for §4.2's list
+    // when the user advertised a size.
+    let view = match case.input.last {
+        None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
+        Some(advertised) => ibst::update_view(size, Some(advertised))
+            .map_err(|err| format!("update view: {err}"))?,
+    };
+    for position in &view {
+        reader
+            .timestamp(*position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let outcome = combined::greatest_version_search(
+        suite,
+        size,
+        case.input.monitoring_window,
+        claimed,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§6.3: {err}"))?;
+    let (inspected_pairs, note) = match &outcome {
+        combined::Outcome::Found(search) => (&search.inspected, ""),
+        // The label has no versions. §6.3 does not describe this response; see DRAFT-08.
+        combined::Outcome::NoVersions { inspected, .. } => {
+            (inspected, " (the label has no versions)")
+        }
+    };
+
+    // Any entry that got a timestamp but no proof needs its prefix root, which is what
+    // `prefix_roots` is for.
+    let inspected: Vec<u64> = inspected_pairs
+        .iter()
+        .map(|(position, _)| *position)
+        .collect();
+    for position in &view {
+        if !inspected.contains(position) {
+            reader
+                .prefix_root(*position)
+                .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+        }
+    }
+
+    let _ = (file, case_name);
+    reader
+        .finish()
+        .map(|()| format!("every element read, none left over{note}"))
+        .map_err(|err| format!("§12.3: {err}"))
+}
+
 /// §6.1: which log entries are distinguished.
 fn distinguished_suite(dir: &Path) -> Result<Suite, Error> {
     const FILE: &str = "distinguished.json";
@@ -1074,7 +1251,7 @@ fn distinguished_suite(dir: &Path) -> Result<Suite, Error> {
     for case in &file.cases {
         let name = case.name.as_str();
         let timestamps = case.input.timestamps.clone();
-        let at = move |position: u64| {
+        let mut at = move |position: u64| {
             usize::try_from(position)
                 .ok()
                 .and_then(|index| timestamps.get(index))
@@ -1097,7 +1274,7 @@ fn distinguished_suite(dir: &Path) -> Result<Suite, Error> {
                 case.expect
                     .rightmost
                     .map_or_else(|| "none".to_owned(), |value| value.to_string()),
-                render(kt_tree::distinguished::rightmost(size, window, &at)),
+                render(kt_tree::distinguished::rightmost(size, window, &mut at)),
             ),
             Check::new(
                 "rightmost distinguished entry left of the last one (§6.1)",
@@ -1105,14 +1282,14 @@ fn distinguished_suite(dir: &Path) -> Result<Suite, Error> {
                     .previous_rightmost
                     .map_or_else(|| "none".to_owned(), |value| value.to_string()),
                 render(kt_tree::distinguished::previous_rightmost(
-                    size, window, &at,
+                    size, window, &mut at,
                 )),
             ),
         ];
 
         // The full set has no counterpart to compare against — the peer never computes one —
         // so it goes in the description, where it is the thing a reader wants anyway.
-        let enumerated = kt_tree::distinguished::enumerate(size, window, &at);
+        let enumerated = kt_tree::distinguished::enumerate(size, window, &mut at);
         let summary = match &enumerated {
             Err(err) => format!("enumerating failed: {err}"),
             Ok(set) if set.is_empty() => "no distinguished entries".to_owned(),

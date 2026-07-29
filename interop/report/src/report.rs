@@ -477,21 +477,19 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-wire::proofs, kt-wire::responses",
             &["search.json"],
         ),
-        Area {
-            section: "§12.3".to_owned(),
-            name: "CombinedTreeProof element ordering — which element belongs to which entry"
-                .to_owned(),
-            module: None,
-            // The bytes are pinned; what they *mean* is decided by the algorithm consuming
-            // them, and the algorithms are the rows below. Reading the structure is not the
-            // same as verifying it, and the table should not let one stand in for the other.
-            coverage: Coverage::NotImplemented,
-            evidence: Vec::new(),
-        },
-        todo(
-            "§6.3, §7.2",
-            "Greatest-version and fixed-version search: consuming a CombinedTreeProof",
+        verified(
+            "§12.3",
+            "CombinedTreeProof element ordering, and its five consumption rules",
+            "kt-tree::combined",
+            &["search.json"],
         ),
+        verified(
+            "§6.3",
+            "Greatest-version search, replayed against a running log's responses",
+            "kt-tree::combined",
+            &["search.json"],
+        ),
+        todo("§7.1, §7.2", "Fixed-version search, and log entry expiry"),
         todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
         todo("§9, §13.5", "Updating a label"),
         todo(

@@ -36,7 +36,8 @@
 //! [`audit`] sits a level above the trees: it is the §15.2 third-party auditor,
 //! which checks that one new log entry follows from the last one it accepted.
 //! [`distinguished`] is §6.1's choice of reference-point entries, and §10.1's walk
-//! over them.
+//! over them. [`combined`] reads a §12.3 `CombinedTreeProof`, whose elements only
+//! mean anything in the order the algorithm consuming them asks for.
 
 #![no_std]
 
@@ -48,11 +49,7 @@ pub mod log;
 
 pub mod prefix;
 
-/// Combined tree — log leaves committing to prefix roots
-/// (`draft-ietf-keytrans-protocol-05` §3.4, §12.3, Appendix C).
-pub mod combined {
-    // TODO(interop tier 1, step 7).
-}
+pub mod combined;
 
 pub mod ibst;
 pub mod ladder;

@@ -125,6 +125,33 @@ themselves and disagree with the peer everywhere. Recomputing katie's values wou
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
 
+### Replaying an algorithm is how the ordering gets verified
+
+§12.3's elements are ordered by the algorithm consuming them, so implementing §6.3 is what
+turns that ordering from an assumption into a test. §12.3 requires the proof to hold exactly
+the elements the algorithm asks for — "no more and no less" — so replaying §6.3 over a
+recorded response either consumes every timestamp and every prefix proof or it does not. There
+is no partial credit and no need for extra vector data: `Reader::finish` reports what was left
+over.
+
+Getting there corrected three readings of the draft, each caught by a case that would not
+consume:
+
+- The per-entry ladders are prefixes, not recomputations (`NOTE-04` above). This was the first
+  failure: the verifier expected 6 lookups at the first entry and the proof carried 5.
+- **The distinguished-entry walk consumes timestamps of its own.** §12.3.2 says the search
+  needs no additional timestamps because the frontier's are "either already provided as part of
+  updating the user's view of the tree, or are expected to have been retained". That is false
+  when §4.2's list comes out empty — `DRAFT-06` — and it comes out empty in exactly the case a
+  user hits by advertising a size whose rightmost entry is still on the new frontier. The log
+  sends the frontier timestamps anyway, and the first thing that asks for them is the walk that
+  finds where §6.3 starts. So its request order is part of the wire order.
+- **The response's own ladder can be truncated too**, for the same reason as the per-entry
+  ones, which is how a label with no versions gets a single-step ladder (`DRAFT-08`).
+
+All five greatest-version cases now consume exactly, including the advertised-size one whose
+view update supplies nothing.
+
 ### Bytes that do not say what they are for
 
 §12.3's `CombinedTreeProof` is the only structure in the draft whose contents cannot be
@@ -475,6 +502,33 @@ same underlying reason; `auditor-update.json`'s `change-nothing` case pins that.
 Whether the draft intends to forbid such an entry or to exempt it from step 6 is
 worth asking.
 
+**[DRAFT-08] §6.3 cannot verify the response that means "this label does not exist".** A log
+still has to answer a search for a label with no versions, and the only answer available is a
+claimed greatest version of 0 whose single ladder lookup proves version 0 absent. §6.3 step 2
+read literally rejects it: it requires the rightmost entry to show every version at or below
+the target as *included*, which nothing can do for a label that has never existed. There is no
+branch in §6.3 for the case and no field in `SearchResponse` that distinguishes it — on the
+wire it is a `version` of 0 and a one-step ladder, which is also what a label whose only
+version is 0 would produce, minus the inclusion. katie invents the handling its client needs
+(`if ver == 0 && res == -1 { ErrLabelNotFound }`); this implementation reports it as
+`Outcome::NoVersions` rather than as a dishonest log. Pinned by `search.json`'s
+`label-does-not-exist` case. The draft needs either a branch in §6.3 or a way to say it in the
+response.
+
+**[NOTE-04] a per-entry binary ladder is a prefix of the target's, not a recomputation of
+it.** §6.2 says a search ladder "ends after the first inclusion proof for a version greater
+than the target, or the first non-inclusion proof for a version less than or equal to it", and
+the log indexes that stopping rule on the greatest version present *at that entry* — which the
+verifier does not know, because learning it is the point of the search. So the proof for an
+entry left of the terminal one carries **fewer** results than the ladder the verifier computes,
+and they pair with a prefix of it: the sequence of versions is the same, only the stopping
+point differs. A verifier that requires the lengths to match rejects every honest multi-entry
+search, and one that recomputes the ladder from a guessed local greatest gets different
+versions. Measured against katie: for a seven-entry log with greatest version 6, the ladder is
+`[0, 1, 3, 7, 5, 6]` and the three inspected entries carry 5, 3 and 2 results. Not a bug in
+either implementation — but the draft never says the results are a prefix, and it is the first
+thing an implementer gets wrong.
+
 **[NOTE-03] `opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
 and writes it to the HMAC first. Same bytes, different factoring — the vectors
@@ -541,7 +595,9 @@ reproducible bytes whenever the decision changes.
 | `DRAFT-05` | §15.2 cannot audit a log entry that changes nothing | draft | `auditor-update.json` `change-nothing` | tracked locally |
 | `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::leaves_right_edge_unchecked` | tracked locally |
 | `DRAFT-07` | §11.2's grouped `select` reads two ways; the two Go implementations took one each, and no signature cross-verifies in contactMonitoring | draft | `tree-head.json`, including a negative case carrying a signature valid under the other reading | tracked locally |
+| `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | tracked locally |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
+| `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
 | `NOTE-02` | katie's monitoring ladder predates draft-05's deduplication parameter | katie | `binary-ladder.json` empty-set cases only | no action |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
