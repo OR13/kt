@@ -121,6 +121,160 @@ impl Encode for SearchResponse {
     }
 }
 
+/// The log's answer to a `ContactMonitorRequest` (§13.2).
+///
+/// ```text
+/// struct {
+///   FullTreeHead full_tree_head;
+///   CombinedTreeProof monitor;
+/// } ContactMonitorResponse;
+/// ```
+///
+/// Two fields and no ladder, which is the whole difference between monitoring and searching: a
+/// searcher is asking *what* the value is, and needs commitments and openings to find out, while
+/// a monitor already knows and is asking only whether the log has kept it where it was. So
+/// everything the response carries is in the proof, and §12.3.4 decides the order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContactMonitorResponse {
+    /// The tree head, and the auditor's where the mode has one.
+    pub full_tree_head: FullTreeHead,
+    /// The monitoring proof: the view update, then §8.2's algorithm.
+    pub monitor: CombinedTreeProof,
+}
+
+impl ContactMonitorResponse {
+    /// Reads a `ContactMonitorResponse` under `mode`.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from either member.
+    pub fn decode_with(dec: &mut Decoder<'_>, mode: DeploymentMode) -> Result<Self> {
+        let full_tree_head = FullTreeHead::decode_with_mode(dec, mode)?;
+        let monitor = CombinedTreeProof::decode(dec)?;
+        Ok(Self {
+            full_tree_head,
+            monitor,
+        })
+    }
+}
+
+impl Encode for ContactMonitorResponse {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        self.full_tree_head.encode(enc)?;
+        self.monitor.encode(enc)
+    }
+}
+
+/// The log's answer to an `OwnerMonitorRequest` (§13.4).
+///
+/// Structurally identical to [`ContactMonitorResponse`], and deliberately not the same type:
+/// the proofs inside are ordered by different algorithms — §8.2's alone for a contact, §8.2's
+/// followed by §8.3's second algorithm for an owner — and the bytes do not say which. A single
+/// type would invite reading one as the other.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OwnerMonitorResponse {
+    /// The tree head, and the auditor's where the mode has one.
+    pub full_tree_head: FullTreeHead,
+    /// The monitoring proof: the view update, then §8.2's algorithm, then §8.3's second.
+    pub monitor: CombinedTreeProof,
+}
+
+impl OwnerMonitorResponse {
+    /// Reads an `OwnerMonitorResponse` under `mode`.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from either member.
+    pub fn decode_with(dec: &mut Decoder<'_>, mode: DeploymentMode) -> Result<Self> {
+        let full_tree_head = FullTreeHead::decode_with_mode(dec, mode)?;
+        let monitor = CombinedTreeProof::decode(dec)?;
+        Ok(Self {
+            full_tree_head,
+            monitor,
+        })
+    }
+}
+
+impl Encode for OwnerMonitorResponse {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        self.full_tree_head.encode(enc)?;
+        self.monitor.encode(enc)
+    }
+}
+
+/// The log's answer to an `OwnerInitRequest` (§13.3).
+///
+/// ```text
+/// struct {
+///   FullTreeHead full_tree_head;
+///
+///   uint32 greatest_versions<0..2^8-1>;
+///   BinaryLadderStep binary_ladder<0..2^16-1>;
+///   CombinedTreeProof init;
+/// } OwnerInitResponse;
+/// ```
+///
+/// `greatest_versions` is the greatest version present at each entry §8.3's first algorithm
+/// inspects, "ending at the first log entry where the label doesn't exist" — so it may be
+/// shorter than that list, and §13.3 step 1 requires it to be descending. `binary_ladder` is one
+/// step per version that algorithm looks up, ascending by version, with a commitment for each
+/// version that exists — and §13.3 goes out of its way to note that "the existence of a version
+/// does not require the existence of all lesser versions", so the commitments are not a prefix.
+///
+/// Note the wider bound on `binary_ladder` here than in a `SearchResponse`: `<0..2^16-1>` rather
+/// than `<0..2^8-1>`. An owner initializing state may be catching up over many entries at once.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OwnerInitResponse {
+    /// The tree head, and the auditor's where the mode has one.
+    pub full_tree_head: FullTreeHead,
+    /// The greatest version at each inspected entry, descending.
+    pub greatest_versions: Vec<u32>,
+    /// One step per version looked up, ascending by version.
+    pub binary_ladder: Vec<BinaryLadderStep>,
+    /// The proof: the view update, then §8.3's first algorithm.
+    pub init: CombinedTreeProof,
+}
+
+impl OwnerInitResponse {
+    /// `uint32 greatest_versions<0..2^8-1>`.
+    pub const VERSIONS: VectorSpec = VectorSpec::new((1 << 8) - 1);
+    /// `BinaryLadderStep binary_ladder<0..2^16-1>`.
+    pub const LADDER: VectorSpec = VectorSpec::new((1 << 16) - 1);
+
+    /// Reads an `OwnerInitResponse` under `mode`, with `VRF.Np`-byte ladder proofs.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from any member.
+    pub fn decode_with(
+        dec: &mut Decoder<'_>,
+        mode: DeploymentMode,
+        proof_size: usize,
+    ) -> Result<Self> {
+        let full_tree_head = FullTreeHead::decode_with_mode(dec, mode)?;
+        let greatest_versions = dec.vector(Self::VERSIONS)?;
+        let binary_ladder = dec.vector_with(Self::LADDER, |dec| {
+            BinaryLadderStep::decode_with_proof_size(dec, proof_size)
+        })?;
+        let init = CombinedTreeProof::decode(dec)?;
+        Ok(Self {
+            full_tree_head,
+            greatest_versions,
+            binary_ladder,
+            init,
+        })
+    }
+}
+
+impl Encode for OwnerInitResponse {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        self.full_tree_head.encode(enc)?;
+        enc.vector(Self::VERSIONS, &self.greatest_versions)?;
+        enc.vector(Self::LADDER, &self.binary_ladder)?;
+        self.init.encode(enc)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::indexing_slicing,
@@ -192,6 +346,70 @@ mod tests {
             SearchResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring, 16, 80, true)
                 .unwrap();
         assert_eq!(decoded, value);
+    }
+
+    /// The two monitoring responses round-trip, and the owner's carries its two extra vectors.
+    #[test]
+    fn monitoring_responses_round_trip() {
+        let proof = CombinedTreeProof {
+            timestamps: vec![7, 8],
+            prefix_proofs: vec![PrefixProof {
+                results: vec![PrefixSearchResult::Inclusion { depth: 2 }],
+                elements: vec![HashValue::from_bytes([0x11; 32])],
+            }],
+            prefix_roots: vec![HashValue::from_bytes([0x22; 32])],
+            inclusion: InclusionProof::new(vec![HashValue::from_bytes([0x33; 32])]),
+        };
+        let head = FullTreeHead::Updated {
+            tree_head: TreeHead {
+                tree_size: 4,
+                signature: vec![9; 64],
+            },
+            auditor_tree_head: None,
+        };
+
+        let contact = ContactMonitorResponse {
+            full_tree_head: head.clone(),
+            monitor: proof.clone(),
+        };
+        let bytes = encode(&contact).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            ContactMonitorResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring)
+                .unwrap(),
+            contact
+        );
+
+        let owner = OwnerMonitorResponse {
+            full_tree_head: head.clone(),
+            monitor: proof.clone(),
+        };
+        let bytes = encode(&owner).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            OwnerMonitorResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring).unwrap(),
+            owner
+        );
+        // The two are byte-identical for the same contents, which is exactly why they are
+        // separate types: only the request says which algorithm ordered the proof inside.
+        assert_eq!(encode(&contact).unwrap(), encode(&owner).unwrap());
+
+        let init = OwnerInitResponse {
+            full_tree_head: head,
+            greatest_versions: vec![9, 4, 1],
+            binary_ladder: vec![BinaryLadderStep {
+                proof: vec![0x44; 80],
+                commitment: Some(HashValue::from_bytes([0x55; 32])),
+            }],
+            init: proof,
+        };
+        let bytes = encode(&init).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            OwnerInitResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring, 80)
+                .unwrap(),
+            init
+        );
     }
 
     /// The same bytes read with the wrong idea of what was requested. Four bytes shift, and

@@ -419,6 +419,66 @@ pub struct PrefixProofExpect {
     pub elements: Vec<String>,
 }
 
+/// `monitor.json` input (§13.2–§13.4).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MonitorInput {
+    /// Which operation: `contact`, `owner-init`, or `owner-monitor`.
+    pub operation: String,
+    /// One log entry per element, each adding the label-value pairs listed.
+    pub mutations: Vec<SearchMutation>,
+    /// The label, hex.
+    pub label: String,
+    /// The user's monitoring map.
+    pub entries: Vec<MonitorEntryInput>,
+    /// The deployment mode.
+    pub mode: u8,
+    /// The log's signature key, hex.
+    pub signature_public_key: String,
+    /// The log's VRF key, hex.
+    pub vrf_public_key: String,
+    /// The Reasonable Monitoring Window.
+    pub monitoring_window: u64,
+    /// The maximum lifetime, zero if the log defines none.
+    pub maximum_lifetime: u64,
+    /// Every log entry's timestamp, by position.
+    pub entry_timestamps: Vec<u64>,
+    /// The owner's verified starting entry.
+    pub start: u64,
+    /// The greatest version the owner knows of.
+    #[serde(default)]
+    pub greatest_version: Option<u32>,
+    /// The tree size the user advertised, if any.
+    #[serde(default)]
+    pub last: Option<u64>,
+}
+
+/// `monitor.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MonitorExpect {
+    /// The whole encoded response, hex.
+    pub response: String,
+    /// Its `FullTreeHead`, hex.
+    pub full_tree_head: String,
+    /// The proof's timestamps, in the algorithm's request order.
+    pub timestamps: Vec<u64>,
+    /// Its prefix proofs.
+    pub prefix_proofs: Vec<PrefixProofExpect>,
+    /// Its prefix roots, hex.
+    pub prefix_roots: Vec<String>,
+    /// Its log tree inclusion elements, hex.
+    pub inclusion: Vec<String>,
+    /// The log's tree size.
+    pub tree_size: u64,
+    /// The greatest version at each inspected entry, for owner initialization.
+    #[serde(default)]
+    pub greatest_versions: Option<Vec<u32>>,
+    /// The binary ladder, for owner initialization.
+    #[serde(default)]
+    pub binary_ladder: Option<Vec<LadderStepExpect>>,
+}
+
 /// `distinguished.json` input (§6.1).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

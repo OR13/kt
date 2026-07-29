@@ -501,7 +501,17 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::combined",
             &["search.json"],
         ),
-        todo("§8, §13.2–§13.4", "Contact and owner monitoring"),
+        verified(
+            "§13.2–§13.4",
+            "Monitoring response structures, as a running log serves them",
+            "kt-wire::responses",
+            &["monitor.json"],
+        ),
+        todo(
+            "§8.2, §8.3",
+            "Contact and owner monitoring algorithms, and the §12.3.4–§12.3.6 orderings they \
+             impose",
+        ),
         todo("§9, §13.5", "Updating a label"),
         todo(
             "§13.6",
