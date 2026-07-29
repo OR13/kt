@@ -451,6 +451,26 @@ pub struct MonitorInput {
     /// The tree size the user advertised, if any.
     #[serde(default)]
     pub last: Option<u64>,
+    /// What a monitoring client already holds, from having searched: the VRF output and the
+    /// commitment for every version up to the greatest one in its map.
+    ///
+    /// A monitoring response carries neither — there would be no point in sending a user what it
+    /// already has — so a verifier replaying §8.2 has to be given them. They cannot be derived
+    /// from the log's public key, which is exactly why a monitoring response is as small as it
+    /// is.
+    pub known_versions: Vec<KnownVersion>,
+}
+
+/// One version a monitoring client already knows.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KnownVersion {
+    /// The version.
+    pub version: u32,
+    /// Its VRF output — the prefix tree search key, hex.
+    pub vrf_output: String,
+    /// The commitment to the label's value at that version, hex.
+    pub commitment: String,
 }
 
 /// `monitor.json` expectations.

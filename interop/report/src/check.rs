@@ -1457,6 +1457,17 @@ fn monitor_suite(dir: &Path) -> Result<Suite, Error> {
             },
         ));
 
+        // §8.2, for the contact monitoring responses. Same mechanism as the search replays:
+        // §12.3 requires the proof to hold exactly the elements the algorithm asks for, so
+        // replaying §8.2 over katie's response either consumes all of them or does not.
+        if case.input.operation == "contact" {
+            checks.push(Check::new(
+                "replaying §8.2 consumes the proof exactly (§12.3.4)",
+                "every element read, none left over",
+                replay_contact_monitor(case, &bytes, mode).unwrap_or_else(|detail| detail),
+            ));
+        }
+
         cases.push(Case {
             name: name.to_owned(),
             negative: false,
@@ -1483,6 +1494,113 @@ fn monitor_suite(dir: &Path) -> Result<Suite, Error> {
         cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
         cases,
     })
+}
+
+/// Replays §8.2 over a recorded contact monitoring response.
+///
+/// The search keys come from the versions in the user's own map: a monitor is re-proving versions
+/// it already knows, so it already holds their VRF outputs and commitments. Those are recomputed
+/// here from the label and the log's keys, which is what a client that had run the search would
+/// have kept.
+fn replay_contact_monitor(
+    case: &crate::vectors::Case<MonitorInput, MonitorExpect>,
+    bytes: &[u8],
+    mode: DeploymentMode,
+) -> Result<String, String> {
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+    let mut dec = Decoder::new(bytes);
+    let response = ContactMonitorResponse::decode_with(&mut dec, mode)
+        .map_err(|err| format!("decode failed: {err}"))?;
+
+    let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
+    let vrf_key =
+        hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
+    let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
+        .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
+        .and_then(|value| vrf::PublicKey::from_bytes(value).map_err(|err| err.to_string()))?;
+
+    // What the client already holds. A monitoring response carries no ladder and no
+    // commitments, so these come from the user's own state — recorded by the generator as a
+    // client that had searched would hold them.
+    let _ = (&label, &vrf_key);
+    let mut keys = BTreeMap::new();
+    for known in &case.input.known_versions {
+        let vrf_output = hex::decode(&known.vrf_output)
+            .map_err(|err| format!("version {}: vrf_output: {err}", known.version))
+            .and_then(|bytes| {
+                HashValue::from_slice(&bytes).map_err(|err| format!("vrf_output: {err}"))
+            })?;
+        let commitment = hex::decode(&known.commitment)
+            .map_err(|err| format!("version {}: commitment: {err}", known.version))
+            .and_then(|bytes| {
+                HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
+            })?;
+        keys.insert(
+            known.version,
+            combined::LadderKey {
+                vrf_output,
+                commitment: Some(commitment),
+            },
+        );
+    }
+
+    let map: Vec<combined::MapEntry> = case
+        .input
+        .entries
+        .iter()
+        .map(|entry| combined::MapEntry {
+            position: entry.position,
+            version: entry.version,
+        })
+        .collect();
+
+    let size = case.expect.tree_size;
+    let mut retained = combined::Retained::none();
+    if let Some(advertised) = case.input.last {
+        for position in ibst::frontier(advertised).map_err(|err| format!("frontier: {err}"))? {
+            let timestamp = usize::try_from(position)
+                .ok()
+                .and_then(|index| case.input.entry_timestamps.get(index))
+                .copied()
+                .ok_or_else(|| format!("no recorded timestamp for log entry {position}"))?;
+            retained.timestamps.insert(position, timestamp);
+        }
+    }
+    let mut reader = combined::Reader::new(&response.monitor, &retained);
+
+    // §12.3.4's view update comes first, as for every other operation.
+    let view = match case.input.last {
+        None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
+        Some(advertised) => ibst::update_view(size, Some(advertised))
+            .map_err(|err| format!("update view: {err}"))?,
+    };
+    for position in &view {
+        reader
+            .timestamp(*position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let monitored = combined::contact_monitor(
+        suite,
+        size,
+        case.input.monitoring_window,
+        &map,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§8.2: {err}"))?;
+
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
+    let _ = monitored;
+
+    reader
+        .finish()
+        .map(|()| "every element read, none left over".to_owned())
+        .map_err(|err| format!("§12.3: {err}"))
 }
 
 /// §6.1: which log entries are distinguished.

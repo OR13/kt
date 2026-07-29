@@ -129,6 +129,7 @@ Implemented and verified against the Go peer, byte for byte:
 | `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/search.json) — 10 responses from a running log |
 | Greatest-version and fixed-version search (`kt-tree::combined`) | §6.3, §7.1, §7.2, §12.3 | [`search.json`](interop/vectors/search.json) — all 12 replayed, each consuming its proof exactly |
 | Monitoring response structures (`kt-wire::responses`) | §13.2–§13.4 | [`monitor.json`](interop/vectors/monitor.json) — contact, owner init, owner monitor |
+| Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/monitor.json) — 3 replayed, each consuming its proof exactly |
 
 **Refusing what the peer refuses.**
 [`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
@@ -196,8 +197,8 @@ against regression, not a target: what it mostly bought was covering every error
 type's `Display` — the text a verifier emits when it rejects something — which turned
 up one real inconsistency, a wrapped error that did not chain to its cause.
 
-Interop work has turned up three bugs in the Go peer and seven gaps or ambiguities in
-the draft. Each is written up and given a stable identifier in
+Interop work has turned up three bugs in the Go peer and nine gaps or ambiguities in
+the draft, one of them filed upstream because it cannot be settled from either source. Each is written up and given a stable identifier in
 [`docs/interop.md`](docs/interop.md), whose findings register is the tracker — nothing is
 filed upstream, by decision, and every entry is pinned by a committed vector so a filing
 could point at reproducible bytes rather than at prose.

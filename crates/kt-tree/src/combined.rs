@@ -1412,7 +1412,7 @@ mod search_tests {
         HashValue::from_bytes(bytes)
     }
 
-    fn commitment_for(version: u32) -> HashValue {
+    pub(super) fn commitment_for(version: u32) -> HashValue {
         HashValue::from_bytes([u8::try_from(version % 256).unwrap_or(0) ^ 0xa5; 32])
     }
 
@@ -1982,5 +1982,675 @@ mod fixed_tests {
         };
         assert_ne!(found, FixedOutcome::DoesNotExist);
         assert_ne!(FixedOutcome::DoesNotExist, FixedOutcome::Expired);
+    }
+}
+
+/// One entry of a user's monitoring map: a log entry, and the version proven to exist there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MapEntry {
+    /// The log entry the user is tracking.
+    pub position: u64,
+    /// The greatest version of the label proven to exist at that entry.
+    pub version: u32,
+}
+
+/// What contact monitoring did to a user's map (§8.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Monitored {
+    /// The map to carry forward: every pair moved up to the entry that vouched for it, with the
+    /// ones a distinguished entry has now covered dropped entirely.
+    ///
+    /// §8.2's last step is what makes monitoring terminate: "remove all mappings where the
+    /// position corresponds to a distinguished log entry". A version that has been proven
+    /// correct at a reference point everybody else checks needs no further watching.
+    pub map: Vec<MapEntry>,
+    /// The entries inspected, with the prefix tree root each proof computed.
+    pub inspected: Vec<(u64, HashValue)>,
+}
+
+/// Runs §8.2's contact monitoring algorithm against a proof.
+///
+/// `map` is the user's monitoring state — the pairs a search left behind — and `window` the
+/// Reasonable Monitoring Window. The map is processed "from rightmost to leftmost log entry",
+/// which is the opposite direction from every other algorithm here and the reason §12.3's
+/// monotonicity rule has to look both ways: a timestamp read later can belong to an entry
+/// further left.
+///
+/// # Errors
+///
+/// [`MonitorError`] where the proof does not establish what §8.2 requires.
+pub fn contact_monitor(
+    suite: CipherSuite,
+    size: u64,
+    window: u64,
+    map: &[MapEntry],
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<Monitored, MonitorError> {
+    let mut pairs: Vec<MapEntry> = map.to_vec();
+    // Rightmost to leftmost, as §8.2 says. Sorting rather than trusting the caller: the order
+    // decides which element of the proof belongs to which map entry, so it is part of the
+    // protocol rather than a convenience.
+    pairs.sort_unstable_by_key(|pair| core::cmp::Reverse(pair.position));
+
+    let mut inspected: Vec<(u64, HashValue)> = Vec::new();
+    // Ladders already provided in this response, by the entry they came from, for step 3.1.
+    let mut provided: BTreeMap<u64, u32> = BTreeMap::new();
+    let mut updated: Vec<MapEntry> = Vec::new();
+    // Which entries are known distinguished, and which known not: the descent in step 2 learns
+    // this as it goes, and §6.1's ancestor-closure means a non-distinguished entry settles every
+    // entry below it too.
+    let mut distinguished_at: BTreeMap<u64, bool> = BTreeMap::new();
+
+    for pair in pairs {
+        // §12.3.4: "the timestamp of each log entry on the path from the root to the parent of
+        // the log entry in the user's monitoring map, stopping if a non-distinguished log entry
+        // is established". That descent is what tells the verifier which entries are
+        // distinguished, so it has to happen before step 1 can be answered.
+        descend_for_distinguished(size, window, pair.position, reader, &mut distinguished_at)?;
+
+        // Step 1: a distinguished entry needs no monitoring, and stays in the map for the final
+        // sweep to remove.
+        if distinguished_at
+            .get(&pair.position)
+            .copied()
+            .unwrap_or(false)
+        {
+            updated.push(pair);
+            continue;
+        }
+
+        // Step 2.
+        let list = entries_to_inspect(size, pair.position, &distinguished_at)?;
+
+        // Step 3.
+        let mut moved = None;
+        let mut superseded = false;
+        for entry in list {
+            // Step 3.1: a ladder for this entry may already have been provided for another map
+            // entry. Whether that is a saving or an error depends on which version it targeted.
+            if let Some(target) = provided.get(&entry).copied() {
+                if target > pair.version {
+                    // Step 3.1.1: a greater version at the same entry subsumes this one — proving
+                    // the greater version exists there proves every lesser version does.
+                    superseded = true;
+                    break;
+                }
+                // Step 3.1.2: a ladder for an equal or lesser version tells the user nothing new,
+                // so the log has sent something it should not have.
+                return Err(MonitorError::RedundantLadder {
+                    position: entry,
+                    provided: target,
+                    wanted: pair.version,
+                });
+            }
+
+            // Step 3.2: every lookup a monitoring ladder specifies must be present and must show
+            // inclusion. A monitoring ladder makes no claim about what does *not* exist — it only
+            // re-proves what the user already knows, at a new position.
+            let versions = ladder::monitoring_binary_ladder(pair.version, &[]);
+            let proof = reader.prefix_proof(entry)?;
+            if proof.results.len() != versions.len() {
+                return Err(MonitorError::LadderLength {
+                    position: entry,
+                    expected: versions.len(),
+                    actual: proof.results.len(),
+                });
+            }
+            let mut entries = Vec::new();
+            for (version, result) in versions.iter().zip(proof.results.iter()) {
+                if !result.is_inclusion() {
+                    return Err(MonitorError::VersionMissing {
+                        position: entry,
+                        version: *version,
+                    });
+                }
+                let key = keys.get(version).ok_or(MonitorError::MissingLadderKey {
+                    position: entry,
+                    version: *version,
+                })?;
+                entries.push(prefix::SearchEntry::included(
+                    key.vrf_output,
+                    key.commitment.ok_or(MonitorError::MissingCommitment {
+                        position: entry,
+                        version: *version,
+                    })?,
+                ));
+            }
+            let root = prefix::evaluate(suite, &entries, proof)?;
+            reader.establish_root(entry, root)?;
+            inspected.push((entry, root));
+            provided.insert(entry, pair.version);
+
+            // Step 3.3: the pair moves up to the entry that just vouched for it.
+            moved = Some(entry);
+        }
+
+        if superseded {
+            // The lesser pair leaves the map entirely.
+            continue;
+        }
+        updated.push(MapEntry {
+            position: moved.unwrap_or(pair.position),
+            version: pair.version,
+        });
+    }
+
+    // §8.2's final step: drop everything a distinguished entry now covers. What remains sits on
+    // the frontier, which is where the next round of monitoring will pick it up.
+    updated.retain(|pair| {
+        !distinguished_at
+            .get(&pair.position)
+            .copied()
+            .unwrap_or(false)
+    });
+    updated.sort_unstable();
+    Ok(Monitored {
+        map: updated,
+        inspected,
+    })
+}
+
+/// Reads timestamps down the path to `position`'s parent, recording what is distinguished.
+///
+/// §12.3.4 stops "if a non-distinguished log entry is established", and that early stop is sound
+/// for the same reason §6.1's set is ancestor-closed: the recursion reaches a node only through
+/// distinguished ancestors, so once one link is broken nothing below it can be distinguished
+/// either. The verifier therefore needs no timestamps past that point, and the log sends none.
+fn descend_for_distinguished(
+    size: u64,
+    window: u64,
+    position: u64,
+    reader: &mut Reader<'_>,
+    known: &mut BTreeMap<u64, bool>,
+) -> core::result::Result<(), MonitorError> {
+    let last = size.saturating_sub(1);
+    let rightmost = reader.timestamp(last)?;
+
+    // The descent: root, then each node down to the map entry. §12.3.4 supplies a timestamp for
+    // each entry "on the path from the root to the parent", which is why the map entry's own
+    // timestamp is never read here — its distinguishedness follows from its parent's brackets.
+    let mut chain = ibst::direct_path(position, size)?;
+    chain.reverse();
+    chain.push(position);
+
+    // §6.1 brackets a node by the timestamps either side of it, and which side a step updates
+    // depends on which way it goes: descending to a right child raises the left bracket to the
+    // parent's timestamp, descending to a left child lowers the right bracket to it. Getting this
+    // wrong is not a rounding error — it decides whether an entry counts as distinguished, and it
+    // only shows up for map entries that are left descendants.
+    let mut left = (0_u64, 0_u64);
+    let mut right = (last, rightmost);
+
+    for (index, entry) in chain.iter().enumerate() {
+        if let Some(false) = known.get(entry) {
+            // Already settled as non-distinguished, and so is everything below it.
+            for rest in chain.get(index..).unwrap_or_default() {
+                known.insert(*rest, false);
+            }
+            return Ok(());
+        }
+        let is = distinguished::is_distinguished(window, left, right)?;
+        known.insert(*entry, is);
+        if !is {
+            // Ancestor-closure: nothing below a non-distinguished entry can be distinguished, so
+            // the log sends no more timestamps and the verifier needs none.
+            for rest in chain.get(index..).unwrap_or_default() {
+                known.insert(*rest, false);
+            }
+            return Ok(());
+        }
+        let Some(next) = chain.get(index.saturating_add(1)).copied() else {
+            break;
+        };
+        let timestamp = reader.timestamp(*entry)?;
+        if next < *entry {
+            right = (*entry, timestamp);
+        } else {
+            left = (*entry, timestamp);
+        }
+    }
+    Ok(())
+}
+
+/// §8.2 step 2's ordered list of log entries to inspect.
+fn entries_to_inspect(
+    size: u64,
+    position: u64,
+    known: &BTreeMap<u64, bool>,
+) -> core::result::Result<Vec<u64>, MonitorError> {
+    // 2.1: the entry's direct path.
+    let mut list = ibst::direct_path(position, size)?;
+    // 2.2: nothing to the left of the entry. Monitoring moves *up* the tree as new intermediate
+    // nodes are established, and an ancestor to the left was established before the version
+    // being monitored existed, so it can say nothing about it.
+    list.retain(|entry| *entry > position);
+    list.sort_unstable();
+    // 2.3: terminate just after the first distinguished entry. Past that point monitoring is
+    // finished — a distinguished entry is a reference point the whole deployment checks.
+    if let Some(index) = list
+        .iter()
+        .position(|entry| known.get(entry).copied().unwrap_or(false))
+    {
+        list.truncate(index.saturating_add(1));
+    }
+    Ok(list)
+}
+
+/// Why contact monitoring rejected a proof (§8.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MonitorError {
+    /// A ladder was provided twice for the same entry, for a version that teaches nothing new
+    /// (§8.2 step 3.1.2).
+    RedundantLadder {
+        /// The log entry.
+        position: u64,
+        /// The version the earlier ladder targeted.
+        provided: u32,
+        /// The version this map entry wanted.
+        wanted: u32,
+    },
+    /// An entry's proof carried a different number of results than its monitoring ladder calls
+    /// for (§8.2 step 3.2, "all expected lookups are present").
+    LadderLength {
+        /// The log entry.
+        position: u64,
+        /// How many lookups the ladder specifies.
+        expected: usize,
+        /// How many the proof carried.
+        actual: usize,
+    },
+    /// A version the user already knows exists was not proven present (§8.2 step 3.2).
+    ///
+    /// This is monitoring's whole point: the log has dropped or moved something it had already
+    /// committed to.
+    VersionMissing {
+        /// The log entry.
+        position: u64,
+        /// The version that should have been there.
+        version: u32,
+    },
+    /// No search key was available for a version the ladder looks up.
+    MissingLadderKey {
+        /// The log entry.
+        position: u64,
+        /// The version.
+        version: u32,
+    },
+    /// No commitment was available for a version the ladder proves present.
+    MissingCommitment {
+        /// The log entry.
+        position: u64,
+        /// The version.
+        version: u32,
+    },
+    /// The proof could not be read as §12.3 requires.
+    Proof(Error),
+    /// A prefix tree proof did not evaluate.
+    Prefix(prefix::Error),
+    /// The search tree could not be navigated.
+    Ibst(ibst::Error),
+    /// The distinguished entries could not be determined.
+    Distinguished(distinguished::Error),
+}
+
+impl From<Error> for MonitorError {
+    fn from(err: Error) -> Self {
+        Self::Proof(err)
+    }
+}
+
+impl From<prefix::Error> for MonitorError {
+    fn from(err: prefix::Error) -> Self {
+        Self::Prefix(err)
+    }
+}
+
+impl From<ibst::Error> for MonitorError {
+    fn from(err: ibst::Error) -> Self {
+        Self::Ibst(err)
+    }
+}
+
+impl From<distinguished::Error> for MonitorError {
+    fn from(err: distinguished::Error) -> Self {
+        Self::Distinguished(err)
+    }
+}
+
+impl core::fmt::Display for MonitorError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::RedundantLadder {
+                position,
+                provided,
+                wanted,
+            } => write!(
+                f,
+                "log entry {position} already carried a ladder for version {provided}, which \
+                 teaches nothing about version {wanted}"
+            ),
+            Self::LadderLength {
+                position,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "log entry {position}'s monitoring ladder should have {expected} lookups, the \
+                 proof has {actual}"
+            ),
+            Self::VersionMissing { position, version } => write!(
+                f,
+                "log entry {position} does not contain version {version}, which the user has \
+                 already been shown"
+            ),
+            Self::MissingLadderKey { position, version } => write!(
+                f,
+                "no search key for version {version}, looked up at log entry {position}"
+            ),
+            Self::MissingCommitment { position, version } => write!(
+                f,
+                "no commitment for version {version}, proven present at log entry {position}"
+            ),
+            Self::Proof(err) => write!(f, "reading the proof: {err}"),
+            Self::Prefix(err) => write!(f, "evaluating a prefix tree proof: {err}"),
+            Self::Ibst(err) => write!(f, "walking the search tree: {err}"),
+            Self::Distinguished(err) => write!(f, "finding the distinguished entries: {err}"),
+        }
+    }
+}
+
+impl core::error::Error for MonitorError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Proof(err) => Some(err),
+            Self::Prefix(err) => Some(err),
+            Self::Ibst(err) => Some(err),
+            Self::Distinguished(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod monitor_tests {
+    use super::search_tests::{key_for, tree_at};
+    use super::*;
+    use alloc::vec;
+    use kt_wire::proofs::InclusionProof;
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    /// The versions a monitoring client holds: for a log where version `v` was added at entry
+    /// `v`, every version up to `greatest`, with the commitment it kept from its search.
+    fn known(greatest: u32) -> BTreeMap<u32, LadderKey> {
+        let mut keys = BTreeMap::new();
+        for version in 0..=greatest {
+            keys.insert(
+                version,
+                LadderKey {
+                    vrf_output: key_for(version),
+                    commitment: Some(super::search_tests::commitment_for(version)),
+                },
+            );
+        }
+        keys
+    }
+
+    /// Builds the proof a log serves for §8.2 over `map`, in §12.3.4's order: per map entry from
+    /// rightmost to leftmost, the timestamps down the path to its parent, then a monitoring
+    /// ladder proof from each entry in step 2's list.
+    fn build_monitor(
+        size: u64,
+        window: u64,
+        map: &[MapEntry],
+        stamps: &[u64],
+    ) -> CombinedTreeProof {
+        let last = size - 1;
+        let mut timestamps: Vec<u64> = vec![stamps[last as usize]];
+        let mut seen: Vec<u64> = vec![last];
+        let mut proofs = Vec::new();
+        let mut proved: Vec<u64> = Vec::new();
+        let mut known_distinguished: BTreeMap<u64, bool> = BTreeMap::new();
+
+        let mut pairs = map.to_vec();
+        pairs.sort_unstable_by_key(|pair| core::cmp::Reverse(pair.position));
+        for pair in &pairs {
+            // The descent: root to the parent, stopping at the first non-distinguished entry.
+            let mut chain = ibst::direct_path(pair.position, size).unwrap();
+            chain.reverse();
+            chain.push(pair.position);
+            let mut left = (0_u64, 0_u64);
+            let mut right = (last, stamps[last as usize]);
+            let mut settled = false;
+            for (index, entry) in chain.iter().enumerate() {
+                let is = distinguished::is_distinguished(window, left, right).unwrap();
+                known_distinguished.insert(*entry, is);
+                if !is {
+                    for rest in &chain[index..] {
+                        known_distinguished.insert(*rest, false);
+                    }
+                    break;
+                }
+                let Some(next) = chain.get(index + 1).copied() else {
+                    // The map entry itself is distinguished, so §8.2 step 1 leaves it alone.
+                    settled = true;
+                    break;
+                };
+                if !seen.contains(entry) {
+                    timestamps.push(stamps[*entry as usize]);
+                    seen.push(*entry);
+                }
+                if next < *entry {
+                    right = (*entry, stamps[*entry as usize]);
+                } else {
+                    left = (*entry, stamps[*entry as usize]);
+                }
+            }
+            if settled {
+                continue;
+            }
+
+            for entry in entries_to_inspect(size, pair.position, &known_distinguished).unwrap() {
+                let versions = ladder::monitoring_binary_ladder(pair.version, &[]);
+                let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+                proofs.push(tree_at(entry).prove(SUITE, &searches).unwrap());
+                proved.push(entry);
+            }
+        }
+
+        // §12.3: an entry with a timestamp but no proof is owed a prefix root, left to right.
+        // The log tree's leaves need both halves, so this is not optional padding.
+        let mut owed: Vec<u64> = seen
+            .iter()
+            .copied()
+            .filter(|entry| !proved.contains(entry))
+            .collect();
+        owed.sort_unstable();
+        let prefix_roots = owed
+            .iter()
+            .map(|entry| tree_at(*entry).root(SUITE))
+            .collect();
+
+        CombinedTreeProof {
+            timestamps,
+            prefix_proofs: proofs,
+            prefix_roots,
+            inclusion: InclusionProof::new(Vec::new()),
+        }
+    }
+
+    /// Entries a millisecond apart, so a week-long window leaves only the root distinguished.
+    fn clustered(size: u64) -> Vec<u64> {
+        (0..size).map(|i| 1_700_000_000_000 + i).collect()
+    }
+
+    /// The ordinary case: a version tracked at a non-distinguished entry is re-proven further up
+    /// the tree, and the map moves with it.
+    #[test]
+    fn monitoring_moves_the_map_up_the_tree() {
+        let size = 7_u64;
+        let window = 604_800_000;
+        let stamps = clustered(size);
+        // Entry 2 has an ancestor to its right (entry 3) *and* is not itself distinguished, which
+        // is the shape §8.2 does work for. Two nearby shapes do nothing at all: an entry on the
+        // frontier has no ancestors to its right, and a left descendant like entry 1 keeps a left
+        // bracket of zero and so is always distinguished. That is why the recorded
+        // `contact-one-version` case carries no prefix proofs.
+        let map = vec![MapEntry {
+            position: 2,
+            version: 2,
+        }];
+        let proof = build_monitor(size, window, &map, &stamps);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        let monitored = contact_monitor(SUITE, size, window, &map, &known(2), &mut reader).unwrap();
+
+        // The pair ends up above where it started, which is the whole mechanic: monitoring
+        // follows a version upward as new intermediate nodes are built over it.
+        assert!(!monitored.inspected.is_empty());
+        assert!(
+            monitored.map.iter().all(|pair| pair.position >= 2),
+            "the map moved up, not down: {:?}",
+            monitored.map
+        );
+        for (position, root) in &monitored.inspected {
+            assert_eq!(*root, tree_at(*position).root(SUITE), "entry {position}");
+        }
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// What monitoring exists to catch. A log that drops or moves a version the user has already
+    /// been shown fails here, and nowhere else would notice.
+    #[test]
+    fn a_version_the_user_already_has_must_still_be_there() {
+        let size = 7_u64;
+        let window = 604_800_000;
+        let stamps = clustered(size);
+        let map = vec![MapEntry {
+            position: 2,
+            version: 2,
+        }];
+        let honest = build_monitor(size, window, &map, &stamps);
+
+        // Re-prove the inspected entry against a tree that never had version 1, which is what a
+        // log rolling a value back would produce.
+        let mut tampered = honest.clone();
+        let versions = ladder::monitoring_binary_ladder(2, &[]);
+        let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+        tampered.prefix_proofs = vec![tree_at(1).prove(SUITE, &searches).unwrap()];
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&tampered, &retained);
+        let refused = contact_monitor(SUITE, size, window, &map, &known(2), &mut reader);
+        assert!(
+            matches!(refused, Err(MonitorError::VersionMissing { .. })),
+            "expected a missing version, got {refused:?}"
+        );
+    }
+
+    /// §8.2 step 1 and the final sweep: a pair already at a distinguished entry is not monitored,
+    /// and then leaves the map. That is what makes monitoring terminate rather than grow.
+    #[test]
+    fn a_distinguished_entry_leaves_the_map() {
+        let size = 7_u64;
+        let window = 604_800_000;
+        let stamps = clustered(size);
+        // Entry 3 is the root of a seven-entry log, and with a week-long window it is the only
+        // distinguished entry.
+        let map = vec![MapEntry {
+            position: 3,
+            version: 3,
+        }];
+        let proof = build_monitor(size, window, &map, &stamps);
+        assert!(
+            proof.prefix_proofs.is_empty(),
+            "a distinguished entry needs no ladder at all"
+        );
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        let monitored = contact_monitor(SUITE, size, window, &map, &known(3), &mut reader).unwrap();
+        assert!(
+            monitored.map.is_empty(),
+            "the pair should have been dropped: {:?}",
+            monitored.map
+        );
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// §8.2 step 2's list, checked directly: the direct path, with everything left of the entry
+    /// removed and the tail cut just after the first distinguished entry.
+    #[test]
+    fn the_list_to_inspect_is_the_path_rightward() {
+        let size = 7_u64;
+        let mut known_distinguished = BTreeMap::new();
+
+        // Nothing distinguished: the whole path to the right survives.
+        let list = entries_to_inspect(size, 5, &known_distinguished).unwrap();
+        assert!(list.iter().all(|entry| *entry > 5), "{list:?}");
+        assert!(list.windows(2).all(|pair| pair[0] < pair[1]), "ascending");
+
+        // With an entry distinguished, the list stops just after it.
+        if let Some(first) = list.first().copied() {
+            known_distinguished.insert(first, true);
+            let truncated = entries_to_inspect(size, 5, &known_distinguished).unwrap();
+            assert_eq!(truncated, vec![first]);
+        }
+    }
+
+    #[test]
+    fn monitor_errors_describe_themselves() {
+        use alloc::string::ToString;
+        let errors = [
+            MonitorError::RedundantLadder {
+                position: 3,
+                provided: 2,
+                wanted: 2,
+            },
+            MonitorError::LadderLength {
+                position: 3,
+                expected: 2,
+                actual: 1,
+            },
+            MonitorError::VersionMissing {
+                position: 3,
+                version: 2,
+            },
+            MonitorError::MissingLadderKey {
+                position: 3,
+                version: 2,
+            },
+            MonitorError::MissingCommitment {
+                position: 3,
+                version: 2,
+            },
+            MonitorError::from(Error::Exhausted {
+                array: "prefix_proofs",
+                position: 3,
+            }),
+            MonitorError::from(prefix::Error::DepthOverflow { depth: 256 }),
+            MonitorError::from(ibst::Error::EmptyLog),
+            MonitorError::from(distinguished::Error::MissingTimestamp { position: 1 }),
+        ];
+        for error in &errors {
+            assert!(!error.to_string().is_empty(), "{error:?}");
+        }
+        assert!(core::error::Error::source(&errors[5]).is_some());
+        assert!(core::error::Error::source(&errors[0]).is_none());
     }
 }
