@@ -189,13 +189,14 @@ subtree over `[start, start+len)` is node `2*start + len - 1`, and because a §1
 only ever carries balanced subtree heads, that translation is total on exactly the
 values that matter. A range that failed to map would itself be the bug.
 
-## The one file that cannot be reproducible
+## The two files that cannot be reproducible
 
 Every vector file here regenerates to the same bytes, and CI diffs them so that an upstream
-bump changing behaviour fails loudly instead of passing quietly. `search.json` is the
-exception, and it is not fixable: katie stamps each log entry with `time.Now()` and generates a
-fresh random opening for every commitment, with no injection point for either. Every
-commitment, prefix root, log root and signature in a response therefore differs run to run.
+bump changing behaviour fails loudly instead of passing quietly. `search.json` and
+`monitor.json` are the exceptions, and it is not fixable: both are served by a live log, and
+katie stamps each entry with `time.Now()` and generates a fresh random opening for every
+commitment, with no injection point for either. Every commitment, prefix root, log root and
+signature in a response therefore differs run to run.
 
 Its expiry cases lean on that same clock deliberately. §7.1's expiry is relative to the
 rightmost entry's timestamp, so the only way to produce an expired entry is to space the
@@ -207,12 +208,12 @@ where everything or nothing expired would pass while testing nothing.
 The alternative to giving up the property was to weaken it — compare the regenerated file
 structurally, ignoring the values that move. That would have checked less than what is done
 instead: CI regenerates the vectors and runs **the whole Rust check suite against the
-regenerated tree**, so `search.json`'s checks execute against bytes nobody has ever seen. A
-change in how the peer shapes a response fails there. The committed file remains as a pinned
-artifact for `cargo test` and for the page, and is excluded from the reproducibility diff.
+regenerated tree**, so both files' checks execute against bytes nobody has ever seen. A change
+in how the peer shapes a response fails there. The committed files remain as pinned artifacts
+for `cargo test` and for the page, and are excluded from the reproducibility diff.
 
-Net effect: the deterministic files are pinned *and* reproducible; the nondeterministic one is
-pinned and re-derived. Neither is checked only against itself, which is the property that
+Net effect: the deterministic files are pinned *and* reproducible; the two nondeterministic ones
+are pinned and re-derived. Nothing is checked only against itself, which is the property that
 actually matters.
 
 ## When the peer is the oracle and the peer is wrong
