@@ -29,10 +29,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use kt_crypto::suite::CipherSuite;
-use kt_tree::{log, prefix};
+use kt_tree::{ibst, ladder, log, prefix};
 use kt_wire::audit::AuditorUpdate;
 use kt_wire::codec;
-use kt_wire::proofs::PrefixLeaf;
+use kt_wire::proofs::{CombinedTreeProof, PrefixLeaf};
 use kt_wire::structs::{HashValue, LogEntry};
 use serde::Serialize;
 
@@ -94,6 +94,21 @@ enum Case {
         /// The root after it, hex.
         after: String,
     },
+    /// A `CombinedTreeProof` for the peer's own §6.3 to consume (§12.3.2).
+    CombinedSearch {
+        name: String,
+        expect: &'static str,
+        /// The log's size.
+        size: u64,
+        /// The claimed greatest version, which is also the search target.
+        greatest: u32,
+        /// Every log entry's timestamp, by position.
+        timestamps: Vec<u64>,
+        /// The versions the peer needs search keys for.
+        versions: Vec<VersionKey>,
+        /// The wire-encoded `CombinedTreeProof`, hex.
+        proof: String,
+    },
     /// An `AuditorUpdate` for the peer's decoder (§15.2).
     AuditorUpdate {
         name: String,
@@ -112,6 +127,15 @@ enum Case {
         /// The root the proof should verify against, hex.
         root: String,
     },
+}
+
+/// A version's search key and commitment, as the peer's proof handle wants them.
+#[derive(Clone, Serialize)]
+struct VersionKey {
+    version: u32,
+    vrf_output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    commitment: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -211,6 +235,7 @@ const fn expect_of(case: &Case) -> &'static str {
         Case::LogTree { expect, .. }
         | Case::PrefixTree { expect, .. }
         | Case::PrefixMutation { expect, .. }
+        | Case::CombinedSearch { expect, .. }
         | Case::AuditorUpdate { expect, .. } => expect,
     }
 }
@@ -219,6 +244,199 @@ fn build_cases() -> Result<Vec<Case>, String> {
     let mut cases = log_cases()?;
     cases.extend(prefix_cases()?);
     cases.extend(mutation_cases()?);
+    cases.extend(search_cases()?);
+    Ok(cases)
+}
+
+/// §6.3 proofs built by this implementation for the peer's own algorithm to consume.
+///
+/// Every other §6–§8 check runs one way: the peer serves a response and this side replays it. That
+/// cannot catch over-acceptance — a proof this side would accept and the peer would not — and
+/// over-acceptance is the direction that matters for a verifier. It is also the direction that
+/// found the one real bug in this implementation's history: §12.1's balanced-subtree rule, which
+/// self-consistent proofs passed and the peer rejected.
+///
+/// So this builds `CombinedTreeProof`s from a log constructed here, and the Go side feeds them to
+/// katie's `GreatestVersionSearch` through its own `ReceivedProofHandle`. The peer's `Finish` is its
+/// version of §12.3's exact-count rule, so a proof with an element too many or too few fails there
+/// rather than being quietly tolerated.
+///
+/// No signing is involved: the tree-head signature is a separate step in a client, and the
+/// algorithm layer checks a proof without it. That keeps this side a verifier rather than obliging
+/// it to become a log.
+fn search_cases() -> Result<Vec<Case>, String> {
+    // A log where version `v` was added at entry `v`, timestamps a millisecond apart so that with a
+    // week-long window only the root is distinguished and §6.3 starts there.
+    const SIZE: u64 = 7;
+    const GREATEST: u32 = 6;
+    let timestamps: Vec<u64> = (0..SIZE)
+        .map(|i| 1_700_000_000_000_u64.saturating_add(i))
+        .collect();
+
+    let key_for = |version: u32| {
+        let mut bytes = [0_u8; HashValue::SIZE];
+        bytes[0] = u8::try_from(version.wrapping_mul(37) % 256).unwrap_or(0);
+        bytes[HashValue::SIZE - 1] = u8::try_from(version % 256).unwrap_or(0);
+        HashValue::from_bytes(bytes)
+    };
+    let commitment_for = |version: u32| {
+        HashValue::from_bytes([u8::try_from(version % 256).unwrap_or(0) ^ 0xa5; HashValue::SIZE])
+    };
+    let tree_at = |position: u64| -> Result<prefix::PrefixTree, String> {
+        let mut tree = prefix::PrefixTree::new();
+        for version in 0..=u32::try_from(position).unwrap_or(0) {
+            tree.insert(PrefixLeaf {
+                vrf_output: key_for(version),
+                commitment: commitment_for(version),
+            })
+            .map_err(|err| format!("building the tree at {position}: {err}"))?;
+        }
+        Ok(tree)
+    };
+
+    // §6.3's walk: from the rightmost distinguished entry along the frontier, one ladder per entry,
+    // each indexed on the greatest version present *there* — which is what makes the results a
+    // prefix of the verifier's ladder rather than a match for it.
+    let frontier = ibst::frontier(SIZE).map_err(|err| format!("frontier: {err}"))?;
+    let start = ibst::root(SIZE).map_err(|err| format!("root: {err}"))?;
+    let mut proofs = Vec::new();
+    let mut roots = Vec::new();
+    let mut left_inclusion: Vec<u32> = Vec::new();
+    let mut current = start;
+    loop {
+        let local = u32::try_from(current).unwrap_or(0);
+        let versions = ladder::search_binary_ladder(GREATEST, local, &left_inclusion, &[])
+            .map_err(|err| format!("ladder at {current}: {err}"))?;
+        let tree = tree_at(current)?;
+        let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+        let proof = tree
+            .prove(SUITE, &searches)
+            .map_err(|err| format!("proving at {current}: {err}"))?;
+        for (version, result) in versions.iter().zip(proof.results.iter()) {
+            if result.is_inclusion() && !left_inclusion.contains(version) {
+                left_inclusion.push(*version);
+            }
+        }
+        proofs.push(proof);
+        roots.push((current, tree.root(SUITE)));
+        if current == SIZE - 1 {
+            break;
+        }
+        current = ibst::right(current, SIZE).map_err(|err| format!("right of {current}: {err}"))?;
+    }
+
+    let stamp_at = |position: u64| -> Result<u64, String> {
+        usize::try_from(position)
+            .ok()
+            .and_then(|index| timestamps.get(index))
+            .copied()
+            .ok_or_else(|| format!("no timestamp for entry {position}"))
+    };
+
+    // The log tree, so the proof carries a real inclusion proof for the leaves it names.
+    let mut leaves = Vec::new();
+    for position in 0..SIZE {
+        let entry = LogEntry {
+            timestamp: stamp_at(position)?,
+            prefix_tree: tree_at(position)?.root(SUITE),
+        };
+        leaves
+            .push(log::leaf_value(SUITE, &entry).map_err(|err| format!("leaf {position}: {err}"))?);
+    }
+    let mut inspected: Vec<u64> = frontier.clone();
+    inspected.sort_unstable();
+    let inclusion =
+        log::prove(SUITE, &leaves, &inspected, None).map_err(|err| format!("log proof: {err}"))?;
+
+    let combined = CombinedTreeProof {
+        // §12.3.1: a first-time user gets the frontier's timestamps.
+        timestamps: frontier
+            .iter()
+            .map(|position| stamp_at(*position))
+            .collect::<Result<Vec<u64>, String>>()?,
+        prefix_proofs: proofs,
+        // Every frontier entry gets a proof here, so nothing is owed a root.
+        prefix_roots: Vec::new(),
+        inclusion,
+    };
+
+    let mut versions: Vec<VersionKey> = Vec::new();
+    for version in 0..=GREATEST.saturating_add(1) {
+        versions.push(VersionKey {
+            version,
+            vrf_output: hex::encode(key_for(version).as_bytes()),
+            commitment: (version <= GREATEST)
+                .then(|| hex::encode(commitment_for(version).as_bytes())),
+        });
+    }
+
+    let encoded = |proof: &CombinedTreeProof| -> Result<String, String> {
+        codec::encode(proof)
+            .map(hex::encode)
+            .map_err(|err| format!("encoding: {err}"))
+    };
+
+    let mut cases = vec![Case::CombinedSearch {
+        name: "combined-greatest-version-search".to_owned(),
+        expect: ACCEPT,
+        size: SIZE,
+        greatest: GREATEST,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&combined)?,
+    }];
+
+    // And the negatives, which are the point of the exercise: each is a proof this side builds
+    // deliberately wrong, and the peer must refuse it. A verifier that accepts these accepts more
+    // than the protocol allows, which no amount of recomputing values would reveal.
+    let mut extra_timestamp = combined.clone();
+    extra_timestamp.timestamps.push(1_700_000_000_099);
+    cases.push(Case::CombinedSearch {
+        name: "combined-search-extra-timestamp".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        greatest: GREATEST,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&extra_timestamp)?,
+    });
+
+    let mut missing_proof = combined.clone();
+    missing_proof.prefix_proofs.pop();
+    cases.push(Case::CombinedSearch {
+        name: "combined-search-missing-prefix-proof".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        greatest: GREATEST,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&missing_proof)?,
+    });
+
+    let mut reordered = combined.clone();
+    reordered.prefix_proofs.reverse();
+    cases.push(Case::CombinedSearch {
+        name: "combined-search-proofs-out-of-order".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        greatest: GREATEST,
+        timestamps: timestamps.clone(),
+        versions: versions.clone(),
+        proof: encoded(&reordered)?,
+    });
+
+    let mut backwards = combined.clone();
+    backwards.timestamps.reverse();
+    cases.push(Case::CombinedSearch {
+        name: "combined-search-timestamps-backwards".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        greatest: GREATEST,
+        timestamps,
+        versions,
+        proof: encoded(&backwards)?,
+    });
+
     Ok(cases)
 }
 

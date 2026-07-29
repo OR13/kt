@@ -113,8 +113,8 @@ disagrees:
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
 Eighteen vector files pass from the Rust side — 6706 checks across 789 cases — and
-`from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
-katie must accept and 100 of which it must reject. "Agrees" here means a committed
+`from-kt.json` runs the other way: 214 artifacts built by the Rust side, 110 of which
+katie must accept and 104 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
 
 The reverse direction earned its keep immediately. It found that §12.1's proofs
@@ -124,6 +124,29 @@ any log whose size is not a power of two — builds proofs that verify against
 themselves and disagree with the peer everywhere. Recomputing katie's values would
 have caught it too, but only once proofs were being compared; nothing in the
 hashing rules of §11.8 says it.
+
+### The reverse direction, for an algorithm rather than a proof
+
+For six rounds of work the §6–§8 algorithms were checked in one direction only: katie serves a
+response and this side replays it. That cannot catch over-acceptance — a proof this side would
+accept and katie would not — and over-acceptance is the failure that matters for a verifier. It is
+also the failure the reverse direction caught the one time this project had a real bug, in §12.1's
+balanced-subtree rule, which self-consistent proofs satisfied and katie rejected.
+
+So `from-kt.json` now carries `CombinedTreeProof`s built here for katie's own §6.3 to consume. No
+signing is involved and none is needed: katie's algorithm layer verifies a proof through a
+`ReceivedProofHandle` without a tree head, so this side stays a verifier rather than having to
+become a log. `handle.Finish()` is katie's own version of §12.3's exact-count rule, which makes it
+the mirror image of the replay check — where the replay asks whether this side reads katie's
+ordering correctly, this asks whether katie reads ours.
+
+Four of the five cases are deliberately wrong, because those are the ones with something to prove: a
+timestamp too many, a prefix proof too few, the proofs reordered, and the timestamps descending.
+katie refuses all four and accepts the honest one. The clock bounds in that fixture's configuration
+are set enormous on purpose — §4.2 has a verifier compare the rightmost timestamp against its own
+clock, which is deployment policy rather than a property of a proof, and these fixtures carry fixed
+timestamps so the file regenerates to identical bytes. `tree-head.json` pins the clock bounds
+themselves.
 
 ### Replaying an algorithm is how the ordering gets verified
 

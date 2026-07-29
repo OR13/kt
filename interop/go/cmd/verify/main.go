@@ -25,8 +25,10 @@ import (
 	"os"
 
 	"github.com/Bren2010/katie/crypto/suites"
+	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
+	"github.com/Bren2010/katie/tree/transparency/algorithms"
 	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
@@ -69,10 +71,21 @@ type caseEnvelope struct {
 	Before  string `json:"before"`
 	After   string `json:"after"`
 
+	// combined-search — `size` is shared with log-tree above.
+	Greatest   uint32       `json:"greatest"`
+	Timestamps []uint64     `json:"timestamps"`
+	Versions   []versionKey `json:"versions"`
+
 	// auditor-update
 	Encoding string `json:"encoding"`
 
 	Root string `json:"root"`
+}
+
+type versionKey struct {
+	Version    uint32  `json:"version"`
+	VrfOutput  string  `json:"vrf_output"`
+	Commitment *string `json:"commitment"`
 }
 
 type leaf struct {
@@ -126,6 +139,8 @@ func main() {
 			err = checkPrefixTree(cs, c)
 		case "prefix-mutation":
 			err = checkPrefixMutation(cs, c)
+		case "combined-search":
+			err = checkCombinedSearch(cs, c)
 		case "auditor-update":
 			err = checkAuditorUpdate(cs, c)
 		default:
@@ -212,6 +227,102 @@ func checkPrefixMutation(cs suites.CipherSuite, c caseEnvelope) error {
 		return errors.New("the root after the update does not match")
 	}
 	return nil
+}
+
+// checkCombinedSearch runs a CombinedTreeProof built by the Rust side through katie's own §6.3.
+//
+// This is the direction that catches over-acceptance. Everything else about §6–§8 runs the other
+// way — katie serves a response and the Rust side replays it — which cannot reveal a proof the
+// Rust side would accept and katie would not. The one real bug in this project's history was found
+// exactly here: §12.1's balanced-subtree rule, which self-consistent proofs satisfied and katie
+// rejected.
+//
+// No signature is involved. katie's algorithm layer verifies a proof through a ProofHandle without
+// a tree head, so the Rust side does not have to become a log to be checked as a verifier.
+// `handle.Finish()` is katie's own version of §12.3's exact-count rule, so a proof carrying one
+// element too many or too few fails there rather than passing quietly.
+func checkCombinedSearch(cs suites.CipherSuite, c caseEnvelope) error {
+	raw, err := hex.DecodeString(c.Proof)
+	if err != nil {
+		return fmt.Errorf("proof: %w", err)
+	}
+	buf := bytes.NewBuffer(raw)
+	proof, err := structs.NewCombinedTreeProof(cs, buf)
+	if err != nil {
+		return fmt.Errorf("parsing the proof: %w", err)
+	} else if buf.Len() != 0 {
+		return fmt.Errorf("%d bytes left after the proof", buf.Len())
+	}
+
+	handle := algorithms.NewReceivedProofHandle(cs, *proof)
+	for _, v := range c.Versions {
+		vrfOutput, err := hex.DecodeString(v.VrfOutput)
+		if err != nil {
+			return fmt.Errorf("version %d vrf_output: %w", v.Version, err)
+		}
+		var commitment []byte
+		if v.Commitment != nil {
+			commitment, err = hex.DecodeString(*v.Commitment)
+			if err != nil {
+				return fmt.Errorf("version %d commitment: %w", v.Version, err)
+			}
+		}
+		if err := handle.AddVersion(v.Version, vrfOutput, commitment); err != nil {
+			return fmt.Errorf("version %d: %w", v.Version, err)
+		}
+	}
+
+	config, err := searchConfig(cs)
+	if err != nil {
+		return err
+	}
+	provider := algorithms.NewDataProvider(cs, handle)
+	// §12.3.1 first, exactly as a client does: the view update consumes the frontier's timestamps
+	// before the search asks for anything.
+	if err := algorithms.UpdateView(config, c.Size, nil, provider); err != nil {
+		return fmt.Errorf("updating the view: %w", err)
+	}
+	if _, err := algorithms.GreatestVersionSearch(config, c.Greatest, c.Size, provider); err != nil {
+		return fmt.Errorf("greatest-version search: %w", err)
+	}
+	// katie's own "no more and no less".
+	if _, err := handle.Finish(); err != nil {
+		return fmt.Errorf("finishing: %w", err)
+	}
+	return nil
+}
+
+// searchConfig is the public configuration these proofs are checked against.
+//
+// The monitoring window is the field that matters for the proof: the Rust side builds its logs with
+// entries a millisecond apart, so a week-long window leaves only the root distinguished and §6.3
+// starts there.
+//
+// The clock bounds are deliberately enormous. §4.2 has a verifier check the rightmost timestamp
+// against its own clock, which is a deployment policy rather than a property of a proof — and these
+// fixtures carry fixed timestamps so that from-kt.json regenerates to identical bytes. Making the
+// fixture track the wall clock would trade a reproducible artifact for a check that belongs
+// elsewhere; tree-head.json already pins the clock bounds themselves.
+func searchConfig(cs suites.CipherSuite) (*structs.PublicConfig, error) {
+	logKey, err := cs.ParseSigningPrivateKey(bytes.Repeat([]byte{0x71}, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the log signing key: %w", err)
+	}
+	vrfKey, err := edwards25519.NewPrivateKey(bytes.Repeat([]byte{0x74}, 32))
+	if err != nil {
+		return nil, fmt.Errorf("parsing the VRF key: %w", err)
+	}
+	return &structs.PublicConfig{
+		SignatureKey: logKey.Public(),
+		VrfKey:       vrfKey.PublicKey(),
+		Config: structs.Config{
+			Suite:                      cs,
+			Mode:                       structs.ContactMonitoring,
+			MaxAhead:                   1 << 62,
+			MaxBehind:                  1 << 62,
+			ReasonableMonitoringWindow: 604800000,
+		},
+	}, nil
 }
 
 // checkAuditorUpdate parses an `AuditorUpdate` the Rust side encoded and re-marshals it,
