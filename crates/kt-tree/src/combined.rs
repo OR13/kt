@@ -361,6 +361,19 @@ impl<'a> Reader<'a> {
             .collect()
     }
 
+    /// Whether every element has been read.
+    ///
+    /// Needed by exactly one algorithm. §8.3's second algorithm says at step 4 that "the only stop
+    /// condition" from a user's perspective "is having consumed all of the Transparency Log's
+    /// response" — so there, running out of proof is a legitimate outcome rather than an error. It
+    /// is the one place in the protocol where the element count decides when the algorithm stops,
+    /// instead of the algorithm deciding what the element count should be.
+    #[must_use]
+    pub fn is_exhausted(&self) -> bool {
+        self.timestamps_used >= self.proof.timestamps.len()
+            && self.proofs_used >= self.proof.prefix_proofs.len()
+    }
+
     /// Finishes reading, requiring that nothing was left over (§12.3).
     ///
     /// # Errors
@@ -2882,6 +2895,14 @@ pub enum InitError {
     Ibst(ibst::Error),
     /// A ladder could not be computed.
     Ladder(ladder::Error),
+    /// Distinguishedness could not be decided from the timestamps available.
+    Distinguished(distinguished::Error),
+}
+
+impl From<distinguished::Error> for InitError {
+    fn from(err: distinguished::Error) -> Self {
+        Self::Distinguished(err)
+    }
 }
 
 impl From<Error> for InitError {
@@ -2973,6 +2994,7 @@ impl core::fmt::Display for InitError {
             Self::Prefix(err) => write!(f, "evaluating a prefix tree proof: {err}"),
             Self::Ibst(err) => write!(f, "walking the search tree: {err}"),
             Self::Ladder(err) => write!(f, "computing a binary ladder: {err}"),
+            Self::Distinguished(err) => write!(f, "deciding distinguishedness: {err}"),
         }
     }
 }
@@ -2984,6 +3006,7 @@ impl core::error::Error for InitError {
             Self::Prefix(err) => Some(err),
             Self::Ibst(err) => Some(err),
             Self::Ladder(err) => Some(err),
+            Self::Distinguished(err) => Some(err),
             _ => None,
         }
     }
@@ -3269,5 +3292,549 @@ mod init_tests {
         }
         assert!(core::error::Error::source(&errors[8]).is_some());
         assert!(core::error::Error::source(&errors[0]).is_none());
+    }
+}
+
+/// What owner monitoring established (§8.3's second algorithm).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OwnerMonitored {
+    /// The distinguished entries whose ladders were checked, in the order the walk reached them.
+    pub checked: Vec<(u64, HashValue)>,
+    /// The rightmost entry the walk got to before the proof ran out.
+    ///
+    /// §8.3 expects users to "repeatedly query the Transparency Log until they detect that the
+    /// above algorithm has either hit an unresolvable error or successfully reached the rightmost
+    /// distinguished log entry", so this is what the next request starts from.
+    pub reached: Option<u64>,
+}
+
+/// Runs §8.3's second algorithm: an owner checking the recent distinguished entries.
+///
+/// This is the only algorithm in the protocol whose stopping point is decided by the *proof*
+/// rather than by the algorithm. Step 4 says the user's "only stop condition is having consumed
+/// all of the Transparency Log's response" — the log is allowed to truncate, because §8.3 tells it
+/// to limit how many entries it covers per response, and the user simply asks again. So exhaustion
+/// is a legitimate outcome here, and only at step 4: running out anywhere else means the log sent
+/// a proof that does not match its own shape.
+///
+/// One consequence worth knowing: §12.3's exact-count rule cannot police this algorithm's reading
+/// the way it polices the others. Where a search either consumes everything or reveals a
+/// misreading, an owner monitor consumes until empty by construction. What still catches a
+/// misreading is the ladders themselves — an element attributed to the wrong entry evaluates to a
+/// prefix tree root that entry never had.
+///
+/// `start` is the rightmost distinguished entry the owner has already verified. `expected` gives
+/// the greatest version the owner believes existed as of a given log entry — *not* one global
+/// version. §8.3 step 5 says the ladder targets "the greatest version of the label expected to
+/// exist at this point according to the label owner's local state", and an owner has that state
+/// because it created the versions itself: it knows which entry each one went into. Using the
+/// global greatest everywhere gives ladders of the wrong length at every entry before the last,
+/// since §5's series depends on its target.
+///
+/// # Errors
+///
+/// [`InitError`], shared with owner initialization: the two algorithms check the same things about
+/// a ladder, and distinguishing their errors would be a distinction without a difference.
+pub fn owner_monitor(
+    suite: CipherSuite,
+    size: u64,
+    window: u64,
+    start: u64,
+    expected: &impl Fn(u64) -> u32,
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<OwnerMonitored, InitError> {
+    let last = size.saturating_sub(1);
+    let rightmost = reader.timestamp(last)?;
+    let mut checked = Vec::new();
+    let mut reached = None;
+    let root = ibst::root(size)?;
+    owner_monitor_at(
+        suite,
+        size,
+        window,
+        start,
+        expected,
+        keys,
+        reader,
+        root,
+        (0, 0),
+        (last, rightmost),
+        &mut checked,
+        &mut reached,
+    )?;
+    Ok(OwnerMonitored { checked, reached })
+}
+
+/// §8.3's second algorithm at one log entry, recursing as its steps direct.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the recursion's own state: the tree, the log's parameters, the owner's position, \
+              the §6.1 brackets, and the two accumulators. Bundling them would obscure which \
+              parameter each numbered step reads"
+)]
+fn owner_monitor_at(
+    suite: CipherSuite,
+    size: u64,
+    window: u64,
+    start: u64,
+    expected: &impl Fn(u64) -> u32,
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+    current: u64,
+    left: (u64, u64),
+    right: (u64, u64),
+    checked: &mut Vec<(u64, HashValue)>,
+    reached: &mut Option<u64>,
+) -> core::result::Result<(), InitError> {
+    // Step 1. Only distinguished entries are checked here — §8.3 says as much, and points out that
+    // this is why an owner runs §8.2 alongside: between two reference points, only contact
+    // monitoring notices anything.
+    if !distinguished::is_distinguished(window, left, right)? {
+        return Ok(());
+    }
+
+    // Step 2: entries at or before what the owner has already verified need no further checking,
+    // but the walk still has to get past them to reach the ones that do.
+    if current <= start {
+        if let Ok(child) = ibst::right(current, size) {
+            let timestamp = reader.timestamp(current)?;
+            owner_monitor_at(
+                suite,
+                size,
+                window,
+                start,
+                expected,
+                keys,
+                reader,
+                child,
+                (current, timestamp),
+                right,
+                checked,
+                reached,
+            )?;
+        }
+        return Ok(());
+    }
+
+    // Step 3: the left subtree first, so the walk covers the older distinguished entries before
+    // the newer ones — which is what lets the log truncate at step 4 and the user resume.
+    if !ibst::is_leaf(current) {
+        let child = ibst::left(current)?;
+        let timestamp = reader.timestamp(current)?;
+        owner_monitor_at(
+            suite,
+            size,
+            window,
+            start,
+            expected,
+            keys,
+            reader,
+            child,
+            left,
+            (current, timestamp),
+            checked,
+            reached,
+        )?;
+    }
+
+    // Step 4: the stop condition. For a user it is exhaustion, and nothing else.
+    if reader.is_exhausted() {
+        return Ok(());
+    }
+
+    // Step 5. The entry's own timestamp comes first, and §12.3.6 does not say so: it lists "the
+    // timestamp for each log entry that causes the algorithm to recurse" and, separately, a proof
+    // for each entry reaching step 5. But an entry with a proof and no timestamp cannot be placed
+    // in the log tree at all — §11.8's leaf is the hash of a timestamp *and* a prefix tree root,
+    // and §12.3 ties `inclusion` to "all leaf nodes whose timestamp was provided". Compare
+    // §12.3.3, which lists both for every entry a fixed-version search touches. Measured against
+    // the peer: it sends them, in this position. Recorded as `DRAFT-10`.
+    reader.timestamp(current)?;
+
+    // A full ladder for the version the owner expects to be greatest *here*.
+    let greatest = expected(current);
+    let versions = ladder::search_binary_ladder(greatest, greatest, &[], &[])?;
+    let proof = reader.prefix_proof(current)?;
+    let used = versions
+        .get(..proof.results.len())
+        .ok_or(InitError::LadderLength {
+            position: current,
+            expected: versions.len(),
+            actual: proof.results.len(),
+        })?;
+    let ordering = ladder::interpret_search_ladder(used, greatest, &proof.results)?;
+    if ordering != core::cmp::Ordering::Equal {
+        return Err(InitError::LadderInconsistent {
+            position: current,
+            claimed: greatest,
+            exists: true,
+        });
+    }
+    let mut entries = Vec::new();
+    for (version, result) in used.iter().zip(proof.results.iter()) {
+        let key = keys.get(version).ok_or(InitError::MissingLadderKey {
+            position: current,
+            version: *version,
+        })?;
+        entries.push(if result.is_inclusion() {
+            prefix::SearchEntry::included(
+                key.vrf_output,
+                key.commitment.ok_or(InitError::MissingCommitment {
+                    position: current,
+                    version: *version,
+                })?,
+            )
+        } else {
+            prefix::SearchEntry::absent(key.vrf_output)
+        });
+    }
+    let root = prefix::evaluate(suite, &entries, proof)?;
+    reader.establish_root(current, root)?;
+    checked.push((current, root));
+    *reached = Some(current);
+
+    // Step 6.
+    if let Ok(child) = ibst::right(current, size) {
+        let timestamp = reader.timestamp(current)?;
+        owner_monitor_at(
+            suite,
+            size,
+            window,
+            start,
+            expected,
+            keys,
+            reader,
+            child,
+            (current, timestamp),
+            right,
+            checked,
+            reached,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod owner_monitor_tests {
+    use super::search_tests::{commitment_for, key_for, tree_at};
+    use super::*;
+    use kt_wire::proofs::InclusionProof;
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    /// Everything an owner holds after initialization: its own versions, and every version a
+    /// search ladder for any of them reaches — including ones that never existed, which is why
+    /// those have no commitment.
+    fn owner_keys(greatest: u32) -> BTreeMap<u32, LadderKey> {
+        let mut keys = BTreeMap::new();
+        for version in 0..=greatest {
+            for rung in ladder::search_binary_ladder(version, version, &[], &[]).unwrap() {
+                keys.entry(rung).or_insert(LadderKey {
+                    vrf_output: key_for(rung),
+                    commitment: (rung <= greatest).then(|| commitment_for(rung)),
+                });
+            }
+        }
+        keys
+    }
+
+    /// Entries far enough apart that a small window makes most of them distinguished, which is the
+    /// only shape where §8.3's walk reaches step 5 at all.
+    fn spaced(size: u64) -> Vec<u64> {
+        (0..size).map(|i| 1_700_000_000_000 + i * 100).collect()
+    }
+
+    /// Builds the proof for §8.3's walk, in §12.3.6's order plus the step-5 timestamps §12.3.6
+    /// omits (see `DRAFT-10`). `limit` caps how many ladders the log includes, which is the
+    /// truncation §8.3 permits.
+    fn build_walk(
+        size: u64,
+        window: u64,
+        start: u64,
+        expected: &impl Fn(u64) -> u32,
+        stamps: &[u64],
+        limit: usize,
+    ) -> CombinedTreeProof {
+        let last = size - 1;
+        let mut timestamps: Vec<u64> = Vec::new();
+        let mut seen: Vec<u64> = Vec::new();
+        let mut proofs = Vec::new();
+        let mut proved: Vec<u64> = Vec::new();
+
+        // The view update first, as every operation does.
+        for entry in ibst::frontier(size).unwrap() {
+            if !seen.contains(&entry) {
+                timestamps.push(stamps[entry as usize]);
+                seen.push(entry);
+            }
+        }
+
+        #[allow(
+            clippy::too_many_arguments,
+            reason = "the walk's own state, mirroring the library recursion it builds proofs for"
+        )]
+        fn walk(
+            size: u64,
+            window: u64,
+            start: u64,
+            expected: &impl Fn(u64) -> u32,
+            stamps: &[u64],
+            limit: usize,
+            current: u64,
+            left: (u64, u64),
+            right: (u64, u64),
+            timestamps: &mut Vec<u64>,
+            seen: &mut Vec<u64>,
+            proofs: &mut Vec<kt_wire::proofs::PrefixProof>,
+            proved: &mut Vec<u64>,
+        ) {
+            if !distinguished::is_distinguished(window, left, right).unwrap() {
+                return;
+            }
+            let push = |entry: u64, timestamps: &mut Vec<u64>, seen: &mut Vec<u64>| {
+                if !seen.contains(&entry) {
+                    timestamps.push(stamps[entry as usize]);
+                    seen.push(entry);
+                }
+            };
+            if current <= start {
+                if let Ok(child) = ibst::right(current, size) {
+                    push(current, timestamps, seen);
+                    walk(
+                        size,
+                        window,
+                        start,
+                        expected,
+                        stamps,
+                        limit,
+                        child,
+                        (current, stamps[current as usize]),
+                        right,
+                        timestamps,
+                        seen,
+                        proofs,
+                        proved,
+                    );
+                }
+                return;
+            }
+            if !ibst::is_leaf(current) {
+                let child = ibst::left(current).unwrap();
+                push(current, timestamps, seen);
+                walk(
+                    size,
+                    window,
+                    start,
+                    expected,
+                    stamps,
+                    limit,
+                    child,
+                    left,
+                    (current, stamps[current as usize]),
+                    timestamps,
+                    seen,
+                    proofs,
+                    proved,
+                );
+            }
+            if proofs.len() >= limit {
+                // The log has sent as much as it intends to; §8.3 lets it stop here.
+                return;
+            }
+            push(current, timestamps, seen);
+            let target = expected(current);
+            let versions = ladder::search_binary_ladder(target, target, &[], &[]).unwrap();
+            let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+            proofs.push(tree_at(current).prove(SUITE, &searches).unwrap());
+            proved.push(current);
+            if let Ok(child) = ibst::right(current, size) {
+                push(current, timestamps, seen);
+                walk(
+                    size,
+                    window,
+                    start,
+                    expected,
+                    stamps,
+                    limit,
+                    child,
+                    (current, stamps[current as usize]),
+                    right,
+                    timestamps,
+                    seen,
+                    proofs,
+                    proved,
+                );
+            }
+        }
+
+        walk(
+            size,
+            window,
+            start,
+            expected,
+            stamps,
+            limit,
+            ibst::root(size).unwrap(),
+            (0, 0),
+            (last, stamps[last as usize]),
+            &mut timestamps,
+            &mut seen,
+            &mut proofs,
+            &mut proved,
+        );
+
+        let mut owed: Vec<u64> = seen
+            .iter()
+            .copied()
+            .filter(|entry| !proved.contains(entry))
+            .collect();
+        owed.sort_unstable();
+        let prefix_roots = owed
+            .iter()
+            .map(|entry| tree_at(*entry).root(SUITE))
+            .collect();
+
+        CombinedTreeProof {
+            timestamps,
+            prefix_proofs: proofs,
+            prefix_roots,
+            inclusion: InclusionProof::new(Vec::new()),
+        }
+    }
+
+    /// The whole walk, checking a ladder at every distinguished entry past the owner's start.
+    #[test]
+    fn an_owner_walks_the_distinguished_entries() {
+        let size = 7_u64;
+        let window = 50_u64;
+        let start = 1_u64;
+        let stamps = spaced(size);
+        let expected = |entry: u64| u32::try_from(entry).unwrap_or(6).min(6);
+        let proof = build_walk(size, window, start, &expected, &stamps, usize::MAX);
+        assert!(
+            proof.prefix_proofs.len() > 1,
+            "the walk should reach several entries"
+        );
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let monitored = owner_monitor(
+            SUITE,
+            size,
+            window,
+            start,
+            &expected,
+            &owner_keys(6),
+            &mut reader,
+        )
+        .unwrap();
+        assert_eq!(monitored.checked.len(), proof.prefix_proofs.len());
+        for (position, root) in &monitored.checked {
+            assert_eq!(*root, tree_at(*position).root(SUITE), "entry {position}");
+        }
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// §8.3 lets the log truncate: "the Transparency Log SHOULD limit the number of distinguished
+    /// log entries that it provides binary ladders for in a single response", and step 4 makes
+    /// exhaustion the user's stop condition. So a short proof is a valid answer, not an error —
+    /// the user just asks again from where it got to.
+    #[test]
+    fn a_truncated_response_is_an_answer_not_an_error() {
+        let size = 7_u64;
+        let window = 50_u64;
+        let start = 1_u64;
+        let stamps = spaced(size);
+        let expected = |entry: u64| u32::try_from(entry).unwrap_or(6).min(6);
+        let full = build_walk(size, window, start, &expected, &stamps, usize::MAX);
+        let short = build_walk(size, window, start, &expected, &stamps, 2);
+        assert!(short.prefix_proofs.len() < full.prefix_proofs.len());
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&short, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let monitored = owner_monitor(
+            SUITE,
+            size,
+            window,
+            start,
+            &expected,
+            &owner_keys(6),
+            &mut reader,
+        )
+        .unwrap();
+        assert_eq!(monitored.checked.len(), 2);
+        assert!(monitored.reached.is_some(), "the walk got somewhere");
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// A ladder that does not place the expected version as the greatest. For an owner this is the
+    /// alarm: someone else has created a version of a label the owner controls.
+    #[test]
+    fn a_ladder_inconsistent_with_the_owners_state_is_refused() {
+        let size = 7_u64;
+        let window = 50_u64;
+        let start = 1_u64;
+        let stamps = spaced(size);
+        let honest = |entry: u64| u32::try_from(entry).unwrap_or(6).min(6);
+        let proof = build_walk(size, window, start, &honest, &stamps, usize::MAX);
+
+        // The owner believes version 0 is the greatest everywhere, so every ladder the log built
+        // for a later version now disagrees with its state.
+        let stale = |_: u64| 0_u32;
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        for entry in ibst::frontier(size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let refused = owner_monitor(
+            SUITE,
+            size,
+            window,
+            start,
+            &stale,
+            &owner_keys(6),
+            &mut reader,
+        );
+        // Which refusal depends on how far the two states have diverged: a ladder for a much
+        // smaller version is *shorter*, so the mismatch surfaces as a length disagreement before
+        // the interpretation is even reached. Both are the same finding — the log's ladders do not
+        // describe the history the owner believes in — so the test accepts either.
+        assert!(
+            matches!(
+                refused,
+                Err(InitError::LadderInconsistent { .. })
+                    | Err(InitError::LadderLength { .. })
+                    | Err(InitError::Ladder(_))
+            ),
+            "expected a refusal, got {refused:?}"
+        );
+    }
+
+    #[test]
+    fn the_distinguished_error_is_reported() {
+        use alloc::string::ToString;
+        let wrapped = InitError::from(distinguished::Error::NonMonotonic { left: 1, right: 2 });
+        assert!(!wrapped.to_string().is_empty());
+        assert!(core::error::Error::source(&wrapped).is_some());
     }
 }

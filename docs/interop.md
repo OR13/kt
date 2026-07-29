@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Eighteen vector files pass from the Rust side — 6697 checks across 787 cases — and
+Eighteen vector files pass from the Rust side — 6706 checks across 789 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -180,6 +180,29 @@ enumerate the distinguished set, because that needs timestamps for entries the s
 visits. It does not have to. §6.1 brackets a node by the timestamps of the entries either side
 of it in the search tree, and a descent maintains exactly those bounds as it goes — so
 distinguishedness along a search path is decidable from the path itself.
+
+### The one algorithm the proof stops rather than the algorithm stopping the proof
+
+§8.3's second algorithm inverts the relationship every other operation has with its proof. Step 4
+says the user's "only stop condition is having consumed all of the Transparency Log's response" —
+because §8.3 tells the log to limit how many distinguished entries it covers, and the user simply
+asks again. So the element count decides when the walk stops, rather than the walk deciding what
+the element count should be.
+
+That costs the verification technique its teeth. Everywhere else, §12.3's exact-count rule turns a
+misreading of the ordering into a leftover element; here the walk consumes whatever it is given by
+construction. What still catches a misreading is the ladders: an element attributed to the wrong
+entry evaluates to a prefix tree root that entry never had. The check is recorded as reading "to
+exhaustion" rather than "exactly" so the page does not overstate what it establishes.
+
+Two things had to be right before the recorded case would replay, and neither is in §8.3's text
+where a reader would look for it. The step 5 ladder targets "the greatest version expected to exist
+at this point according to the label owner's local state" — *per entry*, from the owner's own record
+of when it created each version, not one global greatest; using the global version gives ladders of
+the wrong length at every entry but the last. And the owner needs VRF outputs for versions that
+have never existed, because a ladder for version 3 reaches for version 7: §8.3 step 3 supplies
+exactly that set during initialization, and a client retains it. The second was nearly filed as a
+gap before finding the sentence that covers it.
 
 ### An owner looks backwards, everyone else looks forward
 
@@ -617,6 +640,21 @@ versions. Measured against katie: for a seven-entry log with greatest version 6,
 either implementation — but the draft never says the results are a prefix, and it is the first
 thing an implementer gets wrong.
 
+**[DRAFT-10] §12.3.6 omits the timestamps without which its own proof cannot be rooted.** For
+owner monitoring it lists "the timestamp for each log entry that causes the second algorithm of
+§8.3 to recurse either left or right" and, separately, "for each log entry that reaches step 5, a
+`PrefixProof`". An entry that reaches step 5 without causing a recursion therefore gets a proof
+and no timestamp — and cannot be placed in the log tree at all, because §11.8's leaf is the hash
+of a timestamp *and* a prefix tree root, and §12.3 ties `inclusion` to "the values of all leaf
+nodes whose timestamp was provided in `timestamps`". Compare §12.3.3, which for a fixed-version
+search lists both the timestamp and the proof for every entry the algorithm touches.
+
+Resolved by measurement rather than filed: the peer sends those timestamps, immediately before
+the entry's ladder, and a verifier that expects them consumes the proof exactly. Pinned by
+`monitor.json`'s `owner-monitor-reaches-step-5` case, which is the only recorded case where an
+entry reaches step 5 without recursing. Worth an editorial issue if the register is ever filed —
+an implementer following §12.3.6 literally builds a proof that no client can root.
+
 **[NOTE-03] `opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
 and writes it to the HMAC first. Same bytes, different factoring — the vectors
@@ -690,7 +728,8 @@ courtesy rather than a necessity.
 | `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | tracked locally |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
 | `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
-| `DRAFT-09` | Nothing says when a monitoring ladder deduplicates against `left_inclusion`; the two readings fail against each other | draft | `monitor.json`, three §8.2 replays under the empty-set reading | **filed**: [draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48) |
+| `DRAFT-09` | Nothing says when a monitoring ladder deduplicates against `left_inclusion`; the two readings fail against each other | draft | `monitor.json`, §8.2 replays under the empty-set reading | **filed**: [draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48) |
+| `DRAFT-10` | §12.3.6 omits the timestamp of an entry that reaches step 5 without recursing, so its own proof cannot be rooted | draft | `monitor.json` `owner-monitor-reaches-step-5` | tracked locally; resolved by measurement |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
 Two ground rules for anything added here. A finding is only a finding once a committed

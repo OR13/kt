@@ -29,12 +29,15 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/Bren2010/katie/crypto/commitments"
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/tree/transparency"
+	"github.com/Bren2010/katie/tree/transparency/math"
 	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
@@ -139,7 +142,8 @@ func monitorVectors(sha string) (*File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("case %q: parsing the VRF key: %w", spec.name, err)
 		}
-		known, kerr := knownVersions(cs, tree, vrfPrivate, []byte(spec.label), spec.entries)
+		known, kerr := knownVersions(
+			cs, tree, vrfPrivate, []byte(spec.label), spec.entries, spec.greatestVersion)
 		if kerr != nil {
 			return nil, fmt.Errorf("case %q: %w", spec.name, kerr)
 		}
@@ -222,6 +226,13 @@ func monitorCases() []monitorCase {
 		},
 	}
 
+	// The same log, with the entries spaced out in real time and a window small enough that most
+	// of them are distinguished. §7.1 requires a maximum lifetime to exceed the window; there is
+	// none here, so only the window matters.
+	spaced := growing
+	spaced.window = 50
+	spaced.spacing = 100 * time.Millisecond
+
 	return []monitorCase{
 		{
 			name:      "contact-one-version",
@@ -243,6 +254,17 @@ func monitorCases() []monitorCase {
 			log:       growing,
 			label:     alice,
 			entries:   []mapEntry{{position: 2, version: 2}},
+		},
+		{
+			// The same spaced log the owner-monitor case uses, so a pure contact monitor over a
+			// map entry that §6.1 makes distinguished can be compared against the composed
+			// operation. §8.2 step 1 says a distinguished map entry is left alone with no ladder;
+			// this records what the peer actually sends.
+			name:      "contact-distinguished-map-entry",
+			operation: "contact",
+			log:       spaced,
+			label:     alice,
+			entries:   []mapEntry{{position: 5, version: 5}},
 		},
 		{
 			name:      "contact-two-versions",
@@ -275,6 +297,21 @@ func monitorCases() []monitorCase {
 			start:           3,
 			greatestVersion: ptr(uint32(6)),
 		},
+		{
+			// The shape where §8.3's second algorithm reaches step 5 at all. With a week-long
+			// window only the root of a seven-entry log is distinguished, so a walk starting at
+			// the root goes right, finds nothing distinguished, and stops having checked no
+			// ladders — which is what `owner-monitor` above does. Spacing the entries out and
+			// shrinking the window makes several entries distinguished, so there are reference
+			// points to the right of the owner's start for the walk to actually check.
+			name:            "owner-monitor-reaches-step-5",
+			operation:       "owner-monitor",
+			log:             spaced,
+			label:           alice,
+			entries:         []mapEntry{{position: 5, version: 5}},
+			start:           1,
+			greatestVersion: ptr(uint32(6)),
+		},
 	}
 }
 
@@ -291,44 +328,76 @@ func knownVersions(
 	vrfKey vrf.PrivateKey,
 	label []byte,
 	entries []mapEntry,
+	advertised *uint32,
 ) ([]map[string]any, error) {
+	// The greatest version the owner knows of: the largest in its monitoring map, or the one it
+	// advertises, whichever is larger. An owner monitor targets the advertised version, which can
+	// be ahead of anything still in the map.
 	greatest := uint32(0)
 	for _, entry := range entries {
 		if entry.version > greatest {
 			greatest = entry.version
 		}
 	}
+	if advertised != nil && *advertised > greatest {
+		greatest = *advertised
+	}
 
-	out := make([]map[string]any, 0, int(greatest)+1)
+	// Every version the owner would hold after initialization: the ones it created, plus every
+	// version that appears in a search binary ladder for any of them. §8.3 step 3 makes the log
+	// supply VRF proofs for exactly that set during owner init, and a client retains them — which
+	// is why an owner monitoring later can check a ladder lookup for a version that has never
+	// existed, such as the 7 that a ladder for version 3 reaches for.
+	wanted := make(map[uint32]struct{})
 	for version := uint32(0); version <= greatest; version++ {
+		wanted[version] = struct{}{}
+		for _, rung := range math.SearchBinaryLadder(version, version, nil, nil) {
+			wanted[rung] = struct{}{}
+		}
+	}
+	versions := make([]uint32, 0, len(wanted))
+	for version := range wanted {
+		versions = append(versions, version)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+
+	out := make([]map[string]any, 0, len(versions))
+	for _, version := range versions {
 		alpha, err := structs.Marshal(&structs.VrfInput{Label: label, Version: version})
 		if err != nil {
 			return nil, fmt.Errorf("marshalling the VRF input for version %d: %w", version, err)
 		}
 		output, _ := vrfKey.Prove(alpha)
 
-		target := version
-		res, err := tree.Search(context.Background(), &structs.SearchRequest{
-			Label:   label,
-			Version: &target,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("searching for version %d: %w", version, err)
-		}
-		commitmentValue, err := structs.Marshal(&structs.CommitmentValue{
-			Label:   label,
-			Version: version,
-			Update:  res.Value,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("marshalling the commitment value for version %d: %w", version, err)
-		}
-		out = append(out, map[string]any{
+		entry := map[string]any{
 			"version":    version,
 			"vrf_output": hex.EncodeToString(output),
-			"commitment": hex.EncodeToString(
-				commitments.Commit(cs, res.Opening, commitmentValue)),
-		})
+		}
+		// A commitment only where the version exists. §13.3 step 2 makes the same point about
+		// owner initialization: a VRF proof is provided for versions that do not exist, so that
+		// their absence can be checked, and there is nothing to commit to.
+		if version <= greatest {
+			target := version
+			res, err := tree.Search(context.Background(), &structs.SearchRequest{
+				Label:   label,
+				Version: &target,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("searching for version %d: %w", version, err)
+			}
+			commitmentValue, err := structs.Marshal(&structs.CommitmentValue{
+				Label:   label,
+				Version: version,
+				Update:  res.Value,
+			})
+			if err != nil {
+				return nil, fmt.Errorf(
+					"marshalling the commitment value for version %d: %w", version, err)
+			}
+			entry["commitment"] = hex.EncodeToString(
+				commitments.Commit(cs, res.Opening, commitmentValue))
+		}
+		out = append(out, entry)
 	}
 	return out, nil
 }
