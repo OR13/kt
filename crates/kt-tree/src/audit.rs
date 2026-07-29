@@ -360,14 +360,14 @@ pub fn verify_update(
     let new_size = previous.map_or(0, |state| state.log.size).saturating_add(1);
     let position = new_size.saturating_sub(1);
     if !update.removed.is_empty() {
-        let timestamp = |wanted: u64| {
+        let mut timestamp = |wanted: u64| {
             if wanted == position {
                 return Some(update.timestamp);
             }
             previous.and_then(|state| state.timestamp_of(wanted))
         };
         let through =
-            distinguished::previous_rightmost_from_frontier(new_size, window, &timestamp)?;
+            distinguished::previous_rightmost_from_frontier(new_size, window, &mut timestamp)?;
         for (index, leaf) in update.removed.iter().enumerate() {
             let tracked = previous.and_then(|state| {
                 state
@@ -437,7 +437,7 @@ pub fn verify_update(
     // And the insertions still worth tracking. Anything the rightmost distinguished entry
     // has reached is covered for good, so it is dropped here rather than carried forever.
     let covered = {
-        let timestamp = |wanted: u64| {
+        let mut timestamp = |wanted: u64| {
             timestamps
                 .get(
                     ibst::frontier(view.size)
@@ -447,7 +447,7 @@ pub fn verify_update(
                 )
                 .copied()
         };
-        distinguished::rightmost_from_frontier(view.size, window, &timestamp)?
+        distinguished::rightmost_from_frontier(view.size, window, &mut timestamp)?
     };
     let mut inserted: Vec<Inserted> = previous
         .map(|state| state.inserted.clone())

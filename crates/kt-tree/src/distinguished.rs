@@ -126,7 +126,7 @@ pub fn is_distinguished(window: u64, left: (u64, u64), right: (u64, u64)) -> Res
 pub fn enumerate(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
 ) -> Result<Vec<u64>> {
     if size == 0 {
         // No entries, so no reference points. Not an error: an auditor sees this state
@@ -160,7 +160,7 @@ fn visit(
     right: (u64, u64),
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
     out: &mut Vec<u64>,
 ) -> Result<()> {
     if !is_distinguished(window, left, right)? {
@@ -192,7 +192,7 @@ fn visit(
 pub fn rightmost(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
 ) -> Result<Option<u64>> {
     Ok(enumerate(size, window, timestamp)?.last().copied())
 }
@@ -210,7 +210,7 @@ pub fn rightmost(
 pub fn previous_rightmost(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
 ) -> Result<Option<u64>> {
     let last = size.saturating_sub(1);
     Ok(enumerate(size, window, timestamp)?
@@ -245,7 +245,7 @@ pub fn previous_rightmost(
 pub fn rightmost_from_frontier(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
 ) -> Result<Option<u64>> {
     if size == 0 {
         return Ok(None);
@@ -294,7 +294,7 @@ pub fn rightmost_from_frontier(
 pub fn previous_rightmost_from_frontier(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
 ) -> Result<Option<u64>> {
     if size == 0 {
         return Ok(None);
@@ -368,7 +368,7 @@ pub fn previous_rightmost_from_frontier(
 pub fn walk(
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
     stop: Option<u64>,
     recent: &impl Fn(u64) -> bool,
 ) -> Result<Vec<u64>> {
@@ -405,7 +405,7 @@ fn descend(
     right: (u64, u64),
     size: u64,
     window: u64,
-    timestamp: &impl Fn(u64) -> Option<u64>,
+    timestamp: &mut impl FnMut(u64) -> Option<u64>,
     stop: Option<u64>,
     recent: &impl Fn(u64) -> bool,
     out: &mut Vec<u64>,
@@ -448,7 +448,7 @@ fn descend(
     Ok(())
 }
 
-fn lookup(timestamp: &impl Fn(u64) -> Option<u64>, position: u64) -> Result<u64> {
+fn lookup(timestamp: &mut impl FnMut(u64) -> Option<u64>, position: u64) -> Result<u64> {
     timestamp(position).ok_or(Error::MissingTimestamp { position })
 }
 
@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn a_zero_window_distinguishes_every_entry() {
         for size in 1..20_u64 {
-            let found = enumerate(size, 0, &all(size)).unwrap();
+            let found = enumerate(size, 0, &mut all(size)).unwrap();
             assert_eq!(found, (0..size).collect::<Vec<_>>(), "size {size}");
         }
     }
@@ -488,18 +488,26 @@ mod tests {
     #[test]
     fn an_unreachable_window_distinguishes_nothing() {
         for size in 1..20_u64 {
-            assert!(enumerate(size, u64::MAX, &all(size)).unwrap().is_empty());
+            assert!(
+                enumerate(size, u64::MAX, &mut all(size))
+                    .unwrap()
+                    .is_empty()
+            );
         }
     }
 
     #[test]
     fn an_empty_log_has_no_distinguished_entries() {
         // And asks for no timestamps: a log with no entries has none to give.
-        let none = |_: u64| None;
-        assert!(enumerate(0, 1000, &none).unwrap().is_empty());
-        assert_eq!(rightmost(0, 1000, &none).unwrap(), None);
-        assert_eq!(previous_rightmost(0, 1000, &none).unwrap(), None);
-        assert!(walk(0, 1000, &none, None, &|_| true).unwrap().is_empty());
+        let mut none = |_: u64| None;
+        assert!(enumerate(0, 1000, &mut none).unwrap().is_empty());
+        assert_eq!(rightmost(0, 1000, &mut none).unwrap(), None);
+        assert_eq!(previous_rightmost(0, 1000, &mut none).unwrap(), None);
+        assert!(
+            walk(0, 1000, &mut none, None, &|_| true)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     /// §6.1's stability property, which the whole scheme rests on: an entry that is
@@ -511,7 +519,7 @@ mod tests {
         for window in [1_u64, step, 3 * step, 10 * step] {
             let mut previous: Vec<u64> = Vec::new();
             for size in 1..=64_u64 {
-                let now = enumerate(size, window, &evenly(step)).unwrap();
+                let now = enumerate(size, window, &mut evenly(step)).unwrap();
                 for entry in &previous {
                     assert!(
                         now.contains(entry),
@@ -531,7 +539,7 @@ mod tests {
         let step = 5_u64;
         let window = 8 * step;
         let size = 200_u64;
-        let found = enumerate(size, window, &evenly(step)).unwrap();
+        let found = enumerate(size, window, &mut evenly(step)).unwrap();
         assert!(found.len() > 1);
 
         let last = *found.last().unwrap();
@@ -554,15 +562,15 @@ mod tests {
         let window = 4 * step;
         let mut witnessed = false;
         for size in 2..=128_u64 {
-            let previous = previous_rightmost(size, window, &evenly(step)).unwrap();
-            let smaller = rightmost(size - 1, window, &evenly(step)).unwrap();
+            let previous = previous_rightmost(size, window, &mut evenly(step)).unwrap();
+            let smaller = rightmost(size - 1, window, &mut evenly(step)).unwrap();
             if previous != smaller {
                 witnessed = true;
             }
             // Whatever it is, it must be a distinguished entry of *this* log, and left of
             // the rightmost one.
             if let Some(position) = previous {
-                let set = enumerate(size, window, &evenly(step)).unwrap();
+                let set = enumerate(size, window, &mut evenly(step)).unwrap();
                 assert!(set.contains(&position), "size {size}");
                 assert!(position < size - 1, "size {size}");
             }
@@ -588,7 +596,7 @@ mod tests {
             }
         };
         for shape in 0..2 {
-            let at = move |position: u64| {
+            let mut at = move |position: u64| {
                 Some(if shape == 0 {
                     position.saturating_mul(step)
                 } else {
@@ -598,13 +606,13 @@ mod tests {
             for window in [0_u64, 1, step, 2 * step, 5 * step, 40 * step, u64::MAX] {
                 for size in 0..=256_u64 {
                     assert_eq!(
-                        rightmost_from_frontier(size, window, &at).unwrap(),
-                        rightmost(size, window, &at).unwrap(),
+                        rightmost_from_frontier(size, window, &mut at).unwrap(),
+                        rightmost(size, window, &mut at).unwrap(),
                         "rightmost: shape {shape}, window {window}, size {size}"
                     );
                     assert_eq!(
-                        previous_rightmost_from_frontier(size, window, &at).unwrap(),
-                        previous_rightmost(size, window, &at).unwrap(),
+                        previous_rightmost_from_frontier(size, window, &mut at).unwrap(),
+                        previous_rightmost(size, window, &mut at).unwrap(),
                         "previous: shape {shape}, window {window}, size {size}"
                     );
                 }
@@ -625,17 +633,17 @@ mod tests {
                     .into_iter()
                     .chain(core::iter::once(size - 1))
                     .collect();
-                let at = |position: u64| {
+                let mut at = |position: u64| {
                     retained
                         .contains(&position)
                         .then(|| position.saturating_mul(step))
                 };
                 assert!(
-                    rightmost_from_frontier(size, window, &at).is_ok(),
+                    rightmost_from_frontier(size, window, &mut at).is_ok(),
                     "rightmost read outside the retained set at size {size}, window {window}"
                 );
                 assert!(
-                    previous_rightmost_from_frontier(size, window, &at).is_ok(),
+                    previous_rightmost_from_frontier(size, window, &mut at).is_ok(),
                     "previous read outside the retained set at size {size}, window {window}"
                 );
             }
@@ -649,9 +657,9 @@ mod tests {
         let step = 5_u64;
         let window = 6 * step;
         let size = 100_u64;
-        let set = enumerate(size, window, &evenly(step)).unwrap();
+        let set = enumerate(size, window, &mut evenly(step)).unwrap();
 
-        let walked = walk(size, window, &evenly(step), None, &|_| true).unwrap();
+        let walked = walk(size, window, &mut evenly(step), None, &|_| true).unwrap();
         let mut sorted = walked.clone();
         sorted.sort_unstable();
         assert_eq!(sorted, set, "the walk visits exactly the distinguished set");
@@ -685,10 +693,10 @@ mod tests {
         let step = 5_u64;
         let window = 6 * step;
         let size = 100_u64;
-        let full = walk(size, window, &evenly(step), None, &|_| true).unwrap();
+        let full = walk(size, window, &mut evenly(step), None, &|_| true).unwrap();
         let stop = full[full.len() / 2];
 
-        let stopped = walk(size, window, &evenly(step), Some(stop), &|_| true).unwrap();
+        let stopped = walk(size, window, &mut evenly(step), Some(stop), &|_| true).unwrap();
         assert!(stopped.len() < full.len());
         assert!(
             stopped.contains(&stop),
@@ -710,16 +718,16 @@ mod tests {
         let step = 5_u64;
         let window = 6 * step;
         let size = 100_u64;
-        let full = walk(size, window, &evenly(step), None, &|_| true).unwrap();
+        let full = walk(size, window, &mut evenly(step), None, &|_| true).unwrap();
 
         // "One of the n rightmost", n = 2.
         let cutoff = full.get(1).copied().unwrap_or(0);
-        let by_count = walk(size, window, &evenly(step), None, &|x| x >= cutoff).unwrap();
+        let by_count = walk(size, window, &mut evenly(step), None, &|x| x >= cutoff).unwrap();
         assert!(by_count.len() < full.len());
 
         // "Within some duration of the rightmost entry's timestamp."
         let newest = (size - 1) * step;
-        let by_time = walk(size, window, &evenly(step), None, &|x| {
+        let by_time = walk(size, window, &mut evenly(step), None, &|x| {
             newest.saturating_sub(x * step) < 10 * step
         })
         .unwrap();
@@ -730,18 +738,18 @@ mod tests {
     /// getting an answer computed from what it happened to have.
     #[test]
     fn a_missing_timestamp_is_reported() {
-        let sparse = |position: u64| (position != 3).then_some(position * 10);
+        let mut sparse = |position: u64| (position != 3).then_some(position * 10);
         // Size 8's root is 3, and a window of zero makes it distinguished, so its own
         // timestamp is needed to bracket its children.
         assert_eq!(
-            enumerate(8, 0, &sparse),
+            enumerate(8, 0, &mut sparse),
             Err(Error::MissingTimestamp { position: 3 })
         );
 
         // The rightmost entry's timestamp is needed before anything else.
-        let no_rightmost = |position: u64| (position != 7).then_some(position * 10);
+        let mut no_rightmost = |position: u64| (position != 7).then_some(position * 10);
         assert_eq!(
-            enumerate(8, 0, &no_rightmost),
+            enumerate(8, 0, &mut no_rightmost),
             Err(Error::MissingTimestamp { position: 7 })
         );
     }
@@ -750,9 +758,9 @@ mod tests {
     /// distinguished" into "distinguished".
     #[test]
     fn non_monotonic_timestamps_are_refused() {
-        let backwards = |position: u64| Some(100_u64.saturating_sub(position));
+        let mut backwards = |position: u64| Some(100_u64.saturating_sub(position));
         assert!(matches!(
-            enumerate(8, 10, &backwards),
+            enumerate(8, 10, &mut backwards),
             Err(Error::NonMonotonic { .. })
         ));
         assert_eq!(
@@ -766,21 +774,21 @@ mod tests {
     /// points is indistinguishable from a log that simply has fewer.
     #[test]
     fn the_walk_refuses_rather_than_truncating() {
-        let missing_root = |position: u64| (position != 3).then_some(position * 10);
+        let mut missing_root = |position: u64| (position != 3).then_some(position * 10);
         assert_eq!(
-            walk(8, 0, &missing_root, None, &|_| true),
+            walk(8, 0, &mut missing_root, None, &|_| true),
             Err(Error::MissingTimestamp { position: 3 })
         );
 
-        let backwards = |position: u64| Some(100_u64.saturating_sub(position));
+        let mut backwards = |position: u64| Some(100_u64.saturating_sub(position));
         assert!(matches!(
-            walk(8, 10, &backwards, None, &|_| true),
+            walk(8, 10, &mut backwards, None, &|_| true),
             Err(Error::NonMonotonic { .. })
         ));
 
-        let no_rightmost = |position: u64| (position != 7).then_some(position * 10);
+        let mut no_rightmost = |position: u64| (position != 7).then_some(position * 10);
         assert_eq!(
-            walk(8, 0, &no_rightmost, None, &|_| true),
+            walk(8, 0, &mut no_rightmost, None, &|_| true),
             Err(Error::MissingTimestamp { position: 7 })
         );
     }
@@ -817,17 +825,17 @@ mod tests {
         let step = 4_u64;
         let size = 33_u64;
         let span = (size - 1) * step;
-        let found = enumerate(size, span, &evenly(step)).unwrap();
+        let found = enumerate(size, span, &mut evenly(step)).unwrap();
         assert_eq!(found, vec![ibst::root(size).unwrap()]);
         assert_eq!(
-            rightmost(size, span, &evenly(step)).unwrap(),
+            rightmost(size, span, &mut evenly(step)).unwrap(),
             found.last().copied()
         );
 
         // The power-of-two case, measured rather than asserted away.
         let power = 32_u64;
         let power_span = (power - 1) * step;
-        let spine = enumerate(power, power_span, &evenly(step)).unwrap();
+        let spine = enumerate(power, power_span, &mut evenly(step)).unwrap();
         assert_eq!(spine, vec![15, 31], "the root is the rightmost entry here");
         assert_eq!(ibst::root(power).unwrap(), 31);
     }

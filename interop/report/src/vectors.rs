@@ -325,6 +325,12 @@ pub struct SearchInput {
     pub max_behind: u64,
     /// The Reasonable Monitoring Window.
     pub monitoring_window: u64,
+    /// Every log entry's timestamp, indexed by position, as the log stamped them.
+    ///
+    /// §12.3 omits the ones a user who advertised a tree size is expected to have retained, so
+    /// a verifier replaying the response has to be given them — and they are wall-clock values
+    /// that cannot be reconstructed.
+    pub entry_timestamps: Vec<u64>,
 }
 
 /// One log entry's worth of additions.
