@@ -142,7 +142,8 @@ compute the same values, which a verifier that accepted everything would also pa
 **Both directions.** The vectors above are generated from the pinned katie by
 `interop/go/cmd/gen` and checked by `cargo test`. The reverse also runs:
 `kt-interop-emit` builds proofs from this implementation — half of them corrupted
-on purpose — and `interop/go/cmd/verify` puts each through katie's own verifiers,
+on purpose, and including `CombinedTreeProof`s for katie's own §6.3 to consume —
+and `interop/go/cmd/verify` puts each through katie's own verifiers,
 which must accept every honest one and reject every corrupted one. That direction is
 what catches *over-acceptance*, and recomputing the peer's values cannot see it.
 CI regenerates everything and fails on any diff, so upstream drift is loud.
