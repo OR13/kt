@@ -113,8 +113,8 @@ disagrees:
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
 Eighteen vector files pass from the Rust side — 6706 checks across 789 cases — and
-`from-kt.json` runs the other way: 214 artifacts built by the Rust side, 110 of which
-katie must accept and 104 of which it must reject. "Agrees" here means a committed
+`from-kt.json` runs the other way: 218 artifacts built by the Rust side, 112 of which
+katie must accept and 106 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
 
 The reverse direction earned its keep immediately. It found that §12.1's proofs
@@ -140,9 +140,18 @@ become a log. `handle.Finish()` is katie's own version of §12.3's exact-count r
 the mirror image of the replay check — where the replay asks whether this side reads katie's
 ordering correctly, this asks whether katie reads ours.
 
-Four of the five cases are deliberately wrong, because those are the ones with something to prove: a
-timestamp too many, a prefix proof too few, the proofs reordered, and the timestamps descending.
-katie refuses all four and accepts the honest one. The clock bounds in that fixture's configuration
+Most of the cases are deliberately wrong, because those are the ones with something to prove: a
+timestamp too many, a prefix proof too few, the proofs reordered, the timestamps descending, a
+fixed-version proof a timestamp short, and a monitoring ladder taken from a log entry that never
+held the version — the rollback monitoring exists to catch. katie refuses every one and accepts the
+three honest proofs, one per algorithm: §6.3, §7.2 and §8.2.
+
+The closing call turned out to matter more than expected. Using katie's `DataProvider.Finish`
+rather than its handle's runs the whole sequence a client performs at the end of an operation: it
+in-fills the prefix roots for entries that have a timestamp and no proof, hashes every inspected
+leaf, evaluates the log tree inclusion proof against them, and only then refuses anything left
+unconsumed. So the reverse direction checks three things at once — the element ordering, §12.3's
+exact counts, and whether the log tree proof this side built actually roots the leaves it names. The clock bounds in that fixture's configuration
 are set enormous on purpose — §4.2 has a verifier compare the rightmost timestamp against its own
 clock, which is deployment policy rather than a property of a proof, and these fixtures carry fixed
 timestamps so the file regenerates to identical bytes. `tree-head.json` pins the clock bounds

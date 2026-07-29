@@ -72,14 +72,21 @@ type caseEnvelope struct {
 	After   string `json:"after"`
 
 	// combined-search — `size` is shared with log-tree above.
+	Operation  string       `json:"operation"`
 	Greatest   uint32       `json:"greatest"`
 	Timestamps []uint64     `json:"timestamps"`
 	Versions   []versionKey `json:"versions"`
+	Map        []mapEntry   `json:"map"`
 
 	// auditor-update
 	Encoding string `json:"encoding"`
 
 	Root string `json:"root"`
+}
+
+type mapEntry struct {
+	Position uint64 `json:"position"`
+	Version  uint32 `json:"version"`
 }
 
 type versionKey struct {
@@ -282,11 +289,39 @@ func checkCombinedSearch(cs suites.CipherSuite, c caseEnvelope) error {
 	if err := algorithms.UpdateView(config, c.Size, nil, provider); err != nil {
 		return fmt.Errorf("updating the view: %w", err)
 	}
-	if _, err := algorithms.GreatestVersionSearch(config, c.Greatest, c.Size, provider); err != nil {
-		return fmt.Errorf("greatest-version search: %w", err)
+	// Each operation is a different reader of the same structure, which is the point: the proof's
+	// elements only mean anything in the order the algorithm being run asks for them.
+	switch c.Operation {
+	case "greatest-version":
+		if _, err := algorithms.GreatestVersionSearch(config, c.Greatest, c.Size, provider); err != nil {
+			return fmt.Errorf("greatest-version search: %w", err)
+		}
+	case "fixed-version":
+		if _, err := algorithms.FixedVersionSearch(config, c.Greatest, c.Size, provider); err != nil {
+			return fmt.Errorf("fixed-version search: %w", err)
+		}
+	case "contact-monitor":
+		monitor, err := algorithms.NewMonitor(config, c.Size, provider)
+		if err != nil {
+			return fmt.Errorf("creating the monitor: %w", err)
+		}
+		ptrs := make(map[uint64]uint32, len(c.Map))
+		for _, entry := range c.Map {
+			ptrs[entry.Position] = entry.Version
+		}
+		monitor.Contact = &algorithms.ContactState{Ptrs: ptrs}
+		if err := monitor.ContactMonitor(); err != nil {
+			return fmt.Errorf("contact monitor: %w", err)
+		}
+	default:
+		return fmt.Errorf("unknown operation %q", c.Operation)
 	}
-	// katie's own "no more and no less".
-	if _, err := handle.Finish(); err != nil {
+	// The provider's Finish is the whole closing sequence a client performs: it in-fills the prefix
+	// roots for entries that have a timestamp and no proof, hashes every inspected leaf, evaluates
+	// the log tree inclusion proof against them, and refuses if anything is left unconsumed. So it
+	// checks more than §12.3's exact-count rule — it also checks that the log tree proof this side
+	// built actually roots the leaves it names.
+	if _, err := provider.Finish(c.Size, nil, nil); err != nil {
 		return fmt.Errorf("finishing: %w", err)
 	}
 	return nil
