@@ -513,9 +513,15 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::combined",
             &["monitor.json"],
         ),
+        verified(
+            "§8.3 first algorithm, §12.3.5",
+            "Owner initialization: adopting a label's history at a distinguished entry",
+            "kt-tree::combined",
+            &["monitor.json"],
+        ),
         todo(
-            "§8.3, §12.3.5–§12.3.6",
-            "Owner initialization and owner monitoring algorithms",
+            "§8.3 second algorithm, §12.3.6",
+            "Owner monitoring: the recursive walk over recent distinguished entries",
         ),
         todo("§9, §13.5", "Updating a label"),
         todo(
