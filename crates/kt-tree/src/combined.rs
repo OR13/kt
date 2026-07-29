@@ -41,7 +41,7 @@ use crate::{distinguished, ibst, ladder, prefix};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use kt_crypto::suite::CipherSuite;
-use kt_wire::proofs::{CombinedTreeProof, PrefixProof};
+use kt_wire::proofs::{CombinedTreeProof, PrefixProof, PrefixSearchResult};
 use kt_wire::structs::HashValue;
 
 /// Why a `CombinedTreeProof` could not be read.
@@ -320,6 +320,29 @@ impl<'a> Reader<'a> {
     #[must_use]
     pub fn timestamp_was_supplied(&self, position: u64) -> bool {
         self.timestamps.contains_key(&position) && !self.retained.timestamps.contains_key(&position)
+    }
+
+    /// The entries still owed a prefix tree root, in left-to-right order (§12.3).
+    ///
+    /// "The elements of the `prefix_roots` field are, in left-to-right order, the prefix tree
+    /// root hashes for any log entries whose timestamp was provided in `timestamps` but a search
+    /// proof was not provided in `prefix_proofs`." Both halves matter: an entry the user
+    /// retained is not owed one, because its timestamp was not provided, and an entry with a
+    /// proof is not owed one either, because the proof computes its root.
+    ///
+    /// The reason the log has to send them at all is `inclusion`: it covers the leaves of every
+    /// entry whose timestamp was provided, and a leaf is the hash of a timestamp *and* a prefix
+    /// tree root. An entry with a timestamp and no root would leave a hole in the log tree
+    /// computation.
+    #[must_use]
+    pub fn entries_owed_roots(&self) -> Vec<u64> {
+        self.timestamps
+            .keys()
+            .copied()
+            .filter(|position| {
+                self.timestamp_was_supplied(*position) && !self.roots.contains_key(position)
+            })
+            .collect()
     }
 
     /// The prefix tree root established for `position`, if any.
@@ -666,6 +689,64 @@ mod tests {
     }
 }
 
+/// What the ladders inspected so far have established, and where (§6.2).
+///
+/// §6.2 lets a log omit a lookup in two cases: an inclusion proof for a version already proven
+/// included "for a log entry to the left", and a non-inclusion proof for one already proven
+/// absent "for a log entry to the right". Both are sound because the prefix tree only grows: a
+/// version present at some entry is present at every entry after it, and one absent at some
+/// entry was absent at every entry before it.
+///
+/// The direction is the whole content of the rule, so this records where each result came from
+/// rather than accumulating a flat set. §6.3 walks strictly left to right and would not notice
+/// the difference; §7.2 is a binary search that moves both ways, and there it decides whether a
+/// ladder has two lookups or none.
+#[derive(Clone, Debug, Default)]
+struct Established {
+    /// `(position, versions proven included there, versions proven absent there)`.
+    entries: Vec<(u64, Vec<u32>, Vec<u32>)>,
+}
+
+impl Established {
+    /// The omission sets for a ladder at `position`: inclusions established to its left, and
+    /// non-inclusions established to its right.
+    fn sets_for(&self, position: u64) -> (Vec<u32>, Vec<u32>) {
+        let mut left_inclusion = Vec::new();
+        let mut right_non_inclusion = Vec::new();
+        for (at, included, absent) in &self.entries {
+            if *at < position {
+                for version in included {
+                    if !left_inclusion.contains(version) {
+                        left_inclusion.push(*version);
+                    }
+                }
+            }
+            if *at > position {
+                for version in absent {
+                    if !right_non_inclusion.contains(version) {
+                        right_non_inclusion.push(*version);
+                    }
+                }
+            }
+        }
+        (left_inclusion, right_non_inclusion)
+    }
+
+    /// Records what an entry's ladder proved.
+    fn record(&mut self, position: u64, versions: &[u32], results: &[PrefixSearchResult]) {
+        let mut included = Vec::new();
+        let mut absent = Vec::new();
+        for (version, result) in versions.iter().zip(results.iter()) {
+            if result.is_inclusion() {
+                included.push(*version);
+            } else {
+                absent.push(*version);
+            }
+        }
+        self.entries.push((position, included, absent));
+    }
+}
+
 /// One version of a label as a search key, taken from a response's binary ladder (§13.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LadderKey {
@@ -762,9 +843,7 @@ pub fn greatest_version_search(
     let last = size.saturating_sub(1);
     let mut inspected = Vec::new();
     let mut terminal = None;
-    // Versions already proven to exist at an entry to the left. §6.2's second optimization
-    // lets the log omit those lookups, so the verifier has to expect the shorter ladder.
-    let mut left_inclusion: Vec<u32> = Vec::new();
+    let mut established = Established::default();
 
     let mut current = start;
     loop {
@@ -776,8 +855,13 @@ pub fn greatest_version_search(
         // and at an entry to the left of the terminal one that happens early. The results are
         // a prefix of this sequence, because the sequence itself does not depend on the local
         // greatest version — only where it stops does.
-        let versions =
-            ladder::search_binary_ladder(claimed_greatest, claimed_greatest, &left_inclusion, &[])?;
+        let (left_inclusion, right_non_inclusion) = established.sets_for(current);
+        let versions = ladder::search_binary_ladder(
+            claimed_greatest,
+            claimed_greatest,
+            &left_inclusion,
+            &right_non_inclusion,
+        )?;
 
         // §12.3.2 says the search needs no timestamps of its own, because the frontier's are
         // either in the view update or retained. Asking anyway is free — §12.3's rule that a
@@ -865,10 +949,8 @@ pub fn greatest_version_search(
             } else {
                 prefix::SearchEntry::absent(key.vrf_output)
             });
-            if result.is_inclusion() && !left_inclusion.contains(version) {
-                left_inclusion.push(*version);
-            }
         }
+        established.record(current, used, &proof.results);
 
         let root = prefix::evaluate(suite, &entries, proof)?;
         reader.establish_root(current, root)?;
@@ -1060,6 +1142,252 @@ impl core::error::Error for SearchError {
     }
 }
 
+/// Whether a log entry has outlived the log's maximum lifetime (§7.1).
+///
+/// "Whether a log entry is expired is determined by subtracting the timestamp of the log entry
+/// in question from the timestamp of the rightmost log entry and checking if the result is
+/// greater than or equal to the defined duration." A `lifetime` of zero means the log defines
+/// none, and nothing expires.
+#[must_use]
+pub const fn expired(lifetime: u64, timestamp: u64, rightmost: u64) -> bool {
+    if lifetime == 0 {
+        return false;
+    }
+    match rightmost.checked_sub(timestamp) {
+        // Monotonic timestamps make this unreachable, and a wrapped subtraction would report a
+        // fresh entry as expired, so treat it as not expired and let the ordering check that
+        // §12.3 already performs be the thing that objects.
+        None => false,
+        Some(age) => age >= lifetime,
+    }
+}
+
+/// What a fixed-version search concluded (§7.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FixedOutcome {
+    /// The target version was found at the terminal entry.
+    Found {
+        /// The entry that triggered step 5, or the one step 6 identified.
+        terminal: u64,
+        /// Every entry inspected, with the prefix tree root its proof computed. Entries the
+        /// search skipped as expired have no root, so they are absent.
+        inspected: Vec<(u64, HashValue)>,
+    },
+    /// The target version does not exist (§7.2 steps 6.1 and 6.3).
+    DoesNotExist,
+    /// The target version existed but has expired (§7.2 steps 5.2 and 6.2).
+    Expired,
+}
+
+/// Runs §7.2's fixed-version search against a proof.
+///
+/// A binary search rather than a walk: §7.2 starts at the root of the implicit binary search
+/// tree and moves left or right according to what each entry's ladder says about the target,
+/// which is why it needs a timestamp for every entry it touches — unlike §6.3, whose entries
+/// are all on the frontier.
+///
+/// `lifetime` is the log's maximum lifetime (§7.1), zero if it defines none.
+///
+/// The rightmost entry's timestamp is read first, before the walk, and that ordering is forced
+/// by the draft rather than chosen: §7.1 defines expiry by "subtracting the timestamp of the log
+/// entry in question from the timestamp of the rightmost log entry", so no expiry question can
+/// be answered until it is known. It is therefore the first element of a fixed-version search's
+/// `timestamps` — unless the user retained it, in which case §12.3 omits it and this consumes
+/// nothing.
+///
+/// # Errors
+///
+/// [`SearchError`] for a proof that does not establish what §7.2 requires. Note that "the
+/// version does not exist" and "the version has expired" are outcomes rather than errors: the
+/// log answered honestly, and the answer is no.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "§7.2's inputs: the tree, the log's two time parameters, the target, its keys, and \
+              the proof. Bundling them would hide which of the draft's parameters is which"
+)]
+pub fn fixed_version_search(
+    suite: CipherSuite,
+    size: u64,
+    lifetime: u64,
+    window: u64,
+    target: u32,
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<FixedOutcome, SearchError> {
+    let rightmost = reader.timestamp(size.saturating_sub(1))?;
+    let mut inspected: Vec<(u64, HashValue)> = Vec::new();
+    let mut established = Established::default();
+    let mut met_expired = false;
+    // The leftmost inspected entry whose ladder placed the greatest version at or above the
+    // target. §7.2 defines two terminals — the entry that triggers step 5, and the one step 6
+    // identifies — and this is both: step 5's entry has the target as its greatest, step 6's has
+    // something above it, and in each case the leftmost such entry is the one that counts.
+    let mut terminal: Option<u64> = None;
+    // Unexpired distinguished entries met on the way down, for steps 5.2 and 6.2.
+    let mut vouchers: Vec<u64> = Vec::new();
+
+    // §6.1's bracketing timestamps for the current entry, maintained by the descent itself.
+    // This is why a search can decide distinguishedness at all: §6.1 brackets a node by the
+    // timestamps of the entries either side of it in the search tree, and those are exactly the
+    // ancestors this walk has already visited. A verifier that tried to enumerate the
+    // distinguished set instead would need timestamps for entries the search never touches, and
+    // the proof does not carry them.
+    let mut left = (0_u64, 0_u64);
+    let mut right = (size.saturating_sub(1), rightmost);
+
+    let mut current = ibst::root(size)?;
+    loop {
+        let timestamp = reader.timestamp(current)?;
+
+        // Step 1. An expired entry gets no ladder at all — that is what lets the log prune old
+        // prefix trees — so the search moves right on the timestamp alone.
+        if expired(lifetime, timestamp, rightmost) {
+            met_expired = true;
+            match ibst::right(current, size) {
+                Ok(child) => {
+                    left = (current, timestamp);
+                    current = child;
+                    continue;
+                }
+                Err(_) => break,
+            }
+        }
+        if distinguished::is_distinguished(window, left, right)? {
+            vouchers.push(current);
+        }
+
+        // Step 2, with the same prefix reasoning as §6.3: the proof may answer fewer lookups
+        // than the verifier's ladder, because the log stops as soon as it has placed the
+        // greatest version at this entry relative to the target.
+        let (left_inclusion, right_non_inclusion) = established.sets_for(current);
+        let versions =
+            ladder::search_binary_ladder(target, target, &left_inclusion, &right_non_inclusion)?;
+        let proof = reader.prefix_proof(current)?;
+        let used = versions
+            .get(..proof.results.len())
+            .ok_or(SearchError::LadderLength {
+                position: current,
+                expected: versions.len(),
+                actual: proof.results.len(),
+            })?;
+        let ordering = ladder::interpret_search_ladder(used, target, &proof.results)?;
+
+        let mut entries = Vec::new();
+        for (version, result) in used.iter().zip(proof.results.iter()) {
+            let key = keys.get(version).ok_or(SearchError::MissingLadderKey {
+                position: current,
+                version: *version,
+            })?;
+            entries.push(if result.is_inclusion() {
+                prefix::SearchEntry::included(
+                    key.vrf_output,
+                    key.commitment.ok_or(SearchError::MissingCommitment {
+                        position: current,
+                        version: *version,
+                    })?,
+                )
+            } else {
+                prefix::SearchEntry::absent(key.vrf_output)
+            });
+        }
+        established.record(current, used, &proof.results);
+        let root = prefix::evaluate(suite, &entries, proof)?;
+        reader.establish_root(current, root)?;
+        inspected.push((current, root));
+
+        if ordering != core::cmp::Ordering::Less
+            && terminal.is_none_or(|previous| current < previous)
+        {
+            terminal = Some(current);
+        }
+
+        match ordering {
+            // Step 3: the greatest version here is below the target, so it arrived later.
+            core::cmp::Ordering::Less => match ibst::right(current, size) {
+                Ok(child) => {
+                    left = (current, timestamp);
+                    current = child;
+                }
+                Err(_) => break,
+            },
+            // Step 4: the greatest version here is above the target, so the target was already
+            // present earlier.
+            core::cmp::Ordering::Greater => match ibst::left(current) {
+                Ok(child) => {
+                    right = (current, timestamp);
+                    current = child;
+                }
+                Err(_) => break,
+            },
+            // Step 5: this entry has the target as its greatest version.
+            core::cmp::Ordering::Equal => {
+                // Step 5.1.
+                if !met_expired {
+                    return Ok(FixedOutcome::Found {
+                        terminal: current,
+                        inspected,
+                    });
+                }
+                // Step 5.2: something on the way was expired, so this entry needs a voucher —
+                // itself, or an unexpired distinguished entry to its left in its direct path.
+                // Without one, nobody was ever obliged to look here.
+                if vouchers.iter().any(|voucher| *voucher <= current) {
+                    return Ok(FixedOutcome::Found {
+                        terminal: current,
+                        inspected,
+                    });
+                }
+                return Ok(FixedOutcome::Expired);
+            }
+        }
+    }
+
+    // Step 6: the walk ran off the tree without an entry whose greatest version is the target.
+    let Some(identified) = terminal else {
+        // Step 6.1.
+        return Ok(FixedOutcome::DoesNotExist);
+    };
+    // Step 6.2. Note the comparison is strict here where step 5.2's is not: the identified entry
+    // does *not* have the target as its greatest version, so §7.2 says clients "MUST NOT accept
+    // a proof where the identified log entry is itself the leftmost unexpired and distinguished
+    // log entry" — the label owner would have had no reason to check this version there.
+    if met_expired && !vouchers.iter().any(|voucher| *voucher < identified) {
+        return Ok(FixedOutcome::Expired);
+    }
+    // Step 6.3: one more lookup, for the target version alone.
+    let key = keys.get(&target).ok_or(SearchError::MissingLadderKey {
+        position: identified,
+        version: target,
+    })?;
+    let proof = reader.prefix_proof(identified)?;
+    let result = proof.results.first().ok_or(SearchError::LadderLength {
+        position: identified,
+        expected: 1,
+        actual: 0,
+    })?;
+    let entry = if result.is_inclusion() {
+        prefix::SearchEntry::included(
+            key.vrf_output,
+            key.commitment.ok_or(SearchError::MissingCommitment {
+                position: identified,
+                version: target,
+            })?,
+        )
+    } else {
+        prefix::SearchEntry::absent(key.vrf_output)
+    };
+    let root = prefix::evaluate(suite, &[entry], proof)?;
+    reader.establish_root(identified, root)?;
+    if result.is_inclusion() {
+        Ok(FixedOutcome::Found {
+            terminal: identified,
+            inspected,
+        })
+    } else {
+        Ok(FixedOutcome::DoesNotExist)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -1077,7 +1405,7 @@ mod search_tests {
 
     /// A search key for a version. Standing in for a VRF output, which is all the tree cares
     /// about — §11.7's evaluation is checked elsewhere.
-    fn key_for(version: u32) -> HashValue {
+    pub(super) fn key_for(version: u32) -> HashValue {
         let mut bytes = [0_u8; 32];
         bytes[0] = u8::try_from(version.wrapping_mul(37) % 256).unwrap_or(0);
         bytes[31] = u8::try_from(version % 256).unwrap_or(0);
@@ -1088,7 +1416,7 @@ mod search_tests {
         HashValue::from_bytes([u8::try_from(version % 256).unwrap_or(0) ^ 0xa5; 32])
     }
 
-    fn keys_through(greatest: u32) -> BTreeMap<u32, LadderKey> {
+    pub(super) fn keys_through(greatest: u32) -> BTreeMap<u32, LadderKey> {
         // Every version the ladder could ask about, existing or not: the response carries a
         // step per version looked up, and commitments only for those that exist.
         let mut keys = BTreeMap::new();
@@ -1106,7 +1434,7 @@ mod search_tests {
 
     /// The prefix tree of the log entry at `position`, where version `v` was added at entry
     /// `v` — so entry `position` holds versions `0..=position`.
-    fn tree_at(position: u64) -> prefix::PrefixTree {
+    pub(super) fn tree_at(position: u64) -> prefix::PrefixTree {
         let mut tree = prefix::PrefixTree::new();
         for version in 0..=u32::try_from(position).unwrap() {
             tree.insert(PrefixLeaf {
@@ -1429,5 +1757,230 @@ mod search_tests {
         }
         assert!(core::error::Error::source(&errors[6]).is_some());
         assert!(core::error::Error::source(&errors[0]).is_none());
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod fixed_tests {
+    use super::search_tests::{keys_through, tree_at};
+    use super::*;
+    use alloc::vec;
+    use kt_wire::proofs::InclusionProof;
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+    const WINDOW: u64 = 604_800_000;
+
+    /// Builds the proof a log serves for a fixed-version search, by running §7.2's own walk and
+    /// answering each entry with exactly the ladder it would answer. `lifetime` and the
+    /// timestamps decide which entries are skipped as expired.
+    fn build_fixed(
+        size: u64,
+        target: u32,
+        lifetime: u64,
+        stamps: &[u64],
+    ) -> (CombinedTreeProof, Vec<u64>) {
+        let rightmost = stamps[(size - 1) as usize];
+        let mut timestamps = vec![rightmost];
+        let mut order = vec![size - 1];
+        let mut proofs = Vec::new();
+        let mut established = Established::default();
+        let mut above: Vec<u64> = Vec::new();
+        let mut current = ibst::root(size).unwrap();
+
+        let identified = loop {
+            if !order.contains(&current) {
+                timestamps.push(stamps[current as usize]);
+                order.push(current);
+            }
+            if expired(lifetime, stamps[current as usize], rightmost) {
+                match ibst::right(current, size) {
+                    Ok(child) => {
+                        current = child;
+                        continue;
+                    }
+                    Err(_) => break above.first().copied(),
+                }
+            }
+            let local = u32::try_from(current).unwrap();
+            let (left, right) = established.sets_for(current);
+            let versions = ladder::search_binary_ladder(target, local, &left, &right).unwrap();
+            let tree = tree_at(current);
+            let searches: Vec<HashValue> = versions
+                .iter()
+                .map(|v| super::search_tests::key_for(*v))
+                .collect();
+            let proof = tree.prove(SUITE, &searches).unwrap();
+            established.record(current, &versions, &proof.results);
+            proofs.push(proof);
+
+            match local.cmp(&target) {
+                core::cmp::Ordering::Less => match ibst::right(current, size) {
+                    Ok(child) => current = child,
+                    Err(_) => break above.first().copied(),
+                },
+                core::cmp::Ordering::Greater => {
+                    above.push(current);
+                    match ibst::left(current) {
+                        Ok(child) => current = child,
+                        Err(_) => break above.first().copied(),
+                    }
+                }
+                core::cmp::Ordering::Equal => break None,
+            }
+        };
+
+        // Step 6.3's extra lookup, where the walk ended without finding the target as greatest.
+        if let Some(position) = identified {
+            let tree = tree_at(position);
+            let key = super::search_tests::key_for(target);
+            proofs.push(tree.prove(SUITE, &[key]).unwrap());
+        }
+
+        // §12.3: an entry with a timestamp but no proof is owed a prefix root, left to right.
+        let mut owed: Vec<u64> = order
+            .iter()
+            .copied()
+            .filter(|position| {
+                !established.entries.iter().any(|(at, _, _)| at == position)
+                    && Some(*position) != identified
+            })
+            .collect();
+        owed.sort_unstable();
+        let prefix_roots = owed
+            .iter()
+            .map(|position| tree_at(*position).root(SUITE))
+            .collect();
+
+        (
+            CombinedTreeProof {
+                timestamps,
+                prefix_proofs: proofs,
+                prefix_roots,
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+            order,
+        )
+    }
+
+    fn clustered(size: u64) -> Vec<u64> {
+        (0..size).map(|i| 1_700_000_000_000 + i).collect()
+    }
+
+    /// The main path: a binary search that moves left and then right to land on the entry where
+    /// the target became the greatest version.
+    #[test]
+    fn a_fixed_version_search_finds_its_entry_and_consumes_exactly() {
+        let size = 7_u64;
+        let target = 2_u32;
+        let stamps = clustered(size);
+        let (proof, _) = build_fixed(size, target, 0, &stamps);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        let outcome = fixed_version_search(
+            SUITE,
+            size,
+            0,
+            WINDOW,
+            target,
+            &keys_through(6),
+            &mut reader,
+        )
+        .unwrap();
+        match outcome {
+            FixedOutcome::Found { terminal, .. } => assert_eq!(terminal, u64::from(target)),
+            other => panic!("expected to find version {target}, got {other:?}"),
+        }
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// A version the log never had. §7.2 step 6.1: no inspected entry ever showed a greatest
+    /// above the target, so there is nowhere it could have been.
+    #[test]
+    fn a_version_above_everything_does_not_exist() {
+        let size = 7_u64;
+        let stamps = clustered(size);
+        let (proof, _) = build_fixed(size, 99, 0, &stamps);
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        let outcome =
+            fixed_version_search(SUITE, size, 0, WINDOW, 99, &keys_through(99), &mut reader)
+                .unwrap();
+        assert_eq!(outcome, FixedOutcome::DoesNotExist);
+    }
+
+    /// §7.1 and §7.2 step 1: an expired entry is skipped without a ladder at all, which is what
+    /// lets a log prune old prefix trees. The search still has to reach a conclusion.
+    #[test]
+    fn an_expired_entry_is_skipped_without_a_ladder() {
+        let size = 7_u64;
+        let target = 6_u32;
+        // Entries a day apart, with a two-day lifetime: everything but the last three is
+        // expired. §7.1 requires the lifetime to exceed the monitoring window, so the window
+        // here is an hour.
+        let day = 86_400_000_u64;
+        let stamps: Vec<u64> = (0..size).map(|i| 1_700_000_000_000 + i * day).collect();
+        let lifetime = 2 * day;
+        let window = 3_600_000;
+        let (proof, _) = build_fixed(size, target, lifetime, &stamps);
+
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        let outcome = fixed_version_search(
+            SUITE,
+            size,
+            lifetime,
+            window,
+            target,
+            &keys_through(6),
+            &mut reader,
+        )
+        .unwrap();
+        // The root of a seven-entry log is entry 3, four days behind the rightmost, so the
+        // search starts on an expired entry and moves right on the timestamp alone.
+        assert!(expired(lifetime, stamps[3], stamps[6]));
+        match outcome {
+            FixedOutcome::Found { terminal, .. } => assert_eq!(terminal, 6),
+            other => panic!("expected to find version {target}, got {other:?}"),
+        }
+        for position in reader.entries_owed_roots() {
+            reader.prefix_root(position).unwrap();
+        }
+        reader.finish().unwrap();
+    }
+
+    /// §7.1's boundary, which is "greater than or equal to" rather than "greater than": an entry
+    /// exactly one lifetime behind the rightmost is expired.
+    #[test]
+    fn expiry_is_inclusive_at_the_boundary() {
+        assert!(expired(10, 90, 100), "exactly one lifetime behind");
+        assert!(!expired(10, 91, 100), "one millisecond inside");
+        assert!(
+            !expired(0, 0, u64::MAX),
+            "a lifetime of zero means no expiry"
+        );
+        // Non-monotonic timestamps would wrap the subtraction; a fresh entry must not be
+        // reported as expired because of it.
+        assert!(!expired(10, 200, 100));
+    }
+
+    #[test]
+    fn fixed_outcomes_are_distinguishable() {
+        let found = FixedOutcome::Found {
+            terminal: 3,
+            inspected: vec![(3, HashValue::ZERO)],
+        };
+        assert_ne!(found, FixedOutcome::DoesNotExist);
+        assert_ne!(FixedOutcome::DoesNotExist, FixedOutcome::Expired);
     }
 }

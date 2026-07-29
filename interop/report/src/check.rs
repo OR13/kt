@@ -1038,6 +1038,22 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
         // katie's response has to consume every timestamp and every prefix proof with nothing
         // left over. An implementation that reads §12.3's order differently does not compute
         // something subtly wrong — it finishes holding elements it never used.
+        if case.input.version.is_some() {
+            checks.push(Check::new(
+                "replaying §7.2 consumes the proof exactly (§12.3)",
+                // The outcome rides along in the expected string, because "the version does
+                // not exist" is an answer §7.2 defines rather than a failure to verify.
+                if case.name == "fixed-version-above-the-greatest" {
+                    "every element read, none left over (the version does not exist)"
+                } else {
+                    "every element read, none left over"
+                },
+                match &parsed {
+                    Err(err) => format!("decode failed: {err}"),
+                    Ok(response) => replay_fixed_version(case, response).unwrap_or_else(|d| d),
+                },
+            ));
+        }
         if case.input.version.is_none() {
             checks.push(Check::new(
                 "replaying §6.3 consumes the proof exactly (§12.3)",
@@ -1087,40 +1103,34 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
     })
 }
 
-/// Replays §6.3 over a recorded response and reports whether the proof came out exact.
+/// The search keys a response's binary ladder establishes, by version.
 ///
-/// The search keys come from the response's own binary ladder: each step's VRF proof is
-/// verified against the log's public key for the label-version pair it claims, which is the
-/// only thing that ties a step to a version. The target version's commitment is recomputed
-/// from `opening` and `value`, because §13.1 deliberately omits it from the ladder.
-fn replay_greatest_version(
-    file: &str,
-    case_name: &str,
+/// Each step's VRF proof is verified against the log's public key for the label-version pair it
+/// claims — that verification is the only thing tying a step to a version, since the wire
+/// carries the steps in ladder order and names no versions. The target version's commitment is
+/// recomputed from `opening` and `value`, because §13.1 omits it from the ladder on purpose:
+/// recomputing it is what makes the response's claim about the value binding.
+fn ladder_keys(
     case: &crate::vectors::Case<SearchInput, SearchExpect>,
     response: &SearchResponse,
-) -> Result<String, String> {
+    target: u32,
+) -> Result<BTreeMap<u32, combined::LadderKey>, String> {
     let suite = CipherSuite::Kt128Sha256Ed25519;
-    let claimed = response
-        .version
-        .ok_or_else(|| "the response carried no version".to_owned())?;
-    let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
     let vrf_key =
         hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
+    let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
     let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
         .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
         .and_then(|bytes| vrf::PublicKey::from_bytes(bytes).map_err(|err| err.to_string()))?;
 
-    // The ladder the response carries is the one for the target version, in §5's order, so its
-    // steps line up with the versions that algorithm outputs.
-    let versions = ladder::search_binary_ladder(claimed, claimed, &[], &[])
+    // The response's ladder can be shorter than §5's full sequence, for the same reason a
+    // per-entry ladder can: the sequence stops once it has placed the greatest version. So the
+    // steps pair with a prefix of it.
+    let versions = ladder::search_binary_ladder(target, target, &[], &[])
         .map_err(|err| format!("ladder: {err}"))?;
-    // The response's ladder can be *shorter* than §5's full sequence for the target, for the
-    // same reason a per-entry ladder can be: the sequence stops as soon as it has established
-    // where the greatest version sits. For a label with no versions at all the log sends a
-    // single lookup for version 0. So the steps pair with a prefix of the sequence.
     if response.binary_ladder.len() > versions.len() {
         return Err(format!(
-            "the response's ladder has {} steps, more than the {} §5 gives for version {claimed}",
+            "the response's ladder has {} steps, more than the {} §5 gives for version {target}",
             response.binary_ladder.len(),
             versions.len()
         ));
@@ -1129,15 +1139,12 @@ fn replay_greatest_version(
         .get(..response.binary_ladder.len())
         .ok_or_else(|| "the response's ladder is longer than §5's sequence".to_owned())?;
 
-    // §13.1: the target version's commitment is not in the ladder — it is recomputed from the
-    // `opening` and `value` the response carries, which is what makes the response's claim
-    // about the value binding rather than merely asserted.
     let target_commitment = {
         let opening = hex::decode(&case.expect.opening).map_err(|err| format!("opening: {err}"))?;
         let value = kt_wire::structs::CommitmentValue {
             opening,
             label: label.clone(),
-            version: claimed,
+            version: target,
             update: response.value.clone(),
         };
         commitment::commit(suite, &value).map_err(|err| format!("commitment: {err}"))?
@@ -1155,10 +1162,11 @@ fn replay_greatest_version(
             .verify(suite, &input, &proof)
             .map_err(|err| format!("version {version}: the VRF proof does not verify: {err}"))?;
         let mut commitment = step.commitment;
-        if *version == claimed {
+        if *version == target {
             if commitment.is_some() {
                 return Err(format!(
-                    "§13.1 forbids a commitment for the target version, but version {version}                      carries one"
+                    "§13.1 forbids a commitment for the target version, but version {version} \
+                     carries one"
                 ));
             }
             commitment = Some(HashValue::from_bytes(*target_commitment.as_bytes()));
@@ -1171,6 +1179,26 @@ fn replay_greatest_version(
             },
         );
     }
+    Ok(keys)
+}
+
+/// Replays §6.3 over a recorded response and reports whether the proof came out exact.
+///
+/// The search keys come from the response's own binary ladder: each step's VRF proof is
+/// verified against the log's public key for the label-version pair it claims, which is the
+/// only thing that ties a step to a version. The target version's commitment is recomputed
+/// from `opening` and `value`, because §13.1 deliberately omits it from the ladder.
+fn replay_greatest_version(
+    file: &str,
+    case_name: &str,
+    case: &crate::vectors::Case<SearchInput, SearchExpect>,
+    response: &SearchResponse,
+) -> Result<String, String> {
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+    let claimed = response
+        .version
+        .ok_or_else(|| "the response carried no version".to_owned())?;
+    let keys = ladder_keys(case, response, claimed)?;
 
     // What the user retained: §12.3 omits the timestamps their previous view covered, which
     // are the frontier entries of the size they advertised. The values are the log's own,
@@ -1236,6 +1264,74 @@ fn replay_greatest_version(
     }
 
     let _ = (file, case_name);
+    reader
+        .finish()
+        .map(|()| format!("every element read, none left over{note}"))
+        .map_err(|err| format!("§12.3: {err}"))
+}
+
+/// Replays §7.2 over a recorded response, reporting whether the proof came out exact.
+fn replay_fixed_version(
+    case: &crate::vectors::Case<SearchInput, SearchExpect>,
+    response: &SearchResponse,
+) -> Result<String, String> {
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+    let target = case
+        .input
+        .version
+        .ok_or_else(|| "the request named no version".to_owned())?;
+    let size = case.expect.tree_size;
+    let keys = ladder_keys(case, response, target)?;
+
+    let mut retained = combined::Retained::none();
+    if let Some(advertised) = case.input.last {
+        for position in ibst::frontier(advertised).map_err(|err| format!("frontier: {err}"))? {
+            let timestamp = usize::try_from(position)
+                .ok()
+                .and_then(|index| case.input.entry_timestamps.get(index))
+                .copied()
+                .ok_or_else(|| format!("no recorded timestamp for log entry {position}"))?;
+            retained.timestamps.insert(position, timestamp);
+        }
+    }
+    let mut reader = combined::Reader::new(&response.search, &retained);
+
+    // §12.3.1's view update comes first, exactly as for a greatest-version search.
+    let view = match case.input.last {
+        None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
+        Some(advertised) => ibst::update_view(size, Some(advertised))
+            .map_err(|err| format!("update view: {err}"))?,
+    };
+    for position in &view {
+        reader
+            .timestamp(*position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let outcome = combined::fixed_version_search(
+        suite,
+        size,
+        // These cases are served by a log that defines no maximum lifetime, so nothing expires
+        // and §7.2's expiry branches are exercised by unit tests rather than here.
+        0,
+        case.input.monitoring_window,
+        target,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§7.2: {err}"))?;
+
+    let note = match &outcome {
+        combined::FixedOutcome::Found { .. } => "",
+        combined::FixedOutcome::DoesNotExist => " (the version does not exist)",
+        combined::FixedOutcome::Expired => " (the version has expired)",
+    };
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
+
     reader
         .finish()
         .map(|()| format!("every element read, none left over{note}"))

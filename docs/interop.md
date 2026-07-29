@@ -112,7 +112,7 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Seventeen vector files pass from the Rust side — 6647 checks across 778 cases — and
+Seventeen vector files pass from the Rust side — 6657 checks across 778 cases — and
 `from-kt.json` runs the other way: 209 artifacts built by the Rust side, 109 of which
 katie must accept and 100 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
@@ -150,7 +150,26 @@ consume:
   ones, which is how a label with no versions gets a single-step ladder (`DRAFT-08`).
 
 All five greatest-version cases now consume exactly, including the advertised-size one whose
-view update supplies nothing.
+view update supplies nothing. §7.2's fixed-version search followed, and its five cases found two
+more places where the ordering is not what it looks like:
+
+- **The omission rule is directional, and a binary search moves both ways.** §6.2 licenses
+  dropping an inclusion already proven "for a log entry to the left" and a non-inclusion proven
+  "to the right". §6.3 walks strictly left to right, so a flat accumulated set happens to work
+  there; §7.2 descends left and right, and a flat set makes the verifier expect a ladder with no
+  lookups at all where the log sent two. The direction is the whole content of the rule.
+- **The rightmost entry's timestamp comes first, before the walk.** §7.1 defines expiry by
+  subtracting an entry's timestamp "from the timestamp of the rightmost log entry", so no expiry
+  question can be answered until that one is known — which makes it the first element of a
+  fixed-version search's `timestamps`, ahead of the root's. A verifier that takes it from
+  anywhere else reads every subsequent element one position out.
+
+And one place where §7.2 turns out to be implementable only because of a property §6.1 does not
+state outright: steps 5.2 and 6.2 ask whether an entry is distinguished, and a verifier cannot
+enumerate the distinguished set, because that needs timestamps for entries the search never
+visits. It does not have to. §6.1 brackets a node by the timestamps of the entries either side
+of it in the search tree, and a descent maintains exactly those bounds as it goes — so
+distinguishedness along a search path is decidable from the path itself.
 
 ### Bytes that do not say what they are for
 
