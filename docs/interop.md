@@ -30,7 +30,7 @@ well, because a `CombinedTreeProof`'s elements are ordered by the algorithm that
 |---|---|---|
 | `crypto/suites` | `kt-crypto::suite` | §11.1, §17.1 |
 | `crypto/commitments` | `kt-crypto::commitment` | §11.6 |
-| `crypto/vrf/{edwards25519,p256}` | `kt-crypto::vrf` | §11.7 |
+| `crypto/vrf/{edwards25519,p256}` | `kt-crypto::vrf::{edwards25519,p256}` | §11.7 |
 | `tree/log`, `tree/log/math` | `kt-tree::log` | §3.2, §11.8, §12.1 |
 | `tree/prefix` | `kt-tree::prefix` | §3.3, §11.9, §12.2 |
 | `tree/transparency/math` (ladders, tracker) | `kt-tree::ladder`, `kt-tree::ibst` | §4.1, §5, App. A/B |

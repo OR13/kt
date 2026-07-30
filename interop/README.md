@@ -150,7 +150,8 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `commitment.json` | commitment | §11.6 | 6 positive, 1 negative |
 | `ibst.json` | implicit binary search tree | §4.1, Appendix A | 38 log sizes |
 | `binary-ladder.json` | binary ladder | §5, Appendix B | 76 across base, search, monitoring |
-| `vrf.json` | VRF | §11.7 | 10 positive, 1 negative |
+| `vrf.json` | VRF, Ed25519 suite | §11.7 | 10 positive, 1 negative |
+| `vrf-p256.json` | VRF, P-256 suite | §11.7, §17.1 | 10 positive, 1 negative |
 | `log-math.json` | log tree structure, in node indices | §3.2, §4.2, §12.1 | 1679 decompositions |
 | `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
 | `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
@@ -164,6 +165,7 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `distinguished.json` | distinguished log entries | §6.1 | 42 size/window/timestamp shapes |
 | `tree-head.json` | configuration, signatures, and `FullTreeHead` bytes | §11.2–§11.4 | 9, all three modes |
+| `tree-head-p256.json` | the same under ECDSA/P-256 | §11.2–§11.4, §17.1 | 9, all three modes |
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
 | `from-kt.json` | must accept / must reject, in reverse | as above | 225, roughly half negative |
@@ -190,12 +192,18 @@ subtree over `[start, start+len)` is node `2*start + len - 1`, and because a §1
 only ever carries balanced subtree heads, that translation is total on exactly the
 values that matter. A range that failed to map would itself be the bug.
 
-## The three files that cannot be reproducible
+## The four files that cannot be reproducible
 
 Every vector file here regenerates to the same bytes, and CI diffs them so that an upstream
-bump changing behaviour fails loudly instead of passing quietly. `search.json`,
-`monitor.json` and `update.json` are the exceptions, and it is not fixable: all three come
-from a live log, and
+bump changing behaviour fails loudly instead of passing quietly. Four are exceptions.
+
+`tree-head-p256.json` is the simple case: it carries ECDSA signatures, and Go's `crypto/ecdsa`
+draws a nonce per signature. §17.1 fixes how `r` and `s` are encoded, not how they are produced.
+Here the non-reproducibility is a feature — CI regenerates and re-checks, so every run verifies
+signatures nobody has seen, and a verifier that happened to work for one nonce would fail.
+
+`search.json`, `monitor.json` and `update.json` are the harder case, and it is not fixable: all
+three come from a live log, and
 katie stamps each entry with `time.Now()` and generates a fresh random opening for every
 commitment, with no injection point for either. Every commitment, prefix root, log root and
 signature in a response therefore differs run to run.
@@ -210,7 +218,7 @@ where everything or nothing expired would pass while testing nothing.
 The alternative to giving up the property was to weaken it — compare the regenerated file
 structurally, ignoring the values that move. That would have checked less than what is done
 instead: CI regenerates the vectors and runs **the whole Rust check suite against the
-regenerated tree**, so all three files' checks execute against bytes nobody has ever seen. A change
+regenerated tree**, so all four files' checks execute against bytes nobody has ever seen. A change
 in how the peer shapes a response fails there. The committed files remain as pinned artifacts
 for `cargo test` and for the page, and are excluded from the reproducibility diff.
 
@@ -224,7 +232,7 @@ and record what it produces. What is measured is §9.1's element ordering, which
 hand-built example can pin. The `UpdateResponse` around it was never measured and is not
 claimed; its members are pinned by `tree-head.json` and `requests.json` instead.
 
-Net effect: the deterministic files are pinned *and* reproducible; the three nondeterministic ones
+Net effect: the deterministic files are pinned *and* reproducible; the four nondeterministic ones
 are pinned and re-derived. Nothing is checked only against itself, which is the property that
 actually matters.
 
