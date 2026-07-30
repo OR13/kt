@@ -746,6 +746,29 @@ impl Established {
         (left_inclusion, right_non_inclusion)
     }
 
+    /// Records what an entry's ladder *would* have proved, without one having been received.
+    ///
+    /// §9.1 step 2.2 needs this: lookups skipped by step 2.1 "will still be omitted as if the log
+    /// entries had been inspected", so the omission state has to include ladders that never
+    /// arrived. What each lookup would have shown follows from the greatest version at that entry —
+    /// a version at or below it is present, one above it is absent — which is exactly the
+    /// invariant that makes the omission rule sound in the first place.
+    ///
+    /// `greatest` is `None` where the label did not exist there, in which case every lookup would
+    /// have proven non-inclusion.
+    fn assume(&mut self, position: u64, greatest: Option<u32>, versions: &[u32]) {
+        let mut included = Vec::new();
+        let mut absent = Vec::new();
+        for version in versions {
+            if greatest.is_some_and(|bound| *version <= bound) {
+                included.push(*version);
+            } else {
+                absent.push(*version);
+            }
+        }
+        self.entries.push((position, included, absent));
+    }
+
     /// Records what an entry's ladder proved.
     fn record(&mut self, position: u64, versions: &[u32], results: &[PrefixSearchResult]) {
         let mut included = Vec::new();
@@ -935,7 +958,7 @@ pub fn greatest_version_search(
                 };
                 reader.establish_root(current, root)?;
                 inspected.push((current, root));
-                return Ok(Outcome::NoVersions { start, inspected });
+                return Ok(Outcome::NegativeResult { start, inspected });
             }
             return Err(SearchError::RightmostInconsistent {
                 position: current,
@@ -992,13 +1015,23 @@ pub fn greatest_version_search(
 pub enum Outcome {
     /// The log's claim about the greatest version holds.
     Found(Search),
-    /// The label has no versions at all.
+    /// The response reports that the label has no versions, which §13.1 requires a client to
+    /// **reject**.
     ///
-    /// §6.3 has no branch for this, which is `DRAFT-08` in `docs/interop.md`: the log answers
-    /// with a claim of version 0 and a proof that version 0 does not exist, and step 2 read
-    /// literally rejects it. Reported as an outcome because the response is well formed and
-    /// says something true — just not something §6.3 anticipates.
-    NoVersions {
+    /// The log answers with a claim of version 0 and a proof that version 0 does not exist.
+    /// §6.3 step 2 read literally rejects it, and §6.3 offers no branch that accepts it —
+    /// `DRAFT-08`. As of 2026-07-28 the draft says why: "this document doesn't define a way to
+    /// encode a negative result (for a missing label or version) in a `SearchResponse`. This
+    /// functionality was omitted due to its low expected utility. Unless a client has adopted
+    /// a documented protocol for encoding negative search results, clients MUST consider any
+    /// `SearchResponse` with a negative result as invalid and having failed validation."
+    ///
+    /// So this is not a successful search. It is reported as a distinct outcome rather than an
+    /// error because the two situations are worth telling apart — a proof that is malformed and
+    /// a proof that is well formed and reports a negative result — and because the peer serves
+    /// such responses (`KT-05`), so a harness needs to name what it received. A client MUST NOT
+    /// treat it as an answer about the label absent the documented protocol §13.1 refers to.
+    NegativeResult {
         /// Where the search started.
         start: u64,
         /// The entries inspected, with the prefix tree roots their proofs computed.
@@ -1621,9 +1654,11 @@ mod search_tests {
     }
 
     /// A label with no versions: `DRAFT-08`. The log claims version 0 and proves it absent, and
-    /// §6.3 step 2 read literally rejects the only answer available.
+    /// §6.3 step 2 read literally rejects the only answer available — which §13.1 now confirms
+    /// is the right thing to do, since the draft defines no encoding for a negative result and
+    /// requires clients to treat one as failed validation.
     #[test]
-    fn a_label_with_no_versions_is_an_outcome_not_a_failure() {
+    fn a_label_with_no_versions_is_reported_as_a_negative_result() {
         let size = 1_u64;
         let window = 604_800_000;
         let empty = prefix::PrefixTree::new();
@@ -1645,12 +1680,12 @@ mod search_tests {
         let outcome =
             greatest_version_search(SUITE, size, window, 0, &keys_through(0), &mut reader).unwrap();
         match outcome {
-            Outcome::NoVersions { start, inspected } => {
+            Outcome::NegativeResult { start, inspected } => {
                 assert_eq!(start, 0);
                 assert_eq!(inspected.len(), 1);
                 assert_eq!(inspected[0].1, empty.root(SUITE));
             }
-            Outcome::Found(_) => panic!("the label has no versions"),
+            Outcome::Found(_) => panic!("a negative result must not read as a found version"),
         }
         reader.finish().unwrap();
     }
@@ -3836,5 +3871,1592 @@ mod owner_monitor_tests {
         let wrapped = InitError::from(distinguished::Error::NonMonotonic { left: 1, right: 2 });
         assert!(!wrapped.to_string().is_empty());
         assert!(core::error::Error::source(&wrapped).is_some());
+    }
+}
+
+/// A label owner's local state about one label (§8.3, §9.1).
+///
+/// An owner is the only party in the protocol that keeps state *about versions it created*, and
+/// §9.1 leans on all of it: which entry each version went into, what the greatest version was at
+/// the reference point, and where the last update landed. §13.5 step 1 is a check against this
+/// state and nothing else — "verify that `position` is to the right of where the previous greatest
+/// version of the label was inserted" — so a verifier without it cannot check an update at all.
+///
+/// The representation is positions rather than versions because that is what the owner learns:
+/// each update tells it "your new versions are in entry `position`", and the version numbers
+/// follow from counting. `version_at_starting` is `None` when the label did not exist at the
+/// reference point, which is the ordinary case for a label's first owner.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OwnerState {
+    /// The rightmost distinguished entry the owner has verified, from §8.3's first algorithm.
+    pub starting: u64,
+    /// The greatest version that existed at `starting`, or `None` if the label did not exist.
+    pub version_at_starting: Option<u32>,
+    /// The entry each version created since `starting` was inserted into, ascending.
+    ///
+    /// One element per version, so two versions in one entry appear as that position twice.
+    pub upcoming: Vec<u64>,
+}
+
+impl OwnerState {
+    /// The greatest version the owner believes exists, or `None` if the label does not yet.
+    ///
+    /// # Errors
+    ///
+    /// [`UpdateError::VersionOverflow`] if the count does not fit the `uint32` version field.
+    fn greatest_version(&self) -> core::result::Result<Option<u32>, UpdateError> {
+        self.version_after(self.upcoming.len())
+    }
+
+    /// The greatest version the owner believes existed as of entry `position`.
+    ///
+    /// §9.1 step 2.2's ladders target the previous greatest version, and §9.1's seeding of which
+    /// lookups to omit needs the same figure at the *parent* of the entry the walk starts from.
+    /// Neither is the global greatest: a version created in a later entry did not exist here.
+    ///
+    /// Only meaningful for positions at or after `starting`, which is where the owner's knowledge
+    /// begins.
+    ///
+    /// # Errors
+    ///
+    /// [`UpdateError::VersionOverflow`] if the count does not fit the `uint32` version field.
+    fn greatest_version_at(&self, position: u64) -> core::result::Result<Option<u32>, UpdateError> {
+        let created = self
+            .upcoming
+            .iter()
+            .filter(|entry| **entry <= position)
+            .count();
+        self.version_after(created)
+    }
+
+    /// The greatest version after `created` versions have been added to `version_at_starting`.
+    ///
+    /// The awkward case is a label that did not exist at the reference point: `created` versions
+    /// then run from 0, so the greatest is `created - 1`, and zero of them means the label still
+    /// does not exist.
+    fn version_after(&self, created: usize) -> core::result::Result<Option<u32>, UpdateError> {
+        let created = u64::try_from(created).map_err(|_| UpdateError::VersionOverflow)?;
+        let total = match self.version_at_starting {
+            Some(version) => u64::from(version)
+                .checked_add(created)
+                .ok_or(UpdateError::VersionOverflow)?,
+            None if created == 0 => return Ok(None),
+            None => created.saturating_sub(1),
+        };
+        u32::try_from(total)
+            .map(Some)
+            .map_err(|_| UpdateError::VersionOverflow)
+    }
+
+    /// The entry the most recent version went into, or `starting` if there have been none.
+    ///
+    /// §13.5 step 1 compares an update's position against this: a new version cannot appear to
+    /// the left of one the owner already knows about, because the prefix tree only grows.
+    #[must_use]
+    pub fn last_update(&self) -> u64 {
+        self.upcoming.last().copied().unwrap_or(self.starting)
+    }
+}
+
+/// What verifying an update established (§9.1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Updated {
+    /// The previous tree's frontier entries whose ladders were checked, with the prefix tree
+    /// root each proof computed (§9.1 step 2).
+    pub previous: Vec<(u64, HashValue)>,
+    /// The prefix tree root established at the entry holding the new versions.
+    ///
+    /// `None` when nothing was looked up there at all: a distinguished entry whose new versions
+    /// are all covered by a search binary ladder for the new greatest version needs no proof of
+    /// its own, because §8.3's second algorithm will reach it.
+    pub root: Option<HashValue>,
+    /// Whether the entry holding the new versions is distinguished, which is what §9.1 steps 3
+    /// and 4 branch on.
+    pub distinguished: bool,
+    /// The owner's state with the new versions recorded.
+    pub owner: OwnerState,
+    /// The entry to add to the contact monitoring map, present only in step 4's case.
+    ///
+    /// A distinguished entry needs no map entry: owner monitoring visits it anyway. A
+    /// non-distinguished one does, and §9.1 step 4 says so — the mapping is `position` to the
+    /// new greatest version.
+    pub contact: Option<(u64, u32)>,
+}
+
+/// Runs §9.1: a label owner checking that new versions of its label were inserted correctly.
+///
+/// This is the protocol's only *two-tree* algorithm. Everything else verifies a claim about the
+/// tree as presented; this one verifies a claim about the boundary between two trees — the
+/// **previous tree**, "the log tree up to but excluding the log entry where the new versions were
+/// added", and the **current tree** as presented now. The reason §9.1 gives for the first phase is
+/// worth quoting, because it is the whole point of the algorithm: without it a log "might create a
+/// malicious version of a label, later change the corresponding value to something non-malicious,
+/// and try to only inform the label owner of the non-malicious value".
+///
+/// So phase one is a greatest-version search over the previous tree's frontier, proving that the
+/// owner's *previous* greatest version really was the greatest before the update. Phase two checks
+/// how the new versions were created, and branches on whether their entry is distinguished — not
+/// for security but for economy, since §8.3's second algorithm will visit a distinguished entry
+/// anyway.
+///
+/// `position` is where the log says the new versions went, `versions` how many were created, and
+/// `owner` the state the owner held *before* this update. `keys` maps each version in §13.5's
+/// `binary_ladder` to its search key; [`ladder::update_binary_ladder`] says which versions that
+/// must be, and [`update_ladder_keys`] builds the map while making §13.5 step 4's checks.
+///
+/// # Errors
+///
+/// [`UpdateError`] where the proof does not establish what §9.1 requires, including §13.5 step 1's
+/// check on `position` and the reader's own refusals.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "an update is checked against three separate things — the tree, the owner's state and \
+              the response's own claims — and every argument belongs to one of them. Grouping them \
+              into a struct would put the log's parameters and the owner's state behind the same \
+              name, which is the distinction the algorithm turns on"
+)]
+pub fn owner_update(
+    suite: CipherSuite,
+    size: u64,
+    window: u64,
+    position: u64,
+    versions: usize,
+    owner: &OwnerState,
+    keys: &BTreeMap<u32, LadderKey>,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<Updated, UpdateError> {
+    if position >= size {
+        return Err(UpdateError::EntryDoesNotExist { position, size });
+    }
+    // §13.5 step 1. This is also what makes the previous tree non-empty: `last_update` is at
+    // worst the owner's starting position, so `position` is at least 1 and the previous tree has
+    // at least one entry to run phase one over.
+    let last_update = owner.last_update();
+    if position <= last_update {
+        return Err(UpdateError::PositionNotAdvancing {
+            position,
+            last_update,
+        });
+    }
+    // §13.5 step 2 requires `info` to be non-empty, and `versions` is its length.
+    if versions == 0 {
+        return Err(UpdateError::NoNewVersions);
+    }
+
+    let previous_greatest = owner.greatest_version()?;
+    let created = u32::try_from(versions).map_err(|_| UpdateError::VersionOverflow)?;
+    let start_ver = match previous_greatest {
+        Some(version) => version.checked_add(1).ok_or(UpdateError::VersionOverflow)?,
+        None => 0,
+    };
+    let end_ver = start_ver
+        .checked_add(created.saturating_sub(1))
+        .ok_or(UpdateError::VersionOverflow)?;
+    // A ladder for `u32::MAX` needs a lookup for `2^32`, so that version can never be shown to be
+    // the greatest. Refusing here rather than at the ladder keeps the reason attached to the
+    // request that caused it.
+    if end_ver == u32::MAX {
+        return Err(UpdateError::VersionOverflow);
+    }
+
+    // The new versions that a search binary ladder for the new greatest version would *not* look
+    // up. Steps 3 and 4 both ask for a plain inclusion proof for these, ascending: the ladder
+    // proves where the top of the history is, and these prove the rest of the update is really
+    // there rather than merely claimed.
+    let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[])?;
+    let additional: Vec<u32> = (start_ver..=end_ver)
+        .filter(|version| !covered.contains(version))
+        .collect();
+
+    // Phase one, over the previous tree.
+    let mut established = Established::default();
+    let previous = verify_previous_tree(
+        suite,
+        size,
+        window,
+        position,
+        owner,
+        previous_greatest,
+        keys,
+        &mut established,
+        reader,
+    )?;
+
+    // Phase two. §9.1 steps 3 and 4 are the same question asked of a different entry, so the
+    // distinguished check runs the same way it did in phase one.
+    let distinguished = non_distinguished_ancestor(size, window, position, reader)?.is_none();
+    let mut root = None;
+    let mut contact = None;
+    if !distinguished {
+        // Step 4's first proof: a search binary ladder for the new greatest version, with
+        // redundant lookups omitted — and the omissions carry over from phase one, because the
+        // entries inspected there are to this entry's left.
+        let (left_inclusion, right_non_inclusion) = established.sets_for(position);
+        let ladder_versions =
+            ladder::search_binary_ladder(end_ver, end_ver, &left_inclusion, &right_non_inclusion)?;
+        let computed = evaluate_ladder(
+            suite,
+            position,
+            end_ver,
+            &ladder_versions,
+            keys,
+            &mut established,
+            reader,
+        )?;
+        root = Some(computed);
+        contact = Some((position, end_ver));
+    }
+
+    // Steps 3 and 4's second proof: the new versions the ladder did not cover, in ascending order,
+    // every one of which must be included. An empty list means no proof at all — not a proof of
+    // nothing — which is what makes §12.3's exact-count rule bite here.
+    if !additional.is_empty() {
+        reader.timestamp(position)?;
+        let proof = reader.prefix_proof(position)?;
+        if proof.results.len() != additional.len() {
+            return Err(UpdateError::AdditionalLength {
+                position,
+                expected: additional.len(),
+                actual: proof.results.len(),
+            });
+        }
+        let mut entries = Vec::new();
+        for (version, result) in additional.iter().zip(proof.results.iter()) {
+            if !result.is_inclusion() {
+                return Err(UpdateError::VersionNotCreated {
+                    position,
+                    version: *version,
+                });
+            }
+            let key = keys.get(version).ok_or(UpdateError::MissingLadderKey {
+                position,
+                version: *version,
+            })?;
+            entries.push(prefix::SearchEntry::included(
+                key.vrf_output,
+                key.commitment.ok_or(UpdateError::MissingCommitment {
+                    position,
+                    version: *version,
+                })?,
+            ));
+        }
+        let computed = prefix::evaluate(suite, &entries, proof)?;
+        // §12.3.4's rule that two proofs for one entry must agree is what ties this to the ladder
+        // above: both are proofs against the same prefix tree, and a log that answered the two
+        // from different trees is caught here rather than anywhere else.
+        reader.establish_root(position, computed)?;
+        root = Some(computed);
+    }
+
+    let mut updated = owner.clone();
+    for _ in 0..versions {
+        updated.upcoming.push(position);
+    }
+    Ok(Updated {
+        previous,
+        root,
+        distinguished,
+        owner: updated,
+        contact,
+    })
+}
+
+/// §9.1 steps 1 and 2: the greatest-version search over the previous tree.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the log's parameters, the owner's state, the ladder keys, the omission state and the \
+              reader are all inputs to the numbered steps; bundling them would hide which step \
+              reads what"
+)]
+fn verify_previous_tree(
+    suite: CipherSuite,
+    size: u64,
+    window: u64,
+    position: u64,
+    owner: &OwnerState,
+    previous_greatest: Option<u32>,
+    keys: &BTreeMap<u32, LadderKey>,
+    established: &mut Established,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<Vec<(u64, HashValue)>, UpdateError> {
+    // The previous tree is the log up to but excluding `position`, so its size *is* `position`,
+    // and its rightmost entry is `position - 1`. `owner_update` has already established that
+    // `position` exceeds the owner's last update, so this cannot underflow.
+    let previous_size = position;
+    let rightmost = position.saturating_sub(1);
+
+    // Step 1. Note which tree each half of this question belongs to: the entries walked are the
+    // previous tree's frontier, and whether they are distinguished is decided in the *current*
+    // tree. A frontier entry that was distinguished before the update may not be now.
+    let Some(first) = non_distinguished_ancestor(size, window, rightmost, reader)? else {
+        // Every entry down to the previous tree's rightmost is distinguished in the current tree,
+        // so §8.3's second algorithm will cover them all and step 2 has nothing to do.
+        return Ok(Vec::new());
+    };
+
+    // The entry found may sit above the previous tree — the current tree is taller — in which case
+    // the first non-distinguished frontier entry is the previous tree's root, and descending left
+    // is how to reach it. Ancestor-closure is what makes this equivalent to walking the previous
+    // frontier and testing each: below a non-distinguished entry nothing is distinguished.
+    let mut current = first;
+    while current > rightmost {
+        current = ibst::left(current)?;
+    }
+
+    // Step 2.2's omissions, seeded before the walk starts. §9.1 is explicit that lookups skipped
+    // by step 2.1 "will still be omitted as if the log entries had been inspected", so the
+    // omission state has to include ladders that were never actually received. Two of them: the
+    // ladder a greatest-version search would have produced at the parent of the entry the walk
+    // starts from, and one at the entry itself.
+    if let Some(greatest) = previous_greatest {
+        let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[])?;
+        let root = ibst::root(previous_size)?;
+        if current != root {
+            let parent = *ibst::direct_path(current, previous_size)?
+                .first()
+                .ok_or(UpdateError::NoParent { position: current })?;
+            established.assume(parent, owner.greatest_version_at(parent)?, &ladder);
+        }
+        // Not strictly true that `greatest` exists at `current` — it may not — but no lookup
+        // happens before it does, so the omissions this produces are the same either way.
+        established.assume(current, Some(greatest), &ladder);
+    }
+
+    let mut inspected = Vec::new();
+    // Step 2.1, as it read from 2026-07-28: "If a previous version of the label existed, and the
+    // current log entry's index is less than or equal to the index of the log entry where the
+    // previous greatest version was inserted, skip inspecting this log entry." The condition on a
+    // previous version having existed is load-bearing and easy to lose: with no previous version
+    // there is no earlier update whose response could have carried the ladder, so nothing is
+    // skipped — not even entries at or before the owner's reference point.
+    //
+    // The earlier text said "if a binary ladder would have already been received from this log
+    // entry in step 2.2 when processing a previous label update", which is the same rule for a
+    // label that has versions and silently different for one that does not. The peer implements
+    // the earlier reading, falling back to the reference point unconditionally; no recorded case
+    // separates them, because every case's walk begins to the right of the reference point.
+    // Recorded as `KT-06`.
+    let skip_through = previous_greatest.map(|_| owner.last_update());
+    loop {
+        if skip_through.is_none_or(|through| current > through) {
+            // Step 2.2. The target is the previous greatest version, or 0 where the label did not
+            // exist — there is no lower version to ask about.
+            let target = previous_greatest.unwrap_or(0);
+            let (left_inclusion, right_non_inclusion) = established.sets_for(current);
+            let versions = ladder::search_binary_ladder(
+                target,
+                target,
+                &left_inclusion,
+                &right_non_inclusion,
+            )?;
+            let root = evaluate_previous_ladder(
+                suite,
+                current,
+                target,
+                previous_greatest.is_some(),
+                &versions,
+                keys,
+                established,
+                reader,
+            )?;
+            inspected.push((current, root));
+        }
+
+        if current == rightmost {
+            return Ok(inspected);
+        }
+        current = ibst::right(current, previous_size)?;
+    }
+}
+
+/// Reads one of step 2.2's ladders and checks step 2.3's conclusion.
+///
+/// Step 2.3 wants the ladder to terminate "in a way that is consistent with the previous greatest
+/// version of the label being the greatest that exists". Where the label existed that means the
+/// ladder places the target exactly; where it did not, it means the single lookup for version 0
+/// proves version 0 absent.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site, and every argument names something a numbered step refers to"
+)]
+fn evaluate_previous_ladder(
+    suite: CipherSuite,
+    position: u64,
+    target: u32,
+    exists: bool,
+    versions: &[u32],
+    keys: &BTreeMap<u32, LadderKey>,
+    established: &mut Established,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<HashValue, UpdateError> {
+    reader.timestamp(position)?;
+    let proof = reader.prefix_proof(position)?;
+    let used = versions
+        .get(..proof.results.len())
+        .ok_or(UpdateError::LadderLength {
+            position,
+            expected: versions.len(),
+            actual: proof.results.len(),
+        })?;
+    let ordering = ladder::interpret_search_ladder(used, target, &proof.results)?;
+    let wanted = if exists {
+        core::cmp::Ordering::Equal
+    } else {
+        core::cmp::Ordering::Less
+    };
+    if ordering != wanted {
+        return Err(UpdateError::PreviousTreeInconsistent {
+            position,
+            claimed: target,
+            exists,
+        });
+    }
+    let entries = ladder_entries(keys, position, used, &proof.results)?;
+    established.record(position, used, &proof.results);
+    let root = prefix::evaluate(suite, &entries, proof)?;
+    reader.establish_root(position, root)?;
+    Ok(root)
+}
+
+/// Reads step 4's ladder at the entry holding the new versions.
+fn evaluate_ladder(
+    suite: CipherSuite,
+    position: u64,
+    target: u32,
+    versions: &[u32],
+    keys: &BTreeMap<u32, LadderKey>,
+    established: &mut Established,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<HashValue, UpdateError> {
+    reader.timestamp(position)?;
+    let proof = reader.prefix_proof(position)?;
+    let used = versions
+        .get(..proof.results.len())
+        .ok_or(UpdateError::LadderLength {
+            position,
+            expected: versions.len(),
+            actual: proof.results.len(),
+        })?;
+    let ordering = ladder::interpret_search_ladder(used, target, &proof.results)?;
+    if ordering != core::cmp::Ordering::Equal {
+        return Err(UpdateError::NewVersionInconsistent {
+            position,
+            claimed: target,
+        });
+    }
+    let entries = ladder_entries(keys, position, used, &proof.results)?;
+    established.record(position, used, &proof.results);
+    let root = prefix::evaluate(suite, &entries, proof)?;
+    reader.establish_root(position, root)?;
+    Ok(root)
+}
+
+/// Turns a ladder's versions and results into the prefix tree lookups they stand for.
+fn ladder_entries(
+    keys: &BTreeMap<u32, LadderKey>,
+    position: u64,
+    versions: &[u32],
+    results: &[PrefixSearchResult],
+) -> core::result::Result<Vec<prefix::SearchEntry>, UpdateError> {
+    let mut entries = Vec::new();
+    for (version, result) in versions.iter().zip(results.iter()) {
+        let key = keys.get(version).ok_or(UpdateError::MissingLadderKey {
+            position,
+            version: *version,
+        })?;
+        entries.push(if result.is_inclusion() {
+            prefix::SearchEntry::included(
+                key.vrf_output,
+                key.commitment.ok_or(UpdateError::MissingCommitment {
+                    position,
+                    version: *version,
+                })?,
+            )
+        } else {
+            prefix::SearchEntry::absent(key.vrf_output)
+        });
+    }
+    Ok(entries)
+}
+
+/// The first entry on the path from the root towards `target` that is not distinguished, or `None`
+/// if `target` itself is distinguished (§9.1 steps 1 and 3).
+///
+/// §6.1's ancestor-closure is what makes one descent enough: a non-distinguished entry has no
+/// distinguished descendants, so the first one found on the way down settles every entry below it.
+/// The timestamps are read through the reader in descent order, which is the order §12.3.5 lists
+/// them in — "the timestamp of each log entry on the path from the root to the parent … stopping
+/// if a non-distinguished log entry is established".
+fn non_distinguished_ancestor(
+    size: u64,
+    window: u64,
+    target: u64,
+    reader: &mut Reader<'_>,
+) -> core::result::Result<Option<u64>, UpdateError> {
+    let last = size.saturating_sub(1);
+    let mut current = ibst::root(size)?;
+    // The brackets §6.1 measures the gap between. The left one starts at the epoch rather than at
+    // an entry: there is nothing to the left of the tree, and a log's first entry is distinguished
+    // by construction.
+    let mut left = (0_u64, 0_u64);
+    let mut right = (last, reader.timestamp(last)?);
+
+    loop {
+        if !distinguished::is_distinguished(window, left, right)? {
+            return Ok(Some(current));
+        }
+        if current == target {
+            return Ok(None);
+        }
+        let timestamp = reader.timestamp(current)?;
+        // Which bracket a step tightens depends on which way it goes: descending right raises the
+        // left bracket to this entry, descending left lowers the right one.
+        if current < target {
+            let next = ibst::right(current, size)?;
+            left = (current, timestamp);
+            current = next;
+        } else {
+            let next = ibst::left(current)?;
+            right = (current, timestamp);
+            current = next;
+        }
+    }
+}
+
+/// Builds the search keys for an update's binary ladder, making §13.5 step 4's checks (§13.5).
+///
+/// Step 4 wants three things verified about `binary_ladder`: that "the expected number of entries
+/// is present", that every proof evaluates to a VRF output — the caller's job, since that needs
+/// the log's public key — and that "no commitment is provided for any version greater than
+/// `greatest_version`". The last is the interesting one. A commitment for a version above what the
+/// owner advertised would be the log volunteering a value the owner never asked about and cannot
+/// check, so §13.5 forbids it outright rather than leaving it to the algorithm.
+///
+/// `outputs` are the VRF outputs the caller evaluated, in the ladder's order; `commitments` are the
+/// ladder's `commitment` fields in the same order.
+///
+/// # Errors
+///
+/// [`UpdateError::LadderCount`] if the ladder is not the length §9.1 calls for, or
+/// [`UpdateError::UnexpectedCommitment`] for a commitment above `advertised`.
+pub fn update_ladder_keys(
+    start_ver: u32,
+    end_ver: u32,
+    advertised: Option<u32>,
+    outputs: &[HashValue],
+    commitments: &[Option<HashValue>],
+) -> core::result::Result<BTreeMap<u32, LadderKey>, UpdateError> {
+    let versions = ladder::update_binary_ladder(start_ver, end_ver)?;
+    if outputs.len() != versions.len() || commitments.len() != versions.len() {
+        return Err(UpdateError::LadderCount {
+            expected: versions.len(),
+            actual: outputs.len().max(commitments.len()),
+        });
+    }
+    let mut keys = BTreeMap::new();
+    for ((version, output), commitment) in versions.iter().zip(outputs.iter()).zip(commitments) {
+        if commitment.is_some() && advertised.is_none_or(|greatest| *version > greatest) {
+            return Err(UpdateError::UnexpectedCommitment { version: *version });
+        }
+        keys.insert(
+            *version,
+            LadderKey {
+                vrf_output: *output,
+                commitment: *commitment,
+            },
+        );
+    }
+    Ok(keys)
+}
+
+/// Why an update was rejected (§9.1, §13.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UpdateError {
+    /// The claimed position is not in the tree.
+    EntryDoesNotExist {
+        /// The position claimed.
+        position: u64,
+        /// The tree size.
+        size: u64,
+    },
+    /// §13.5 step 1: the position is not to the right of the owner's last known version.
+    PositionNotAdvancing {
+        /// The position claimed.
+        position: u64,
+        /// Where the owner's last known version was inserted.
+        last_update: u64,
+    },
+    /// §13.5 step 2: `info` was empty, so the response reports no new versions at all.
+    NoNewVersions,
+    /// The version count does not fit the `uint32` version field.
+    ///
+    /// Also reported for a new greatest version of `u32::MAX`, which no ladder can establish: the
+    /// proof would need a lookup for version `2^32`.
+    VersionOverflow,
+    /// A step 2.2 ladder does not agree with the owner's previous greatest version.
+    PreviousTreeInconsistent {
+        /// The entry whose ladder disagreed.
+        position: u64,
+        /// The version the owner expected to be greatest there.
+        claimed: u32,
+        /// Whether the owner believed the label existed at all.
+        exists: bool,
+    },
+    /// Step 4's ladder does not place the new greatest version where the response claims.
+    NewVersionInconsistent {
+        /// The entry holding the new versions.
+        position: u64,
+        /// The new greatest version.
+        claimed: u32,
+    },
+    /// A ladder carried more results than it has lookups.
+    LadderLength {
+        /// The entry.
+        position: u64,
+        /// How many lookups the ladder has.
+        expected: usize,
+        /// How many results arrived.
+        actual: usize,
+    },
+    /// The proof for the versions outside the ladder is the wrong length (§9.1 steps 3 and 4).
+    AdditionalLength {
+        /// The entry holding the new versions.
+        position: u64,
+        /// How many versions were outside the ladder.
+        expected: usize,
+        /// How many results arrived.
+        actual: usize,
+    },
+    /// A version the update claims to have created is not in the prefix tree.
+    VersionNotCreated {
+        /// The entry holding the new versions.
+        position: u64,
+        /// The version whose lookup came back as non-inclusion.
+        version: u32,
+    },
+    /// §13.5 step 4: `binary_ladder` is not the length §9.1 calls for.
+    LadderCount {
+        /// How many steps §9.1's version set calls for.
+        expected: usize,
+        /// How many arrived.
+        actual: usize,
+    },
+    /// §13.5 step 4: a commitment for a version above the owner's advertised greatest version.
+    UnexpectedCommitment {
+        /// The version that carried one.
+        version: u32,
+    },
+    /// A version in a ladder has no entry in the response's `binary_ladder`.
+    MissingLadderKey {
+        /// The entry being inspected.
+        position: u64,
+        /// The version with no search key.
+        version: u32,
+    },
+    /// A version proven included has no commitment, so its leaf cannot be reconstructed.
+    MissingCommitment {
+        /// The entry being inspected.
+        position: u64,
+        /// The version with no commitment.
+        version: u32,
+    },
+    /// The previous tree's frontier walk found an entry with no parent, which cannot happen.
+    NoParent {
+        /// The entry.
+        position: u64,
+    },
+    /// The proof did not supply something the algorithm asked for, or supplied too much.
+    Proof(Error),
+    /// A prefix tree proof did not evaluate.
+    Prefix(prefix::Error),
+    /// The search tree rejected a position.
+    Ibst(ibst::Error),
+    /// A ladder could not be built or interpreted.
+    Ladder(ladder::Error),
+    /// Deciding whether an entry is distinguished failed.
+    Distinguished(distinguished::Error),
+}
+
+impl From<Error> for UpdateError {
+    fn from(err: Error) -> Self {
+        Self::Proof(err)
+    }
+}
+
+impl From<prefix::Error> for UpdateError {
+    fn from(err: prefix::Error) -> Self {
+        Self::Prefix(err)
+    }
+}
+
+impl From<ibst::Error> for UpdateError {
+    fn from(err: ibst::Error) -> Self {
+        Self::Ibst(err)
+    }
+}
+
+impl From<ladder::Error> for UpdateError {
+    fn from(err: ladder::Error) -> Self {
+        Self::Ladder(err)
+    }
+}
+
+impl From<distinguished::Error> for UpdateError {
+    fn from(err: distinguished::Error) -> Self {
+        Self::Distinguished(err)
+    }
+}
+
+impl core::fmt::Display for UpdateError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EntryDoesNotExist { position, size } => {
+                write!(f, "log entry {position} does not exist in a log of {size}")
+            }
+            Self::PositionNotAdvancing {
+                position,
+                last_update,
+            } => write!(
+                f,
+                "new versions claimed at log entry {position}, which is not to the right of \
+                 entry {last_update} where the owner's last version was inserted"
+            ),
+            Self::NoNewVersions => write!(f, "the response reports no new versions"),
+            Self::VersionOverflow => {
+                write!(f, "the new greatest version does not fit a uint32 version")
+            }
+            Self::PreviousTreeInconsistent {
+                position,
+                claimed,
+                exists,
+            } => {
+                if *exists {
+                    write!(
+                        f,
+                        "log entry {position} does not show version {claimed} as the greatest \
+                         that existed before the update"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "log entry {position} shows a version of a label the owner believed did \
+                         not exist"
+                    )
+                }
+            }
+            Self::NewVersionInconsistent { position, claimed } => write!(
+                f,
+                "log entry {position} does not show version {claimed} as the new greatest version"
+            ),
+            Self::LadderLength {
+                position,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "log entry {position} answered a ladder of {expected} lookups with {actual} results"
+            ),
+            Self::AdditionalLength {
+                position,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "log entry {position} answered {expected} new-version lookups with {actual} results"
+            ),
+            Self::VersionNotCreated { position, version } => write!(
+                f,
+                "version {version} is claimed to have been created in log entry {position} but is \
+                 not present there"
+            ),
+            Self::LadderCount { expected, actual } => write!(
+                f,
+                "the update's binary ladder should have {expected} steps but has {actual}"
+            ),
+            Self::UnexpectedCommitment { version } => write!(
+                f,
+                "a commitment was provided for version {version}, which is above the greatest \
+                 version the owner advertised"
+            ),
+            Self::MissingLadderKey { position, version } => write!(
+                f,
+                "no search key for version {version}, needed at log entry {position}"
+            ),
+            Self::MissingCommitment { position, version } => write!(
+                f,
+                "no commitment for version {version}, proven to exist at log entry {position}"
+            ),
+            Self::NoParent { position } => {
+                write!(f, "log entry {position} has no parent in the previous tree")
+            }
+            Self::Proof(err) => write!(f, "reading the proof: {err}"),
+            Self::Prefix(err) => write!(f, "evaluating a prefix tree proof: {err}"),
+            Self::Ibst(err) => write!(f, "walking the search tree: {err}"),
+            Self::Ladder(err) => write!(f, "building a binary ladder: {err}"),
+            Self::Distinguished(err) => write!(f, "checking distinguished entries: {err}"),
+        }
+    }
+}
+
+impl core::error::Error for UpdateError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Proof(err) => Some(err),
+            Self::Prefix(err) => Some(err),
+            Self::Ibst(err) => Some(err),
+            Self::Ladder(err) => Some(err),
+            Self::Distinguished(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "tests fail loudly by panicking; the lints protect the library paths"
+)]
+mod update_tests {
+    use super::search_tests::{commitment_for, key_for};
+    use super::*;
+    use kt_wire::proofs::{InclusionProof, PrefixLeaf};
+
+    const SUITE: CipherSuite = CipherSuite::Kt128Sha256Ed25519;
+
+    /// A window far wider than the log's whole span, so only the root is distinguished. This is
+    /// the ordinary case for a log whose entries arrive close together, and the one where §9.1
+    /// step 4 applies.
+    const WEEK: u64 = 604_800_000;
+
+    /// A log where version `i` of the label was created in entry `layout[i]`.
+    ///
+    /// The other test modules use a log where entry `v` holds versions `0..=v`, which cannot
+    /// express what §9.1 is about: an owner whose versions went into particular entries, with
+    /// entries in between that added nothing. So this one takes the layout explicitly.
+    struct Log {
+        size: u64,
+        layout: Vec<u64>,
+        stamps: Vec<u64>,
+    }
+
+    impl Log {
+        fn new(size: u64, layout: &[u64]) -> Self {
+            Self {
+                size,
+                layout: layout.to_vec(),
+                stamps: (0..size).map(|i| 1_700_000_000_000 + i).collect(),
+            }
+        }
+
+        fn last(&self) -> u64 {
+            self.size - 1
+        }
+
+        fn stamp(&self, entry: u64) -> u64 {
+            self.stamps[entry as usize]
+        }
+
+        /// The greatest version present in entry `entry`, or `None` if the label is not there yet.
+        fn greatest_at(&self, entry: u64) -> Option<u32> {
+            let created = self.layout.iter().filter(|at| **at <= entry).count();
+            u32::try_from(created).unwrap().checked_sub(1)
+        }
+
+        /// The prefix tree of entry `entry`: every version created at or before it.
+        fn tree_at(&self, entry: u64) -> prefix::PrefixTree {
+            let mut tree = prefix::PrefixTree::new();
+            for (version, at) in self.layout.iter().enumerate() {
+                if *at <= entry {
+                    tree.insert(PrefixLeaf {
+                        vrf_output: key_for(u32::try_from(version).unwrap()),
+                        commitment: commitment_for(u32::try_from(version).unwrap()),
+                    })
+                    .unwrap();
+                }
+            }
+            tree
+        }
+
+        /// The descent §9.1 steps 1 and 3 make: which entries' timestamps a verifier reads on the
+        /// way towards `target`, and the first entry it finds that is not distinguished.
+        fn descend(&self, window: u64, target: u64) -> (Vec<u64>, Option<u64>) {
+            let last = self.last();
+            let mut reads = vec![last];
+            let mut current = ibst::root(self.size).unwrap();
+            let mut left = (0_u64, 0_u64);
+            let mut right = (last, self.stamp(last));
+            loop {
+                if !distinguished::is_distinguished(window, left, right).unwrap() {
+                    return (reads, Some(current));
+                }
+                if current == target {
+                    return (reads, None);
+                }
+                reads.push(current);
+                let timestamp = self.stamp(current);
+                if current < target {
+                    let next = ibst::right(current, self.size).unwrap();
+                    left = (current, timestamp);
+                    current = next;
+                } else {
+                    let next = ibst::left(current).unwrap();
+                    right = (current, timestamp);
+                    current = next;
+                }
+            }
+        }
+    }
+
+    /// Every search key the owner could need: the versions in the layout exist and so have
+    /// commitments, and the versions above it are looked up but do not.
+    fn keys_for(log: &Log) -> BTreeMap<u32, LadderKey> {
+        let created = u32::try_from(log.layout.len()).unwrap();
+        let mut keys = BTreeMap::new();
+        for version in 0..created.saturating_add(16) {
+            keys.insert(
+                version,
+                LadderKey {
+                    vrf_output: key_for(version),
+                    commitment: (version < created).then(|| commitment_for(version)),
+                },
+            );
+        }
+        keys
+    }
+
+    fn push(entry: u64, log: &Log, timestamps: &mut Vec<u64>, seen: &mut Vec<u64>) {
+        if !seen.contains(&entry) {
+            timestamps.push(log.stamp(entry));
+            seen.push(entry);
+        }
+    }
+
+    /// The proof a log would serve for §9.1, built by walking the same steps and asking each
+    /// entry's real prefix tree for exactly the lookups that step would make.
+    ///
+    /// The ladders here are indexed on the greatest version *at that entry*, not on the target,
+    /// which is what makes the results a prefix of the verifier's ladder rather than a match for
+    /// it — the same asymmetry as in a greatest-version search.
+    fn build_update(
+        log: &Log,
+        window: u64,
+        position: u64,
+        versions: usize,
+        owner: &OwnerState,
+    ) -> CombinedTreeProof {
+        let mut timestamps = Vec::new();
+        let mut seen = Vec::new();
+        let mut proofs = Vec::new();
+        let mut with_proofs: Vec<u64> = Vec::new();
+
+        // The view update supplies the frontier's timestamps before the algorithm starts.
+        for entry in ibst::frontier(log.size).unwrap() {
+            push(entry, log, &mut timestamps, &mut seen);
+        }
+
+        let previous_greatest = owner.greatest_version().unwrap();
+        let start_ver = previous_greatest.map_or(0, |version| version + 1);
+        let end_ver = start_ver + u32::try_from(versions).unwrap() - 1;
+        let mut established = Established::default();
+
+        // Phase one, over the previous tree.
+        let rightmost = position - 1;
+        let (reads, first) = log.descend(window, rightmost);
+        for entry in reads {
+            push(entry, log, &mut timestamps, &mut seen);
+        }
+        if let Some(first) = first {
+            let mut current = first;
+            while current > rightmost {
+                current = ibst::left(current).unwrap();
+            }
+            if let Some(greatest) = previous_greatest {
+                let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[]).unwrap();
+                if current != ibst::root(position).unwrap() {
+                    let parent = ibst::direct_path(current, position).unwrap()[0];
+                    established.assume(parent, owner.greatest_version_at(parent).unwrap(), &ladder);
+                }
+                established.assume(current, Some(greatest), &ladder);
+            }
+            // Step 2.1 as the current text has it: nothing is skipped unless a previous version
+            // existed, in which case entries at or before where it was inserted are.
+            let skip_through = previous_greatest.map(|_| owner.last_update());
+            loop {
+                if skip_through.is_none_or(|through| current > through) {
+                    let target = previous_greatest.unwrap_or(0);
+                    let (left_inclusion, right_non_inclusion) = established.sets_for(current);
+                    // A label with no versions at this entry cannot be expressed as a `greatest`
+                    // — the field is a `u32` and every value of it means some version exists —
+                    // so the honest ladder is written out directly: one lookup for version 0,
+                    // which comes back absent and ends it. This is the log-side face of
+                    // `DRAFT-08`.
+                    let asked = match log.greatest_at(current) {
+                        Some(greatest) => ladder::search_binary_ladder(
+                            target,
+                            greatest,
+                            &left_inclusion,
+                            &right_non_inclusion,
+                        )
+                        .unwrap(),
+                        None => vec![0],
+                    };
+                    let searches: Vec<HashValue> = asked.iter().map(|v| key_for(*v)).collect();
+                    let proof = log.tree_at(current).prove(SUITE, &searches).unwrap();
+                    established.record(current, &asked, &proof.results);
+                    push(current, log, &mut timestamps, &mut seen);
+                    proofs.push(proof);
+                    with_proofs.push(current);
+                }
+                if current == rightmost {
+                    break;
+                }
+                current = ibst::right(current, position).unwrap();
+            }
+        }
+
+        // Phase two.
+        let (reads, first) = log.descend(window, position);
+        for entry in reads {
+            push(entry, log, &mut timestamps, &mut seen);
+        }
+        if first.is_some() {
+            let (left_inclusion, right_non_inclusion) = established.sets_for(position);
+            let asked = ladder::search_binary_ladder(
+                end_ver,
+                log.greatest_at(position).unwrap_or(0),
+                &left_inclusion,
+                &right_non_inclusion,
+            )
+            .unwrap();
+            let searches: Vec<HashValue> = asked.iter().map(|v| key_for(*v)).collect();
+            let proof = log.tree_at(position).prove(SUITE, &searches).unwrap();
+            established.record(position, &asked, &proof.results);
+            push(position, log, &mut timestamps, &mut seen);
+            proofs.push(proof);
+            with_proofs.push(position);
+        }
+
+        // Steps 3 and 4's proof of the new versions the ladder did not cover.
+        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[]).unwrap();
+        let additional: Vec<u32> = (start_ver..=end_ver)
+            .filter(|version| !covered.contains(version))
+            .collect();
+        if !additional.is_empty() {
+            let searches: Vec<HashValue> = additional.iter().map(|v| key_for(*v)).collect();
+            push(position, log, &mut timestamps, &mut seen);
+            proofs.push(log.tree_at(position).prove(SUITE, &searches).unwrap());
+            with_proofs.push(position);
+        }
+
+        // §12.3.2: a prefix tree root for each entry whose timestamp was supplied but which no
+        // proof reconstructs, in ascending order of position.
+        let mut owed: Vec<u64> = seen
+            .iter()
+            .copied()
+            .filter(|entry| !with_proofs.contains(entry))
+            .collect();
+        owed.sort_unstable();
+        let prefix_roots = owed
+            .iter()
+            .map(|entry| log.tree_at(*entry).root(SUITE))
+            .collect();
+
+        CombinedTreeProof {
+            timestamps,
+            prefix_proofs: proofs,
+            prefix_roots,
+            inclusion: InclusionProof::new(Vec::new()),
+        }
+    }
+
+    /// Runs a verifier over a built proof, consuming the view update's timestamps first and
+    /// checking that nothing is left over afterwards.
+    fn verify(
+        log: &Log,
+        proof: &CombinedTreeProof,
+        window: u64,
+        position: u64,
+        versions: usize,
+        owner: &OwnerState,
+    ) -> core::result::Result<Updated, UpdateError> {
+        let retained = Retained::none();
+        let mut reader = Reader::new(proof, &retained);
+        for entry in ibst::frontier(log.size).unwrap() {
+            reader.timestamp(entry).unwrap();
+        }
+        let updated = owner_update(
+            SUITE,
+            log.size,
+            window,
+            position,
+            versions,
+            owner,
+            &keys_for(log),
+            &mut reader,
+        )?;
+        for entry in reader.entries_owed_roots() {
+            reader.prefix_root(entry).unwrap();
+        }
+        reader.finish()?;
+        Ok(updated)
+    }
+
+    /// A whole honest update: one new version, in a non-distinguished entry, with a previous tree
+    /// whose frontier still has to be checked. Every part of §9.1 is exercised — step 1's descent,
+    /// step 2's ladder over the previous tree, step 4's ladder at the new entry — and §12.3's
+    /// exact-count rule confirms the reading, since the proof is consumed to the last element.
+    #[test]
+    fn an_honest_update_consumes_the_proof_exactly() {
+        // Version 0 was created in entry 0; the update puts version 1 in entry 5.
+        let log = Log::new(7, &[0, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        let proof = build_update(&log, WEEK, 5, 1, &owner);
+        let updated = verify(&log, &proof, WEEK, 5, 1, &owner).unwrap();
+
+        assert!(!updated.distinguished, "entry 5 is not distinguished here");
+        assert_eq!(updated.root, Some(log.tree_at(5).root(SUITE)));
+        // Step 2 checked the previous tree's rightmost entry, which is entry 4.
+        assert_eq!(updated.previous, vec![(4, log.tree_at(4).root(SUITE))]);
+        // Step 4's contact map entry: the new greatest version, at the entry holding it.
+        assert_eq!(updated.contact, Some((5, 1)));
+        assert_eq!(updated.owner.upcoming, vec![5]);
+        assert_eq!(updated.owner.greatest_version().unwrap(), Some(1));
+    }
+
+    /// The reason §9.1 has a first phase at all. The log created version 1 in entry 4 — inside the
+    /// previous tree, without telling the owner — and now presents the update as if version 1 were
+    /// new in entry 5. Step 2's ladder over entry 4 shows version 1 already there, which is
+    /// exactly the misbehaviour §9.1 describes: "create a malicious version of a label, later
+    /// change the corresponding value to something non-malicious, and try to only inform the label
+    /// owner of the non-malicious value".
+    #[test]
+    fn a_version_hidden_in_the_previous_tree_is_caught() {
+        let honest = Log::new(7, &[0, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        // The log's real history, which the owner has not been told about.
+        let hidden = Log::new(7, &[0, 4]);
+        let proof = build_update(&hidden, WEEK, 5, 1, &owner);
+        let refused = verify(&honest, &proof, WEEK, 5, 1, &owner);
+        assert_eq!(
+            refused,
+            Err(UpdateError::PreviousTreeInconsistent {
+                position: 4,
+                claimed: 0,
+                exists: true,
+            })
+        );
+    }
+
+    /// Step 2.1's skip. The owner's last version went into entry 4, which is also the previous
+    /// tree's rightmost entry, so the ladder for it arrived with *that* update and this response
+    /// carries none. The walk still passes through the entry — its omissions still count towards
+    /// step 4's ladder — but nothing is read from it, and the proof is consumed exactly.
+    #[test]
+    fn an_entry_already_laddered_is_skipped() {
+        let log = Log::new(7, &[0, 4, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: vec![4],
+        };
+        assert_eq!(owner.last_update(), 4);
+        let proof = build_update(&log, WEEK, 5, 1, &owner);
+        let updated = verify(&log, &proof, WEEK, 5, 1, &owner).unwrap();
+        assert!(updated.previous.is_empty(), "{:?}", updated.previous);
+        assert_eq!(updated.contact, Some((5, 2)));
+        assert_eq!(updated.owner.upcoming, vec![4, 5]);
+    }
+
+    /// A multi-version update, which is the only case where §9.1's "additional" proof carries
+    /// anything. Creating versions 1, 2 and 3 at once means a search ladder for version 3 covers
+    /// 1 and 3 but not 2, so version 2 gets its own inclusion proof — from the same entry, which
+    /// makes this the first algorithm to lean on §12.3.4's rule that two proofs for one log entry
+    /// must agree about its prefix tree root.
+    #[test]
+    fn a_multi_version_update_proves_the_versions_the_ladder_misses() {
+        let log = Log::new(7, &[0, 5, 5, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        let covered = ladder::search_binary_ladder(3, 3, &[], &[]).unwrap();
+        assert!(!covered.contains(&2), "version 2 should need its own proof");
+
+        let proof = build_update(&log, WEEK, 5, 3, &owner);
+        // Two proofs from entry 5: step 4's ladder and the additional lookups.
+        assert_eq!(proof.prefix_proofs.len(), 3);
+        let updated = verify(&log, &proof, WEEK, 5, 3, &owner).unwrap();
+        assert_eq!(updated.root, Some(log.tree_at(5).root(SUITE)));
+        assert_eq!(updated.contact, Some((5, 3)));
+        assert_eq!(updated.owner.upcoming, vec![5, 5, 5]);
+        assert_eq!(updated.owner.greatest_version().unwrap(), Some(3));
+    }
+
+    /// A version the update claims to have created, but which is not in the prefix tree. This is
+    /// the check that makes the additional proof worth sending: without it a log could claim three
+    /// new versions and insert two.
+    #[test]
+    fn a_claimed_version_that_was_not_created_is_caught() {
+        let honest = Log::new(7, &[0, 5, 5, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        // Version 2 was never inserted, though 1 and 3 were.
+        let mut proof = build_update(&honest, WEEK, 5, 3, &owner);
+        let short = Log::new(7, &[0, 5, 6, 5]);
+        let additional = [key_for(2)];
+        proof.prefix_proofs[2] = short.tree_at(5).prove(SUITE, &additional).unwrap();
+        let refused = verify(&honest, &proof, WEEK, 5, 3, &owner);
+        assert_eq!(
+            refused,
+            Err(UpdateError::VersionNotCreated {
+                position: 5,
+                version: 2,
+            })
+        );
+    }
+
+    /// With every entry distinguished — a window of zero — §9.1 has almost nothing to do: step 1
+    /// finds no non-distinguished entry so step 2 is skipped entirely, and step 3 asks only for the
+    /// new versions a ladder would miss. The response carries no ladder at all.
+    ///
+    /// This is the degenerate shape, recorded deliberately: it passes while testing very little,
+    /// and mistaking it for coverage is how a verifier ends up never exercising step 4.
+    #[test]
+    fn a_distinguished_entry_needs_no_ladder() {
+        let log = Log::new(7, &[0, 5, 5, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        let proof = build_update(&log, 0, 5, 3, &owner);
+        // One proof only: the additional lookup for version 2.
+        assert_eq!(proof.prefix_proofs.len(), 1);
+        let updated = verify(&log, &proof, 0, 5, 3, &owner).unwrap();
+        assert!(updated.distinguished);
+        assert!(updated.previous.is_empty());
+        assert_eq!(updated.contact, None, "owner monitoring will reach entry 5");
+        assert_eq!(updated.root, Some(log.tree_at(5).root(SUITE)));
+    }
+
+    /// The most degenerate case of all, and a legitimate one: a distinguished entry whose single
+    /// new version a search ladder already covers. §9.1 asks for nothing, and the whole response
+    /// is a tree head plus the view update. Worth pinning, because a verifier that insists on
+    /// consuming at least one prefix proof would reject it.
+    #[test]
+    fn a_distinguished_single_version_update_asks_for_nothing() {
+        let log = Log::new(7, &[0, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: Vec::new(),
+        };
+        let proof = build_update(&log, 0, 5, 1, &owner);
+        assert!(proof.prefix_proofs.is_empty());
+        let updated = verify(&log, &proof, 0, 5, 1, &owner).unwrap();
+        assert!(updated.distinguished);
+        assert_eq!(updated.root, None);
+        assert!(updated.previous.is_empty());
+    }
+
+    /// §13.5 step 1: a new version cannot appear at or to the left of one the owner already knows
+    /// about. The prefix tree only grows, so a log claiming otherwise is describing a tree that
+    /// cannot exist.
+    #[test]
+    fn a_position_that_does_not_advance_is_refused() {
+        let log = Log::new(7, &[0, 4]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(0),
+            upcoming: vec![4],
+        };
+        let proof = CombinedTreeProof {
+            timestamps: Vec::new(),
+            prefix_proofs: Vec::new(),
+            prefix_roots: Vec::new(),
+            inclusion: InclusionProof::new(Vec::new()),
+        };
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        assert_eq!(
+            owner_update(
+                SUITE,
+                log.size,
+                WEEK,
+                4,
+                1,
+                &owner,
+                &keys_for(&log),
+                &mut reader
+            ),
+            Err(UpdateError::PositionNotAdvancing {
+                position: 4,
+                last_update: 4,
+            })
+        );
+        assert_eq!(
+            owner_update(
+                SUITE,
+                log.size,
+                WEEK,
+                9,
+                1,
+                &owner,
+                &keys_for(&log),
+                &mut reader
+            ),
+            Err(UpdateError::EntryDoesNotExist {
+                position: 9,
+                size: 7,
+            })
+        );
+        // §13.5 step 2 requires `info` to be non-empty: a response reporting no new versions has
+        // nothing to verify and cannot be treated as a successful update.
+        assert_eq!(
+            owner_update(
+                SUITE,
+                log.size,
+                WEEK,
+                5,
+                0,
+                &owner,
+                &keys_for(&log),
+                &mut reader
+            ),
+            Err(UpdateError::NoNewVersions)
+        );
+    }
+
+    /// The `uint32` version field again. An owner at `u32::MAX - 1` creating one more version
+    /// would take the greatest version to `u32::MAX`, which no ladder can establish: proving it is
+    /// the greatest needs a non-inclusion proof for version `2^32`.
+    #[test]
+    fn a_version_at_the_ceiling_is_refused() {
+        let log = Log::new(7, &[0, 5]);
+        let owner = OwnerState {
+            starting: 3,
+            version_at_starting: Some(u32::MAX - 1),
+            upcoming: Vec::new(),
+        };
+        let proof = CombinedTreeProof {
+            timestamps: Vec::new(),
+            prefix_proofs: Vec::new(),
+            prefix_roots: Vec::new(),
+            inclusion: InclusionProof::new(Vec::new()),
+        };
+        let retained = Retained::none();
+        let mut reader = Reader::new(&proof, &retained);
+        assert_eq!(
+            owner_update(
+                SUITE,
+                log.size,
+                WEEK,
+                5,
+                1,
+                &owner,
+                &keys_for(&log),
+                &mut reader
+            ),
+            Err(UpdateError::VersionOverflow)
+        );
+    }
+
+    /// An owner's own arithmetic. The awkward case is a label that did not exist at the reference
+    /// point: the versions created since then run from zero, so two of them means the greatest is
+    /// version 1 — and none of them means the label still does not exist.
+    #[test]
+    fn owner_state_counts_versions_from_where_it_started() {
+        let fresh = OwnerState {
+            starting: 3,
+            version_at_starting: None,
+            upcoming: vec![4, 4, 6],
+        };
+        assert_eq!(fresh.greatest_version().unwrap(), Some(2));
+        assert_eq!(fresh.greatest_version_at(3).unwrap(), None);
+        assert_eq!(fresh.greatest_version_at(4).unwrap(), Some(1));
+        assert_eq!(fresh.greatest_version_at(5).unwrap(), Some(1));
+        assert_eq!(fresh.greatest_version_at(6).unwrap(), Some(2));
+        assert_eq!(fresh.last_update(), 6);
+
+        let empty = OwnerState {
+            starting: 3,
+            version_at_starting: None,
+            upcoming: Vec::new(),
+        };
+        assert_eq!(empty.greatest_version().unwrap(), None);
+        assert_eq!(empty.last_update(), 3, "no updates, so the starting entry");
+
+        let established = OwnerState {
+            starting: 3,
+            version_at_starting: Some(7),
+            upcoming: vec![5],
+        };
+        assert_eq!(established.greatest_version().unwrap(), Some(8));
+        assert_eq!(established.greatest_version_at(4).unwrap(), Some(7));
+
+        let overflowing = OwnerState {
+            starting: 3,
+            version_at_starting: Some(u32::MAX),
+            upcoming: vec![5],
+        };
+        assert_eq!(
+            overflowing.greatest_version(),
+            Err(UpdateError::VersionOverflow)
+        );
+    }
+
+    /// §13.5 step 4's two checks on `binary_ladder`, which are about the response's shape rather
+    /// than the proof: the right number of steps, and no commitment for a version above what the
+    /// owner said it knew. A commitment above that is the log volunteering a value the owner never
+    /// asked about and has no way to check.
+    #[test]
+    fn the_response_ladder_is_checked_for_shape() {
+        let versions = ladder::update_binary_ladder(1, 1).unwrap();
+        assert_eq!(versions, vec![2, 3]);
+
+        let outputs: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
+        let none = vec![None; versions.len()];
+        let keys = update_ladder_keys(1, 1, Some(0), &outputs, &none).unwrap();
+        assert_eq!(keys.len(), 2);
+        assert!(keys[&2].commitment.is_none());
+
+        assert_eq!(
+            update_ladder_keys(1, 1, Some(0), &outputs[..1], &none[..1]),
+            Err(UpdateError::LadderCount {
+                expected: 2,
+                actual: 1,
+            })
+        );
+        // A commitment for version 2, which is above the advertised greatest version of 0.
+        let volunteered = vec![Some(commitment_for(2)), None];
+        assert_eq!(
+            update_ladder_keys(1, 1, Some(0), &outputs, &volunteered),
+            Err(UpdateError::UnexpectedCommitment { version: 2 })
+        );
+        // An owner that advertised no version at all cannot be sent any commitment.
+        assert_eq!(
+            update_ladder_keys(1, 1, None, &outputs, &volunteered),
+            Err(UpdateError::UnexpectedCommitment { version: 2 })
+        );
+    }
+
+    #[test]
+    fn update_errors_describe_themselves() {
+        use alloc::string::ToString;
+        let errors = [
+            UpdateError::EntryDoesNotExist {
+                position: 9,
+                size: 7,
+            },
+            UpdateError::PositionNotAdvancing {
+                position: 4,
+                last_update: 4,
+            },
+            UpdateError::NoNewVersions,
+            UpdateError::VersionOverflow,
+            UpdateError::PreviousTreeInconsistent {
+                position: 4,
+                claimed: 0,
+                exists: true,
+            },
+            UpdateError::PreviousTreeInconsistent {
+                position: 4,
+                claimed: 0,
+                exists: false,
+            },
+            UpdateError::NewVersionInconsistent {
+                position: 5,
+                claimed: 1,
+            },
+            UpdateError::LadderLength {
+                position: 5,
+                expected: 2,
+                actual: 1,
+            },
+            UpdateError::AdditionalLength {
+                position: 5,
+                expected: 1,
+                actual: 0,
+            },
+            UpdateError::VersionNotCreated {
+                position: 5,
+                version: 2,
+            },
+            UpdateError::LadderCount {
+                expected: 2,
+                actual: 1,
+            },
+            UpdateError::UnexpectedCommitment { version: 2 },
+            UpdateError::MissingLadderKey {
+                position: 5,
+                version: 2,
+            },
+            UpdateError::MissingCommitment {
+                position: 5,
+                version: 2,
+            },
+            UpdateError::NoParent { position: 4 },
+            UpdateError::from(Error::Exhausted {
+                array: "prefix_proofs",
+                position: 5,
+            }),
+            UpdateError::from(prefix::Error::DepthOverflow { depth: 256 }),
+            UpdateError::from(ibst::Error::EmptyLog),
+            UpdateError::from(ladder::Error::UnrepresentableRung {
+                rung: 1 << 33,
+                greatest: u32::MAX,
+            }),
+            UpdateError::from(distinguished::Error::MissingTimestamp { position: 1 }),
+        ];
+        for error in &errors {
+            assert!(!error.to_string().is_empty(), "{error:?}");
+        }
+        assert!(core::error::Error::source(&errors[0]).is_none());
+        for error in &errors[15..] {
+            assert!(core::error::Error::source(error).is_some(), "{error:?}");
+        }
+    }
+
+    /// Step 2.1's condition on a previous version having existed, which is the one thing the
+    /// 2026-07-28 rewording changed. The owner is creating a label's first version from a
+    /// reference point at entry 3, and the previous tree's frontier reaches back past it — so
+    /// under the current text entry 3 is inspected, where the earlier text (and the peer) would
+    /// have skipped it as "already laddered" by an update that never happened.
+    #[test]
+    fn a_first_version_skips_nothing_in_the_previous_tree() {
+        // dave's label is created in entry 6; nothing exists before it.
+        let log = Log::new(7, &[6]);
+        let owner = OwnerState {
+            starting: 5,
+            version_at_starting: None,
+            upcoming: Vec::new(),
+        };
+        assert_eq!(
+            owner.last_update(),
+            5,
+            "the reference point, with no updates"
+        );
+
+        let proof = build_update(&log, WEEK, 6, 1, &owner);
+        let updated = verify(&log, &proof, WEEK, 6, 1, &owner).unwrap();
+        // Entry 5 is at the owner's reference point, so the superseded reading would have read
+        // nothing here. The current one inspects it, and the proof carries the ladder for it.
+        assert_eq!(updated.previous, vec![(5, log.tree_at(5).root(SUITE))]);
+        assert_eq!(updated.contact, Some((6, 0)));
     }
 }

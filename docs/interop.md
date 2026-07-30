@@ -5,6 +5,22 @@ implementation that provably agrees with the Go ones, byte for byte." That
 requires a harness, and the harness constrains the design — so it is planned
 first.
 
+## Which text, and which peer
+
+The draft submodule is pinned at `12121fd` (2026-07-29), whose `docname` is
+`draft-ietf-keytrans-protocol-latest` — the editor's copy, some way past published -05. Section
+numbers throughout this repository still cite "-05" because that is the last published revision and
+the numbering has not moved; where the *text* has moved, the code says so at the point it matters
+and the register below records it.
+
+**The two are no longer in step.** The draft took four commits on 2026-07-28/29; katie has not moved
+since 2026-06-30. So there are now places where the draft says one thing, the peer does another, and
+both are recorded rather than reconciled: §4.2's frontier restart (`KT-05`), §14's
+`ManagerUpdateRequest` field order (`KT-07`), §9.1 step 2.1's condition on a previous version
+having existed (`KT-06`). Where a *proof* is at stake the peer's reading has to be implemented as
+well, because a `CombinedTreeProof`'s elements are ordered by the algorithm that built it — see
+`ibst::update_view_ancestors_only`.
+
 ## What we are interoperating with
 
 **`upstream/katie`** ([Bren2010/katie](https://github.com/Bren2010/katie), pinned at
@@ -397,7 +413,24 @@ shape drifts. The two implementations arrive differently: katie indexes a chain 
 and propagates a carry, `kt-tree::log` keeps subtree lengths beside their heads and merges
 the rightmost pair while the lengths match.
 
-### DRAFT-06: §4.2 can leave a user checking nothing at all
+### DRAFT-06: §4.2 can leave a user checking nothing at all — fixed, and the fix does not interoperate
+
+**Fixed in the draft on 2026-07-28**, by adding a restart: "unless there were no such log entries,
+in which case the log entry with index `size-1` lies on the new tree's frontier". The walk then
+begins at the user's own rightmost entry and reaches the new one, so the timestamp their clock
+bounds are checked against always arrives.
+
+Adopting it alone would have cost 31 checks against the pinned peer — 30 in `update-view.json`, and
+one live proof in `search.json`, which fails with "entry 6's timestamp contradicts entry 3's". That
+is not a bookkeeping difference: §12.3 orders a proof's elements by "the order that the algorithm
+the user is executing would request them", so a proof built under the earlier procedure must be read
+under the earlier procedure. Both readings are therefore implemented —
+`ibst::update_view` for the current text, `ibst::update_view_ancestors_only` for the peer's — and
+the replays consume katie's proofs with the latter. Recorded against the peer as `KT-05`.
+
+The original write-up follows, because the argument for *why* the hole was not a rare corner is
+what makes the fix worth having.
+
 
 Implementing §4.2's update-view procedure turned up a hole, and `update-view.json`
 records the Go peer reproducing it, which is what makes it the procedure's behaviour
@@ -682,6 +715,30 @@ versions. Measured against katie: for a seven-entry log with greatest version 6,
 either implementation — but the draft never says the results are a prefix, and it is the first
 thing an implementer gets wrong.
 
+**[KT-05] katie implements §4.2 as it read before 2026-07-28.** Its `UpdateView` has no frontier
+restart, so for the 15 advertised sizes in `update-view.json` where the user's rightmost entry is
+still on the new frontier it returns nothing at all. That is `DRAFT-06`, now fixed in the draft and
+still live in the peer. The consequence is not only a different list: proofs the peer builds are
+ordered by the procedure the peer ran, so consuming one means asking in its order. Both readings are
+implemented here; `update-view.json` compares the peer against its own and checks the current text
+against the guarantee the amendment added.
+
+**[KT-06] katie skips a previous-tree entry §9.1 no longer lets it skip.** Step 2.1 now reads "if a
+previous version of the label existed, and the current log entry's index is less than or equal to
+the index of the log entry where the previous greatest version was inserted". katie's condition is
+`x <= m.Owner.LastUpdate()`, and `LastUpdate` falls back to the owner's reference point when no
+version has been created since — so for a label whose first version is being created, katie skips
+entries at or before the reference point where the current text inspects them. No recorded case
+separates the two, because every case's walk begins to the right of the reference point; a
+`kt-tree` test covers the shape that does.
+
+**[KT-07] katie orders `ManagerUpdateRequest.signed_version` before `values`; §14 puts it after.**
+katie implemented the structure a fortnight before the July 2026 rework, and the rework's listing —
+once its duplicated members were removed on 2026-07-28 — puts `signed_version` last. This
+implementation follows the draft: the listing is well formed now, and nothing measured is given up,
+since the structure travels between the Service Operator and the Third-Party Manager rather than to
+a user, so no vector exchanges it.
+
 **[DRAFT-10] §12.3.6 omits the timestamps without which its own proof cannot be rooted.** For
 owner monitoring it lists "the timestamp for each log entry that causes the second algorithm of
 §8.3 to recurse either left or right" and, separately, "for each log entry that reaches step 5, a
@@ -696,6 +753,81 @@ the entry's ladder, and a verifier that expects them consumes the proof exactly.
 `monitor.json`'s `owner-monitor-reaches-step-5` case, which is the only recorded case where an
 entry reaches step 5 without recursing. Worth an editorial issue if the register is ever filed —
 an implementer following §12.3.6 literally builds a proof that no client can root.
+
+**[KT-04] katie cannot serve an update at all.** `Tree.Update` and `Tree.ManagerUpdate` return a
+channel of `UpdateResponse`, and every element of it is an error: `updater.next` builds its monitor
+with `algorithms.NewMonitor`, which leaves `Monitor.Owner` nil, and then calls `Monitor.Update`,
+whose first line refuses when `Owner` is nil. Measured at the pinned commit, on both the path that
+creates new versions and the path that only reports existing ones: `label owner state has not been
+initialized`, before any proof is built. No katie test exercises `Tree.Update`, which is consistent
+with the path never having run.
+
+This blocks the forward direction for §13.5 outright — there is no `UpdateResponse` to record, so
+none is claimed. §9.1's proof is still measurable, because the consumer half of the same code takes
+the owner state from its caller: `update.json` drives `ProducedProofHandle`, `UpdateView`,
+`NewMonitor` and `Monitor.Update` exactly as `updater.next` does, supplying the state the broken
+path leaves nil, and records what comes out. The reverse direction needs nothing special, since
+`StreamVerifier.Verify` sets `Owner` before calling the algorithm — so `from-kt.json` feeds
+kt-built §9.1 proofs to katie's own reading of it.
+
+Filed as [katie#1](https://github.com/Bren2010/katie/issues/1): a blocker by the register's rule,
+and not one measurement can settle. Two lines of initialization would fix it, but which state the
+log should attribute to a requester is katie's decision, not this implementation's — so the report
+asks rather than proposing a patch.
+
+**[DRAFT-11] §14's `ManagerUpdateRequest` listed every field twice.** *Fixed on 2026-07-28, two
+days before it was filed here — the pin was stale, which is the lesson.* The presentation was:
+
+```tls-presentation
+struct {
+  UpdateRequest request;
+  optional<uint64> last;
+
+  opaque label<0..2^8-1>;
+  optional<uint32> greatest_version;
+  UpdateValue values<0..2^8-1>;
+
+  uint32 signed_version;
+} ManagerUpdateRequest;
+```
+
+`UpdateRequest` already contains `last`, `label`, `greatest_version` and `values`, so as written
+every field appears twice. Tracing it upstream shows what happened: the structure was
+`{ UpdateRequest request; opaque signature<0..2^16-1>; }` until a rework in July 2026 spelled the
+fields out inline, and the first member was never deleted.
+
+That leaves the field order undetermined, and it is not a cosmetic question. The listing puts
+`signed_version` last; katie — which implemented this two weeks before the rework landed — puts it
+before `values`. The prose says only that the structure "is the same as `UpdateRequest`" and "also
+contains a `signed_version` field", which does not choose between them. This implementation follows
+the peer, since a corrupt listing is not evidence for anything and the peer's order is what
+interoperates; `kt-wire::requests` pins the choice as bytes and says why.
+
+What survives is narrower and sharper than what was filed. With the listing well formed,
+`signed_version`-after-`values` is normative and the peer is the one diverging, which makes the
+remainder a peer finding (`KT-07`) rather than a draft one. This implementation follows the draft.
+
+Filed as [draft-protocol#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) against
+a submodule pin that was already two days out of date. Checking upstream before filing would have
+caught it; the issue has been re-scoped to the order alone.
+
+**[DRAFT-12] §13.5 gained `skipped_versions`, and §9.1 was not told.** As of 2026-07-28 an
+`UpdateResponse` under `thirdPartyManagement` carries a `uint32 skipped_versions`: where the Service
+Operator's signed version number runs ahead of the Manager's counter, the Manager fills the gap with
+dummy versions whose commitment is all zeros, and those take the *lower* counters. §14 says they
+"serve the function of skipping the corresponding version counters".
+
+§9.1 says nothing about them. Its VRF-proof set is "the set of all versions that would be contained
+in a search binary ladder for the new greatest version" plus "each of these individual versions" —
+and whether a skipped version is one of "these" is unstated, as is whether step 3 or 4's inclusion
+proof must cover a version whose commitment is a known constant. Both readings are defensible and
+they differ in the number of elements a proof carries, which is exactly the class of ambiguity
+§12.3's exact-count rule turns into an interop failure.
+
+Not filed: unresolvable by measurement, since katie predates the field entirely, but also
+unreachable — `thirdPartyManagement` is the one mode with no §9.1 vector, because the peer cannot
+serve an update in any mode (`KT-04`). The wire field is implemented and the algorithm is left
+alone; when a peer exists that produces one of these, this is the first thing to measure.
 
 **[NOTE-03] `opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
@@ -750,10 +882,19 @@ is stable.
 Findings are tracked here rather than filed, with one exception. The rule is that a finding gets
 filed when it is a **blocker** — something that cannot be resolved either by reading the
 specification or by measuring the peer, so that no amount of further work here will settle it.
-`DRAFT-09` is the first to meet that bar and is filed as
-[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48). Everything
-else is resolved: the behaviour is known, a committed vector pins it, and a filing would be a
-courtesy rather than a necessity.
+`DRAFT-09` was the first to meet that bar, and its answer — "the appendix is wrong" — is the
+clearest illustration of why the rule is drawn where it is: katie implements the parameter-free
+version either way, so no amount of measurement could have settled what the text meant.
+`DRAFT-11` and `KT-04` are the other two: one was a specification that contradicted itself, the
+other a peer code path that cannot run. Everything else is resolved: the behaviour is known, a
+committed vector pins it, and a filing would be a courtesy rather than a necessity.
+
+Two lessons from the 2026-07-28 draft revision, which resolved five entries here at once. **Check
+the pin before filing**: `DRAFT-11` had been fixed upstream two days before it was filed, and the
+issue would not have been written had the submodule been fetched first. And **a resolution can cost
+more than the ambiguity did**: `DRAFT-06`'s fix is the right change to the specification and it makes
+the draft and the pinned peer incompatible on the wire, which is why both readings now exist in the
+code rather than one.
 
 | ID | What | Belongs to | Pinned by | Status |
 |---|---|---|---|---|
@@ -761,17 +902,23 @@ courtesy rather than a necessity.
 | `KT-02` | `EvaluateBeforeAfter` treats §11.9's all-zero copath element as an opaque node | katie | `prefix-mutation.json` `remove-every-leaf` | tracked locally |
 | `KT-03` | `EvaluateBeforeAfter` refuses the replacement §15.2 permits | katie | `prefix-mutation.json` `replace-in-place` | tracked locally |
 | `DRAFT-01` | A greatest version of `2^32-1` cannot be proven at all | draft | `kt-tree::ladder` refuses it | tracked locally |
-| `DRAFT-02` | §12.2 leaves `nonInclusionParent`'s `depth` and its element accounting implicit | draft | `prefix-tree.json` | tracked locally |
+| `DRAFT-02` | §12.2 leaves `nonInclusionParent`'s `depth` and its element accounting implicit | draft | `prefix-tree.json` | **half resolved**: §12.2 now defines `depth` as the missing child's, the reading used here; the element accounting is still implicit |
 | `DRAFT-03` | §12.2's `uint8 depth` cannot express depth 256 | draft | `kt-tree::prefix` `DepthOverflow` | tracked locally |
 | `DRAFT-04` | §15.2 step 7 cannot determine the root when a removal's sibling is uncovered | draft | `prefix-mutation.json`, `auditor-update.json` | tracked locally |
 | `DRAFT-05` | §15.2 cannot audit a log entry that changes nothing | draft | `auditor-update.json` `change-nothing` | tracked locally |
-| `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::leaves_right_edge_unchecked` | tracked locally |
-| `DRAFT-07` | §11.2's grouped `select` reads two ways; the two Go implementations took one each, and no signature cross-verifies in contactMonitoring | draft | `tree-head.json`, including a negative case carrying a signature valid under the other reading | tracked locally |
-| `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | tracked locally |
+| `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::ancestors_only_leaves_right_edge_unchecked` | **resolved**: the 2026-07-28 restart clause; the peer still lags, so both readings are implemented (`KT-05`) |
+| `DRAFT-07` | §11.2's grouped `select` reads two ways; the two Go implementations took one each, and no signature cross-verifies in contactMonitoring | draft | `tree-head.json`, including a negative case carrying a signature valid under the other reading | **resolved**: `case contactMonitoring:` deleted on 2026-07-28, which is the reading implemented here |
+| `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | **resolved**: §13.1 now says no negative result is encodable and clients MUST treat one as failed validation; the peer sends them anyway |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
 | `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
 | `DRAFT-09` | Appendix B's `monitoring_binary_ladder` keeps a `left_inclusion` parameter whose prose was removed; the two readings fail against each other | draft | `monitor.json`, §8.2 replays under the empty-set reading | **resolved**: the appendix is wrong ([#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48)); fix sent as [#49](https://github.com/ietf-wg-keytrans/draft-protocol/pull/49) |
 | `DRAFT-10` | §12.3.6 omits the timestamp of an entry that reaches step 5 without recursing, so its own proof cannot be rooted | draft | `monitor.json` `owner-monitor-reaches-step-5` | tracked locally; resolved by measurement |
+| `KT-04` | `Tree.Update` cannot answer any request: the owner state is checked but never initialized | katie | `update.json` drives the algorithm directly, supplying the state | **filed**: [katie#1](https://github.com/Bren2010/katie/issues/1) |
+| `DRAFT-11` | §14's `ManagerUpdateRequest` listed every field twice | draft | `kt-wire::requests` | **resolved**: duplication removed 2026-07-28, before it was filed; the order half is now `KT-07` |
+| `KT-05` | §4.2 without the 2026-07-28 frontier restart, so 15 advertised sizes get nothing back | katie | `update-view.json`, both readings; `search.json`'s advertised-size replay | tracked locally |
+| `KT-06` | §9.1 step 2.1 skipped unconditionally, where the current text requires a previous version to have existed | katie | `kt-tree::combined` test `a_first_version_skips_nothing_in_the_previous_tree` | tracked locally |
+| `KT-07` | `ManagerUpdateRequest.signed_version` ordered before `values`, where §14 puts it after | katie | `kt-wire::requests` round-trip pins the draft's order as bytes | asked as [#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) |
+| `DRAFT-12` | §13.5 gained `skipped_versions`, but §9.1 does not say how its ladder set or additional-proof set treats a skipped version | draft | `kt-wire::responses` decodes the field; the algorithm is untouched | tracked locally |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
 Two ground rules for anything added here. A finding is only a finding once a committed

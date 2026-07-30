@@ -7,9 +7,14 @@
 //! disagreement about how a configuration encodes is a disagreement about every
 //! signature the log has ever produced.
 //!
-//! # A disagreement about §11.2, found by comparing implementations
+//! # A disagreement about §11.2, found by comparing implementations — since resolved
 //!
-//! §11.2 writes the mode-dependent part of `Configuration` as:
+//! **Resolved on 2026-07-28: the draft deleted `case contactMonitoring:`, which is the reading
+//! this module implements.** The account below is kept because the negative vector in
+//! `tree-head.json` — a signature valid only under the other reading — still guards the choice,
+//! and because the reasoning is what a future grouped `select` should be read against.
+//!
+//! §11.2 used to write the mode-dependent part of `Configuration` as:
 //!
 //! ```tls-presentation
 //! select (Configuration.mode) {
@@ -41,11 +46,12 @@
 //! `thirdPartyManagement`, so under contact monitoring the key would have nothing
 //! to verify. So the `case contactMonitoring:` label looks like an editing slip.
 //!
-//! This module follows katie and the prose, because that is what interoperates and
-//! what makes semantic sense. [`Configuration::leaf_public_key_modes`] states the
+//! This module followed katie and the prose, because that is what interoperated and
+//! what made semantic sense. [`Configuration::leaf_public_key_modes`] states the
 //! rule in one place, and `interop/vectors/tree-head.json` pins it in all three
-//! modes so the choice is checked rather than assumed. Filed upstream; if the
-//! working group resolves it the other way, that function and its vector change.
+//! modes so the choice is checked rather than assumed. The draft has since said the
+//! same, so nothing here changes; had it gone the other way, that function and its
+//! vector would have.
 
 use alloc::vec::Vec;
 
