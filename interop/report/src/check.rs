@@ -1086,7 +1086,8 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
             checks.push(Check::new(
                 "replaying §6.3 consumes the proof exactly (§12.3)",
                 if case.name == "label-does-not-exist" {
-                    "every element read, none left over (the label has no versions)"
+                    "every element read, none left over \
+                     (a negative result, which §13.1 requires rejecting)"
                 } else {
                     "every element read, none left over"
                 },
@@ -1251,7 +1252,10 @@ fn replay_greatest_version(
     // when the user advertised a size.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1272,9 +1276,10 @@ fn replay_greatest_version(
     let (inspected_pairs, note) = match &outcome {
         combined::Outcome::Found(search) => (&search.inspected, ""),
         // The label has no versions. §6.3 does not describe this response; see DRAFT-08.
-        combined::Outcome::NoVersions { inspected, .. } => {
-            (inspected, " (the label has no versions)")
-        }
+        combined::Outcome::NegativeResult { inspected, .. } => (
+            inspected,
+            " (a negative result, which §13.1 requires rejecting)",
+        ),
     };
 
     // Any entry that got a timestamp but no proof needs its prefix root, which is what
@@ -1327,7 +1332,10 @@ fn replay_fixed_version(
     // §12.3.1's view update comes first, exactly as for a greatest-version search.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1592,7 +1600,10 @@ fn replay_contact_monitor(
     // §12.3.4's view update comes first, as for every other operation.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -3030,13 +3041,43 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
         let size = case.input.size;
         let advertised = case.input.advertised;
 
+        // The peer implements §4.2 as it read before 2026-07-28, so that is what its
+        // answers are compared against. The current text's procedure is checked below,
+        // against the property the amendment added rather than against the peer.
         let mut checks = vec![Check::new(
-            "update_view(size, advertised) (§4.2)",
+            "update_view as the peer reads §4.2 (before 2026-07-28)",
             render_list(&case.expect.entries),
-            render_result(ibst::update_view(size, advertised), |entries| {
-                render_list(&entries)
-            }),
+            render_result(
+                ibst::update_view_ancestors_only(size, advertised),
+                |entries| render_list(&entries),
+            ),
         )];
+
+        // What the amendment guarantees: the list ends at the new rightmost entry, so a
+        // user always learns the timestamp their clock bounds are checked against. There is
+        // no peer answer to compare this to — the peer predates the clause — so the check
+        // is against the draft's own guarantee, and it is the only check here that is not a
+        // cross-implementation comparison.
+        let current = ibst::update_view(size, advertised);
+        let up_to_date = advertised == Some(size);
+        checks.push(Check::new(
+            "update_view under the current §4.2 ends at the rightmost entry",
+            if up_to_date {
+                "nothing to send".to_owned()
+            } else {
+                format!("ends at entry {}", size.saturating_sub(1))
+            },
+            render_result(current, |entries| {
+                if up_to_date && entries.is_empty() {
+                    "nothing to send".to_owned()
+                } else {
+                    entries.last().map_or_else(
+                        || "nothing at all".to_owned(),
+                        |last| format!("ends at entry {last}"),
+                    )
+                }
+            }),
+        ));
 
         if let Some(expected) = &case.expect.frontier {
             checks.push(Check::new(
@@ -3053,7 +3094,7 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
                 "whether the rightmost entry is left unchecked (§4.2)",
                 expected.to_string(),
                 render_result(
-                    ibst::leaves_right_edge_unchecked(size, advertised),
+                    ibst::ancestors_only_leaves_right_edge_unchecked(size, advertised),
                     |flag| flag.to_string(),
                 ),
             ));
@@ -3737,7 +3778,10 @@ fn replay_owner_update(
     // §12.3.1's view update first, as for every other operation.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {

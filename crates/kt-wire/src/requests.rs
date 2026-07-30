@@ -397,19 +397,20 @@ impl Decode for UpdateRequest {
 /// commitment per version — until the numbers line up. A `signed_version` *below* it "generally
 /// indicates a bug in the Service Operator" and MUST be rejected.
 ///
-/// # The field order here is the peer's, not the draft's
+/// # The field order is the draft's, and the peer disagrees
 ///
-/// §14's presentation for this structure is corrupt: it opens with `UpdateRequest request;` and
-/// then lists every field of an `UpdateRequest` again inline, so each one appears twice. Tracing
-/// it upstream shows why — the structure was `{ UpdateRequest request; opaque signature<...>; }`
-/// until a rework in July 2026 spelled the fields out and left the first member behind.
+/// §14's presentation used to open with `UpdateRequest request;` and then list every field of an
+/// `UpdateRequest` again inline, so each appeared twice — a leftover from when the structure was
+/// `{ UpdateRequest request; opaque signature<...>; }`. That was fixed on 2026-07-28, and with the
+/// listing well formed it is now the statement of the field order: `signed_version` comes **after**
+/// `values`.
 ///
-/// That makes the listing unusable as a wire format, and it is the *only* statement of the field
-/// order: the prose says only that the structure "is the same as `UpdateRequest`" and "also
-/// contains a `signed_version` field". The listing puts `signed_version` after `values`; the Go
-/// peer, which implemented this two weeks before the rework landed, puts it before. Since the
-/// listing cannot be right as written, there is nothing to prefer it on, and this follows the peer
-/// so that the two interoperate. Recorded as `DRAFT-11`, filed as draft-protocol#50.
+/// The Go peer puts it before, having implemented this a fortnight before the rework landed. This
+/// follows the draft, because a well-formed presentation outranks a peer and nothing measured is
+/// given up by doing so — no vector exchanges this structure, since it travels between the Service
+/// Operator and the Third-Party Manager rather than to a user. Recorded as `DRAFT-11` (the
+/// duplication, now fixed) and `KT-07` (the order the peer uses); asked upstream as
+/// draft-protocol#50, which was filed before the fix landed and re-scoped to the order alone.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ManagerUpdateRequest {
     /// The tree size the user last observed.
@@ -443,9 +444,9 @@ impl ManagerUpdateRequest {
         let last = dec.optional()?;
         let label = dec.opaque_vector(LABEL)?.to_vec();
         let greatest_version = dec.optional()?;
-        let signed_version = dec.u32()?;
         let values =
             dec.vector_with(Self::VALUES, |dec| UpdateValue::decode_with_mode(dec, mode))?;
+        let signed_version = dec.u32()?;
         Ok(Self {
             last,
             label,
@@ -461,8 +462,9 @@ impl Encode for ManagerUpdateRequest {
         enc.optional(self.last.as_ref())?;
         enc.opaque_vector(LABEL, &self.label)?;
         enc.optional(self.greatest_version.as_ref())?;
+        enc.vector(Self::VALUES, &self.values)?;
         enc.u32(self.signed_version);
-        enc.vector(Self::VALUES, &self.values)
+        Ok(())
     }
 }
 
@@ -844,9 +846,9 @@ mod tests {
     }
 
     /// A `ManagerUpdateRequest` round-trips, and its field order is the one recorded in the type's
-    /// documentation: `signed_version` before `values`, which is the Go peer's order and not the
-    /// (corrupt) listing in §14. Pinning it as bytes here is what makes the divergence visible if
-    /// either side ever changes its mind.
+    /// documentation: `signed_version` after `values`, as §14's listing has had it since the
+    /// duplicated members were removed on 2026-07-28. The Go peer puts it before. Pinning it as
+    /// bytes here is what makes the divergence visible if either side changes its mind.
     #[test]
     fn a_manager_update_request_round_trips() {
         let request = ManagerUpdateRequest {
@@ -872,13 +874,13 @@ mod tests {
             request
         );
 
-        // The four bytes of `signed_version` sit immediately after `greatest_version`, which ends
-        // the part this shares with an `UpdateRequest`. `last` is 1 + 8 bytes, the label 1 + 5,
-        // `greatest_version` 1 + 4.
+        // `signed_version` is the last four bytes, after `values`. Everything before it is an
+        // `UpdateRequest` with `UpdateValue`s in place of `LabelValue`s.
+        assert_eq!(&bytes[bytes.len() - 4..], &[0, 0, 0, 4]);
+        // And `values` begins where an `UpdateRequest`'s would: `last` is 1 + 8 bytes, the label
+        // 1 + 5, `greatest_version` 1 + 4, then the vector's own count.
         let prefix = 1 + 8 + 1 + 5 + 1 + 4;
-        assert_eq!(&bytes[prefix..prefix + 4], &[0, 0, 0, 4]);
-        // And `values` follows it, with its own count.
-        assert_eq!(bytes[prefix + 4], 1);
+        assert_eq!(bytes[prefix], 1);
     }
 
     /// `signed_version` is zero when there is nothing signed, which §14 states as a rule rather

@@ -25,15 +25,17 @@
 //!
 //! Both are resolved here the way the Go peer resolves them, and both are pinned
 //! by `interop/vectors/prefix-tree.json` so the choice is checked rather than
-//! assumed. They are worth an upstream question:
+//! assumed. The draft has since settled the first:
 //!
-//! 1. **What `depth` counts for `nonInclusionParent`.** §12.2 says the terminal
-//!    node is "a parent node that lacks the desired child" and that `depth` is
-//!    "the depth of the terminal node". Read literally those give different
-//!    numbers, one apart: the parent sits one level above the child slot the
-//!    search wanted. This implementation uses the number of bits consumed to reach
-//!    the *missing child slot*, which is what the peer does and what makes `depth`
-//!    mean the same thing for all three result types.
+//! 1. **What `depth` counts for `nonInclusionParent`** — *resolved on 2026-07-28 in
+//!    favour of the reading here.* §12.2 said the terminal node is "a parent node
+//!    that lacks the desired child" and that `depth` is "the depth of the terminal
+//!    node", which read literally gave numbers one apart. It now adds: "In the
+//!    context of a `nonInclusionParent` result, the `depth` field contains the depth
+//!    of the missing child node, not the depth of the parent." That is the number of
+//!    bits consumed to reach the *missing child slot*, which is what this
+//!    implementation and the peer both use, and what makes `depth` mean the same
+//!    thing for all three result types.
 //! 2. **Whether a missing child consumes a proof element.** §12.2 says `elements`
 //!    holds "the fewest node values that can be hashed together with the provided
 //!    leaves to produce the root", and also that an all-zero string is "listed

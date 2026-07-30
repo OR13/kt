@@ -958,7 +958,7 @@ pub fn greatest_version_search(
                 };
                 reader.establish_root(current, root)?;
                 inspected.push((current, root));
-                return Ok(Outcome::NoVersions { start, inspected });
+                return Ok(Outcome::NegativeResult { start, inspected });
             }
             return Err(SearchError::RightmostInconsistent {
                 position: current,
@@ -1015,13 +1015,23 @@ pub fn greatest_version_search(
 pub enum Outcome {
     /// The log's claim about the greatest version holds.
     Found(Search),
-    /// The label has no versions at all.
+    /// The response reports that the label has no versions, which §13.1 requires a client to
+    /// **reject**.
     ///
-    /// §6.3 has no branch for this, which is `DRAFT-08` in `docs/interop.md`: the log answers
-    /// with a claim of version 0 and a proof that version 0 does not exist, and step 2 read
-    /// literally rejects it. Reported as an outcome because the response is well formed and
-    /// says something true — just not something §6.3 anticipates.
-    NoVersions {
+    /// The log answers with a claim of version 0 and a proof that version 0 does not exist.
+    /// §6.3 step 2 read literally rejects it, and §6.3 offers no branch that accepts it —
+    /// `DRAFT-08`. As of 2026-07-28 the draft says why: "this document doesn't define a way to
+    /// encode a negative result (for a missing label or version) in a `SearchResponse`. This
+    /// functionality was omitted due to its low expected utility. Unless a client has adopted
+    /// a documented protocol for encoding negative search results, clients MUST consider any
+    /// `SearchResponse` with a negative result as invalid and having failed validation."
+    ///
+    /// So this is not a successful search. It is reported as a distinct outcome rather than an
+    /// error because the two situations are worth telling apart — a proof that is malformed and
+    /// a proof that is well formed and reports a negative result — and because the peer serves
+    /// such responses (`KT-05`), so a harness needs to name what it received. A client MUST NOT
+    /// treat it as an answer about the label absent the documented protocol §13.1 refers to.
+    NegativeResult {
         /// Where the search started.
         start: u64,
         /// The entries inspected, with the prefix tree roots their proofs computed.
@@ -1644,9 +1654,11 @@ mod search_tests {
     }
 
     /// A label with no versions: `DRAFT-08`. The log claims version 0 and proves it absent, and
-    /// §6.3 step 2 read literally rejects the only answer available.
+    /// §6.3 step 2 read literally rejects the only answer available — which §13.1 now confirms
+    /// is the right thing to do, since the draft defines no encoding for a negative result and
+    /// requires clients to treat one as failed validation.
     #[test]
-    fn a_label_with_no_versions_is_an_outcome_not_a_failure() {
+    fn a_label_with_no_versions_is_reported_as_a_negative_result() {
         let size = 1_u64;
         let window = 604_800_000;
         let empty = prefix::PrefixTree::new();
@@ -1668,12 +1680,12 @@ mod search_tests {
         let outcome =
             greatest_version_search(SUITE, size, window, 0, &keys_through(0), &mut reader).unwrap();
         match outcome {
-            Outcome::NoVersions { start, inspected } => {
+            Outcome::NegativeResult { start, inspected } => {
                 assert_eq!(start, 0);
                 assert_eq!(inspected.len(), 1);
                 assert_eq!(inspected[0].1, empty.root(SUITE));
             }
-            Outcome::Found(_) => panic!("the label has no versions"),
+            Outcome::Found(_) => panic!("a negative result must not read as a found version"),
         }
         reader.finish().unwrap();
     }
@@ -4211,12 +4223,22 @@ fn verify_previous_tree(
     }
 
     let mut inspected = Vec::new();
-    let last_update = owner.last_update();
+    // Step 2.1, as it read from 2026-07-28: "If a previous version of the label existed, and the
+    // current log entry's index is less than or equal to the index of the log entry where the
+    // previous greatest version was inserted, skip inspecting this log entry." The condition on a
+    // previous version having existed is load-bearing and easy to lose: with no previous version
+    // there is no earlier update whose response could have carried the ladder, so nothing is
+    // skipped — not even entries at or before the owner's reference point.
+    //
+    // The earlier text said "if a binary ladder would have already been received from this log
+    // entry in step 2.2 when processing a previous label update", which is the same rule for a
+    // label that has versions and silently different for one that does not. The peer implements
+    // the earlier reading, falling back to the reference point unconditionally; no recorded case
+    // separates them, because every case's walk begins to the right of the reference point.
+    // Recorded as `KT-06`.
+    let skip_through = previous_greatest.map(|_| owner.last_update());
     loop {
-        // Step 2.1: an entry at or before the owner's last update already had its ladder in the
-        // response that reported that update. The walk still passes through it, and its omissions
-        // still count, but nothing is read.
-        if current > last_update {
+        if skip_through.is_none_or(|through| current > through) {
             // Step 2.2. The target is the previous greatest version, or 0 where the label did not
             // exist — there is no lower version to ask about.
             let target = previous_greatest.unwrap_or(0);
@@ -4859,17 +4881,28 @@ mod update_tests {
                 }
                 established.assume(current, Some(greatest), &ladder);
             }
+            // Step 2.1 as the current text has it: nothing is skipped unless a previous version
+            // existed, in which case entries at or before where it was inserted are.
+            let skip_through = previous_greatest.map(|_| owner.last_update());
             loop {
-                if current > owner.last_update() {
+                if skip_through.is_none_or(|through| current > through) {
                     let target = previous_greatest.unwrap_or(0);
                     let (left_inclusion, right_non_inclusion) = established.sets_for(current);
-                    let asked = ladder::search_binary_ladder(
-                        target,
-                        log.greatest_at(current).unwrap_or(0),
-                        &left_inclusion,
-                        &right_non_inclusion,
-                    )
-                    .unwrap();
+                    // A label with no versions at this entry cannot be expressed as a `greatest`
+                    // — the field is a `u32` and every value of it means some version exists —
+                    // so the honest ladder is written out directly: one lookup for version 0,
+                    // which comes back absent and ends it. This is the log-side face of
+                    // `DRAFT-08`.
+                    let asked = match log.greatest_at(current) {
+                        Some(greatest) => ladder::search_binary_ladder(
+                            target,
+                            greatest,
+                            &left_inclusion,
+                            &right_non_inclusion,
+                        )
+                        .unwrap(),
+                        None => vec![0],
+                    };
                     let searches: Vec<HashValue> = asked.iter().map(|v| key_for(*v)).collect();
                     let proof = log.tree_at(current).prove(SUITE, &searches).unwrap();
                     established.record(current, &asked, &proof.results);
@@ -5397,5 +5430,33 @@ mod update_tests {
         for error in &errors[15..] {
             assert!(core::error::Error::source(error).is_some(), "{error:?}");
         }
+    }
+
+    /// Step 2.1's condition on a previous version having existed, which is the one thing the
+    /// 2026-07-28 rewording changed. The owner is creating a label's first version from a
+    /// reference point at entry 3, and the previous tree's frontier reaches back past it — so
+    /// under the current text entry 3 is inspected, where the earlier text (and the peer) would
+    /// have skipped it as "already laddered" by an update that never happened.
+    #[test]
+    fn a_first_version_skips_nothing_in_the_previous_tree() {
+        // dave's label is created in entry 6; nothing exists before it.
+        let log = Log::new(7, &[6]);
+        let owner = OwnerState {
+            starting: 5,
+            version_at_starting: None,
+            upcoming: Vec::new(),
+        };
+        assert_eq!(
+            owner.last_update(),
+            5,
+            "the reference point, with no updates"
+        );
+
+        let proof = build_update(&log, WEEK, 6, 1, &owner);
+        let updated = verify(&log, &proof, WEEK, 6, 1, &owner).unwrap();
+        // Entry 5 is at the owner's reference point, so the superseded reading would have read
+        // nothing here. The current one inspects it, and the proof carries the ladder for it.
+        assert_eq!(updated.previous, vec![(5, log.tree_at(5).root(SUITE))]);
+        assert_eq!(updated.contact, Some((6, 0)));
     }
 }

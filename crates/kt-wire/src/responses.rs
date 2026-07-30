@@ -282,6 +282,10 @@ impl Encode for OwnerInitResponse {
 ///   FullTreeHead full_tree_head;
 ///
 ///   uint64 position;
+///   select (Configuration.mode) {
+///     case thirdPartyManagement:
+///       uint32 skipped_versions;
+///   }
 ///   LabelValue values<0..2^8-1>;
 ///   UpdateInfo info<0..2^8-1>;
 ///
@@ -293,6 +297,12 @@ impl Encode for OwnerInitResponse {
 /// `position` is where the new versions were inserted, and §13.5 warns that it "may or may not be
 /// the rightmost log entry" — an update is sequenced into whatever entry the log is building, and
 /// entries to its right may already exist by the time the response is sent.
+///
+/// `skipped_versions` counts version counters that were skipped "due to desynchronization between
+/// the Service Operator and the Third-Party Manager": under `thirdPartyManagement` the Service
+/// Operator signs a version number before the Manager assigns one, and where its number is ahead
+/// the Manager fills the gap with dummy versions whose commitment is all zeros. They take the
+/// *lower* counters, so the versions this response reports begin after them.
 ///
 /// `values` carries a meaning by its emptiness rather than its contents. Empty means every version
 /// in the request was created and nothing else was: the ordinary success. Non-empty means the
@@ -324,6 +334,8 @@ pub struct UpdateResponse {
     pub full_tree_head: FullTreeHead,
     /// The log entry the new versions were inserted into.
     pub position: u64,
+    /// Version counters skipped by dummy entries, under `thirdPartyManagement` only (§14).
+    pub skipped_versions: Option<u32>,
     /// The values created, when the request was disregarded; empty when it was honoured.
     pub values: Vec<LabelValue>,
     /// One entry per version created: its commitment opening, and its signature under
@@ -356,6 +368,10 @@ impl UpdateResponse {
     ) -> Result<Self> {
         let full_tree_head = FullTreeHead::decode_with_mode(dec, mode)?;
         let position = dec.u64()?;
+        let skipped_versions = match mode {
+            DeploymentMode::ThirdPartyManagement => Some(dec.u32()?),
+            DeploymentMode::ContactMonitoring | DeploymentMode::ThirdPartyAuditing => None,
+        };
         let values = dec.vector(Self::VALUES)?;
         let info = dec.vector_with(Self::INFO, |dec| UpdateInfo::decode_with(dec, nc, mode))?;
         let binary_ladder = dec.vector_with(Self::LADDER, |dec| {
@@ -365,6 +381,7 @@ impl UpdateResponse {
         Ok(Self {
             full_tree_head,
             position,
+            skipped_versions,
             values,
             info,
             binary_ladder,
@@ -377,6 +394,9 @@ impl Encode for UpdateResponse {
     fn encode(&self, enc: &mut Encoder) -> Result<()> {
         self.full_tree_head.encode(enc)?;
         enc.u64(self.position);
+        if let Some(skipped) = self.skipped_versions {
+            enc.u32(skipped);
+        }
         enc.vector(Self::VALUES, &self.values)?;
         enc.vector(Self::INFO, &self.info)?;
         enc.vector(Self::LADDER, &self.binary_ladder)?;
@@ -555,6 +575,7 @@ mod tests {
                 auditor_tree_head: None,
             },
             position: 9,
+            skipped_versions: Some(2),
             values: vec![LabelValue::new(vec![1, 2, 3])],
             info: vec![UpdateInfo {
                 opening: vec![0xcd; 16],
@@ -599,6 +620,7 @@ mod tests {
         let value = UpdateResponse {
             full_tree_head: FullTreeHead::Same,
             position: 0,
+            skipped_versions: None,
             values: Vec::new(),
             info: vec![UpdateInfo {
                 opening: vec![0; 16],
@@ -619,5 +641,53 @@ mod tests {
                 .unwrap();
         assert_eq!(decoded, value);
         assert!(decoded.values.is_empty() && decoded.binary_ladder.is_empty());
+    }
+
+    /// The mode decides whether four bytes sit between `position` and `values`, and nothing in
+    /// the bytes says which — the same hazard as every other context-dependent field here, with
+    /// a sharper edge: `skipped_versions` and the length prefix of `values` are both plausible
+    /// readings of the same offset, so a response read under the wrong mode does not fail, it
+    /// silently reports a different position and a different number of values.
+    #[test]
+    fn skipped_versions_is_present_only_under_third_party_management() {
+        let value = UpdateResponse {
+            full_tree_head: FullTreeHead::Same,
+            position: 4,
+            skipped_versions: Some(3),
+            values: Vec::new(),
+            info: vec![UpdateInfo {
+                opening: vec![0x11; 16],
+                suffix: UpdateSuffix::ThirdPartyManagement {
+                    signature: vec![0x22; 64],
+                },
+            }],
+            binary_ladder: Vec::new(),
+            update: CombinedTreeProof {
+                timestamps: Vec::new(),
+                prefix_proofs: Vec::new(),
+                prefix_roots: Vec::new(),
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+        };
+        let bytes = encode(&value).unwrap();
+        // 1 byte of head type, 8 of position, then the four that only this mode carries.
+        assert_eq!(&bytes[9..13], &[0, 0, 0, 3]);
+
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            UpdateResponse::decode_with(&mut dec, DeploymentMode::ThirdPartyManagement, 16, 80)
+                .unwrap(),
+            value
+        );
+
+        // The same bytes under a mode that has no such field: the four bytes are read as the
+        // start of `values` instead, so everything after `position` shifts. It must not
+        // reproduce the original — here it fails outright, because the misread count runs off
+        // the end of the input.
+        let mut dec = Decoder::new(&bytes);
+        match UpdateResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring, 16, 80) {
+            Err(_) => {}
+            Ok(decoded) => assert_ne!(decoded, value),
+        }
     }
 }
