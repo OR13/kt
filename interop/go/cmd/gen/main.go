@@ -87,6 +87,7 @@ func main() {
 		{"auditor-update.json", auditorVectors},
 		{"search.json", searchVectors},
 		{"monitor.json", monitorVectors},
+		{"update.json", updateVectors},
 		{"tree-head.json", headVectors},
 		{"requests.json", requestVectors},
 		{"ladder-interpretation.json", ladderInterpretationVectors},

@@ -530,7 +530,27 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-tree::combined",
             &["monitor.json"],
         ),
-        todo("§9, §13.5", "Updating a label"),
+        verified(
+            "§9.1",
+            "Updating a label: the two-tree check a label owner makes on new versions",
+            "kt-tree::combined",
+            &["update.json"],
+        ),
+        Area {
+            section: "§13.5".to_owned(),
+            name: "UpdateRequest, UpdateResponse, and §14's ManagerUpdateRequest".to_owned(),
+            module: Some("kt-wire::requests, kt-wire::responses".to_owned()),
+            // The requests are pinned as bytes by requests.json. The *response* is not, and
+            // cannot be: katie's tree.Update cannot serve one at all (KT-04), so no
+            // UpdateResponse has ever been measured. Its members are pinned individually —
+            // FullTreeHead by tree-head.json, UpdateInfo and BinaryLadderStep by requests.json,
+            // the CombinedTreeProof by update.json — but the envelope itself is checked only by
+            // this side's round-trips, and §14's ManagerUpdateRequest follows the peer's field
+            // order because §14's own listing is corrupt (DRAFT-11). Saying "verified" would
+            // overstate both.
+            coverage: Coverage::ImplementedUnverified,
+            evidence: Vec::new(),
+        },
         todo(
             "§13.6",
             "Requesting distinguished heads, and fork detection (§10.2)",

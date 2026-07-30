@@ -116,6 +116,34 @@ enum Case {
         /// The wire-encoded `CombinedTreeProof`, hex.
         proof: String,
     },
+    /// A `CombinedTreeProof` for §9.1, which the peer reads with its own `Monitor.Update`.
+    ///
+    /// Separate from [`Case::CombinedSearch`] because §9.1 is checked against three things rather
+    /// than one: the tree, the response's claims, and the *owner's own state*. That state has no
+    /// counterpart in a search, and passing it as optional fields on a search case would suggest a
+    /// search could have one.
+    OwnerUpdate {
+        name: String,
+        expect: &'static str,
+        /// The log's size.
+        size: u64,
+        /// The log entry the new versions were inserted into.
+        position: u64,
+        /// How many new versions were created there.
+        ///
+        /// Named `new_versions` on the wire because a search case's `versions` is a list of search
+        /// keys, and one JSON name cannot be both a count and a list.
+        #[serde(rename = "new_versions")]
+        versions: usize,
+        /// The owner's state before the update.
+        owner: OwnerOut,
+        /// Every log entry's timestamp, by position.
+        timestamps: Vec<u64>,
+        /// The search keys the peer needs for the lookups §9.1 makes.
+        keys: Vec<VersionKey>,
+        /// The wire-encoded `CombinedTreeProof`, hex.
+        proof: String,
+    },
     /// An `AuditorUpdate` for the peer's decoder (§15.2).
     AuditorUpdate {
         name: String,
@@ -141,6 +169,19 @@ enum Case {
 struct MapEntryOut {
     position: u64,
     version: u32,
+}
+
+/// A label owner's state, in the peer's representation.
+///
+/// `version_at_starting` is `-1` where the label did not exist at the reference point, which is how
+/// the peer spells "no version" — it keeps the field an integer and lets the count arithmetic work
+/// out. This side models it as an absent version; the conversion happens here rather than in the
+/// library, so that the peer's encoding does not leak into a type the protocol defines otherwise.
+#[derive(Clone, Serialize)]
+struct OwnerOut {
+    starting: u64,
+    version_at_starting: i64,
+    upcoming: Vec<u64>,
 }
 
 /// A version's search key and commitment, as the peer's proof handle wants them.
@@ -250,6 +291,7 @@ const fn expect_of(case: &Case) -> &'static str {
         | Case::PrefixTree { expect, .. }
         | Case::PrefixMutation { expect, .. }
         | Case::CombinedSearch { expect, .. }
+        | Case::OwnerUpdate { expect, .. }
         | Case::AuditorUpdate { expect, .. } => expect,
     }
 }
@@ -259,6 +301,7 @@ fn build_cases() -> Result<Vec<Case>, String> {
     cases.extend(prefix_cases()?);
     cases.extend(mutation_cases()?);
     cases.extend(search_cases()?);
+    cases.extend(owner_update_cases()?);
     Ok(cases)
 }
 
@@ -1078,6 +1121,456 @@ fn prefix_cases() -> Result<Vec<Case>, String> {
             root: hex::encode(root.as_bytes()),
         });
     }
+
+    Ok(cases)
+}
+
+/// §9.1 proofs built by this implementation for the peer's own `Monitor.Update` to consume.
+///
+/// This is the only direction §9.1 can be checked in. The forward direction needs katie to *serve*
+/// an update, and it cannot: `tree.Update` fails for every request because its own code path leaves
+/// the owner state uninitialized before checking it (`KT-04`). The consumer half is sound, and it
+/// takes the owner state from the caller — so a proof this side builds can be fed to the peer's
+/// reading of the same algorithm, which is the direction that catches over-acceptance anyway.
+///
+/// The log model is the same as the search cases': version `v` was added at entry `v`, up to a cap.
+/// The cap is what makes an honest step 2.2 possible — a label that gains a version in every entry
+/// has nothing for the previous tree's frontier to confirm, since the owner's previous greatest
+/// version was never the greatest anywhere except where it was created.
+fn owner_update_cases() -> Result<Vec<Case>, String> {
+    const SIZE: u64 = 7;
+    let timestamps: Vec<u64> = (0..SIZE)
+        .map(|i| 1_700_000_000_000_u64.saturating_add(i))
+        .collect();
+    let window = 604_800_000_u64;
+
+    let key_for = |version: u32| {
+        let mut bytes = [0_u8; HashValue::SIZE];
+        bytes[0] = u8::try_from(version.wrapping_mul(37) % 256).unwrap_or(0);
+        bytes[HashValue::SIZE - 1] = u8::try_from(version % 256).unwrap_or(0);
+        HashValue::from_bytes(bytes)
+    };
+    let commitment_for = |version: u32| {
+        HashValue::from_bytes([u8::try_from(version % 256).unwrap_or(0) ^ 0xa5; HashValue::SIZE])
+    };
+    // The prefix tree at `position` for a label that gained version `v` in entry `v` until it
+    // stopped at `cap`, then gained one more in the last entry.
+    let tree_at = |position: u64, cap: u64| -> Result<prefix::PrefixTree, String> {
+        let greatest = if position == SIZE - 1 {
+            cap.saturating_add(1)
+        } else {
+            position.min(cap)
+        };
+        let mut tree = prefix::PrefixTree::new();
+        for version in 0..=u32::try_from(greatest).unwrap_or(0) {
+            tree.insert(PrefixLeaf {
+                vrf_output: key_for(version),
+                commitment: commitment_for(version),
+            })
+            .map_err(|err| format!("building the tree at {position}: {err}"))?;
+        }
+        Ok(tree)
+    };
+    let greatest_at = |position: u64, cap: u64| -> u32 {
+        let greatest = if position == SIZE - 1 {
+            cap.saturating_add(1)
+        } else {
+            position.min(cap)
+        };
+        u32::try_from(greatest).unwrap_or(0)
+    };
+    let stamp_at = |position: u64| -> Result<u64, String> {
+        usize::try_from(position)
+            .ok()
+            .and_then(|index| timestamps.get(index))
+            .copied()
+            .ok_or_else(|| format!("no timestamp for entry {position}"))
+    };
+
+    // §6.1's descent, over the timestamps directly: which entries a verifier reads on the way to
+    // `target`, and the first one it finds not distinguished.
+    let descend = |target: u64| -> Result<(Vec<u64>, Option<u64>), String> {
+        let last = SIZE - 1;
+        let mut reads = vec![last];
+        let mut current = ibst::root(SIZE).map_err(|err| format!("root: {err}"))?;
+        let mut left = (0_u64, 0_u64);
+        let mut right = (last, stamp_at(last)?);
+        loop {
+            let gap = right.1.saturating_sub(left.1);
+            if gap < window {
+                return Ok((reads, Some(current)));
+            }
+            if current == target {
+                return Ok((reads, None));
+            }
+            reads.push(current);
+            let timestamp = stamp_at(current)?;
+            if current < target {
+                let next = ibst::right(current, SIZE)
+                    .map_err(|err| format!("right of {current}: {err}"))?;
+                left = (current, timestamp);
+                current = next;
+            } else {
+                let next =
+                    ibst::left(current).map_err(|err| format!("left of {current}: {err}"))?;
+                right = (current, timestamp);
+                current = next;
+            }
+        }
+    };
+
+    // One honest §9.1 proof, built by walking the algorithm's own steps.
+    let build = |cap: u64,
+                 position: u64,
+                 owner_starting: u64,
+                 owner_greatest: u32,
+                 owner_upcoming: &[u64]|
+     -> Result<CombinedTreeProof, String> {
+        let mut stamps: Vec<u64> = Vec::new();
+        let mut seen: Vec<u64> = Vec::new();
+        let mut proofs = Vec::new();
+        let mut proved: Vec<u64> = Vec::new();
+        let mut established: Vec<(u64, Vec<u32>, Vec<u32>)> = Vec::new();
+        let sets_for =
+            |established: &[(u64, Vec<u32>, Vec<u32>)], position: u64| -> (Vec<u32>, Vec<u32>) {
+                let (mut left, mut right) = (Vec::new(), Vec::new());
+                for (at, included, absent) in established {
+                    if *at < position {
+                        for version in included {
+                            if !left.contains(version) {
+                                left.push(*version);
+                            }
+                        }
+                    }
+                    if *at > position {
+                        for version in absent {
+                            if !right.contains(version) {
+                                right.push(*version);
+                            }
+                        }
+                    }
+                }
+                (left, right)
+            };
+        let record =
+            |position: u64, stamps: &mut Vec<u64>, seen: &mut Vec<u64>| -> Result<(), String> {
+                if !seen.contains(&position) {
+                    stamps.push(stamp_at(position)?);
+                    seen.push(position);
+                }
+                Ok(())
+            };
+
+        // §12.3.1's view update: a first-time owner gets the whole frontier.
+        for entry in ibst::frontier(SIZE).map_err(|err| format!("frontier: {err}"))? {
+            record(entry, &mut stamps, &mut seen)?;
+        }
+
+        let last_update = owner_upcoming.last().copied().unwrap_or(owner_starting);
+        let rightmost = position.saturating_sub(1);
+
+        // Phase one: steps 1 and 2 over the previous tree.
+        let (reads, first) = descend(rightmost)?;
+        for entry in reads {
+            record(entry, &mut stamps, &mut seen)?;
+        }
+        if let Some(first) = first {
+            let mut current = first;
+            while current > rightmost {
+                current = ibst::left(current).map_err(|err| format!("left of {current}: {err}"))?;
+            }
+            // Step 2.2's omissions, seeded as if the skipped entries had been inspected.
+            let ladder = ladder::search_binary_ladder(owner_greatest, owner_greatest, &[], &[])
+                .map_err(|err| format!("seed ladder: {err}"))?;
+            let assume = |established: &mut Vec<(u64, Vec<u32>, Vec<u32>)>,
+                          at: u64,
+                          bound: u32,
+                          versions: &[u32]| {
+                let (mut included, mut absent) = (Vec::new(), Vec::new());
+                for version in versions {
+                    if *version <= bound {
+                        included.push(*version);
+                    } else {
+                        absent.push(*version);
+                    }
+                }
+                established.push((at, included, absent));
+            };
+            let previous_root = ibst::root(position).map_err(|err| format!("root: {err}"))?;
+            if current != previous_root {
+                let parent = ibst::direct_path(current, position)
+                    .map_err(|err| format!("direct path: {err}"))?
+                    .first()
+                    .copied()
+                    .ok_or_else(|| format!("entry {current} has no parent"))?;
+                assume(&mut established, parent, greatest_at(parent, cap), &ladder);
+            }
+            assume(&mut established, current, owner_greatest, &ladder);
+
+            loop {
+                if current > last_update {
+                    let (left_inclusion, right_non_inclusion) = sets_for(&established, current);
+                    let versions = ladder::search_binary_ladder(
+                        owner_greatest,
+                        greatest_at(current, cap),
+                        &left_inclusion,
+                        &right_non_inclusion,
+                    )
+                    .map_err(|err| format!("ladder at {current}: {err}"))?;
+                    let searches: Vec<HashValue> =
+                        versions.iter().map(|version| key_for(*version)).collect();
+                    let proof = tree_at(current, cap)?
+                        .prove(SUITE, &searches)
+                        .map_err(|err| format!("proving at {current}: {err}"))?;
+                    let (mut included, mut absent) = (Vec::new(), Vec::new());
+                    for (version, result) in versions.iter().zip(proof.results.iter()) {
+                        if result.is_inclusion() {
+                            included.push(*version);
+                        } else {
+                            absent.push(*version);
+                        }
+                    }
+                    established.push((current, included, absent));
+                    record(current, &mut stamps, &mut seen)?;
+                    proofs.push(proof);
+                    proved.push(current);
+                }
+                if current == rightmost {
+                    break;
+                }
+                current = ibst::right(current, position)
+                    .map_err(|err| format!("right of {current}: {err}"))?;
+            }
+        }
+
+        // Phase two: step 3 or step 4 at the entry holding the new versions.
+        let (reads, first) = descend(position)?;
+        for entry in reads {
+            record(entry, &mut stamps, &mut seen)?;
+        }
+        let end_ver = greatest_at(position, cap);
+        if first.is_some() {
+            let (left_inclusion, right_non_inclusion) = sets_for(&established, position);
+            let versions = ladder::search_binary_ladder(
+                end_ver,
+                greatest_at(position, cap),
+                &left_inclusion,
+                &right_non_inclusion,
+            )
+            .map_err(|err| format!("ladder at {position}: {err}"))?;
+            let searches: Vec<HashValue> =
+                versions.iter().map(|version| key_for(*version)).collect();
+            let proof = tree_at(position, cap)?
+                .prove(SUITE, &searches)
+                .map_err(|err| format!("proving at {position}: {err}"))?;
+            record(position, &mut stamps, &mut seen)?;
+            proofs.push(proof);
+            proved.push(position);
+        }
+
+        // The new versions a ladder for the new greatest version would not look up.
+        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[])
+            .map_err(|err| format!("covered ladder: {err}"))?;
+        let additional: Vec<u32> = (owner_greatest.saturating_add(1)..=end_ver)
+            .filter(|version| !covered.contains(version))
+            .collect();
+        if !additional.is_empty() {
+            let searches: Vec<HashValue> =
+                additional.iter().map(|version| key_for(*version)).collect();
+            record(position, &mut stamps, &mut seen)?;
+            proofs.push(
+                tree_at(position, cap)?
+                    .prove(SUITE, &searches)
+                    .map_err(|err| format!("proving at {position}: {err}"))?,
+            );
+            proved.push(position);
+        }
+
+        // §12.3.2: a prefix root for every entry with a timestamp and no proof, ascending.
+        let mut owed: Vec<u64> = seen
+            .iter()
+            .copied()
+            .filter(|entry| !proved.contains(entry))
+            .collect();
+        owed.sort_unstable();
+        let mut prefix_roots = Vec::new();
+        for entry in &owed {
+            prefix_roots.push(tree_at(*entry, cap)?.root(SUITE));
+        }
+
+        let mut leaves = Vec::new();
+        for entry in 0..SIZE {
+            let log_entry = LogEntry {
+                timestamp: stamp_at(entry)?,
+                prefix_tree: tree_at(entry, cap)?.root(SUITE),
+            };
+            leaves.push(
+                log::leaf_value(SUITE, &log_entry).map_err(|err| format!("leaf {entry}: {err}"))?,
+            );
+        }
+        let mut inspected = seen.clone();
+        inspected.sort_unstable();
+        let inclusion = log::prove(SUITE, &leaves, &inspected, None)
+            .map_err(|err| format!("log proof: {err}"))?;
+
+        Ok(CombinedTreeProof {
+            timestamps: stamps,
+            prefix_proofs: proofs,
+            prefix_roots,
+            inclusion,
+        })
+    };
+
+    let encoded = |proof: &CombinedTreeProof| -> Result<String, String> {
+        codec::encode(proof)
+            .map(hex::encode)
+            .map_err(|err| format!("encoding: {err}"))
+    };
+    let keys_through = |greatest: u32| -> Vec<VersionKey> {
+        (0..=greatest.saturating_add(4))
+            .map(|version| VersionKey {
+                version,
+                vrf_output: hex::encode(key_for(version).as_bytes()),
+                commitment: (version <= greatest)
+                    .then(|| hex::encode(commitment_for(version).as_bytes())),
+            })
+            .collect()
+    };
+
+    // The owner's last version went into the previous tree's rightmost entry, so step 2.1 skips it
+    // and phase one reads nothing. This is the common case for an owner updating a label it updates
+    // often.
+    let skipped = build(5, 6, 3, 5, &[4, 5])?;
+    let mut cases = vec![Case::OwnerUpdate {
+        name: "owner-update-previous-frontier-skipped".to_owned(),
+        expect: ACCEPT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: vec![4, 5],
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(6),
+        proof: encoded(&skipped)?,
+    }];
+
+    // The label stopped gaining versions at entry 3, so the previous tree's frontier has something
+    // to confirm and step 2.2 sends a real ladder. This is the case that exercises the phase §9.1
+    // exists for.
+    let inspected = build(3, 6, 3, 3, &[])?;
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-previous-frontier-inspected".to_owned(),
+        expect: ACCEPT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: Vec::new(),
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(4),
+        proof: encoded(&inspected)?,
+    });
+
+    // The negatives. Each is a proof this side builds deliberately wrong; the peer must refuse it.
+    let mut extra = inspected.clone();
+    extra.timestamps.push(1_700_000_000_099);
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-extra-timestamp".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: Vec::new(),
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(4),
+        proof: encoded(&extra)?,
+    });
+
+    let mut short = inspected.clone();
+    short.prefix_proofs.pop();
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-missing-prefix-proof".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: Vec::new(),
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(4),
+        proof: encoded(&short)?,
+    });
+
+    let mut swapped = inspected.clone();
+    swapped.prefix_proofs.reverse();
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-proofs-out-of-order".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: Vec::new(),
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(4),
+        proof: encoded(&swapped)?,
+    });
+
+    // §13.5 step 1, checked on the peer: an honest proof presented with an owner state that has
+    // already passed the claimed position. Nothing about the bytes is wrong, and the peer must
+    // still refuse — a new version cannot appear to the left of one the owner already holds.
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-position-not-advancing".to_owned(),
+        expect: REJECT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 3,
+            upcoming: vec![4, 5, 6],
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(6),
+        proof: encoded(&skipped)?,
+    });
+
+    // A label with exactly one version before the update, which makes every ladder in the proof as
+    // short as it can be: the seeding ladder for version 0 is two rungs, and step 2.2's is one.
+    // Short ladders are where an off-by-one in the omission bookkeeping shows up, because there is
+    // no slack left in the sequence.
+    let fresh = build(0, 6, 3, 0, &[])?;
+    cases.push(Case::OwnerUpdate {
+        name: "owner-update-shortest-possible-ladders".to_owned(),
+        expect: ACCEPT,
+        size: SIZE,
+        position: 6,
+        versions: 1,
+        owner: OwnerOut {
+            starting: 3,
+            version_at_starting: 0,
+            upcoming: Vec::new(),
+        },
+        timestamps: timestamps.clone(),
+        keys: keys_through(1),
+        proof: encoded(&fresh)?,
+    });
 
     Ok(cases)
 }

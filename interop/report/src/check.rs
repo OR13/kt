@@ -15,12 +15,12 @@ use kt_crypto::suite::CipherSuite;
 use kt_crypto::{signature, vrf};
 use kt_tree::{audit, combined, ibst, ladder, log, prefix};
 use kt_wire::audit::AuditorUpdate;
-use kt_wire::codec::Decoder;
+use kt_wire::codec::{Decode as _, Decoder};
 use kt_wire::heads::{
     AuditorConfig, AuditorTreeHead, AuditorTreeHeadTBS, Configuration, FullTreeHead, TreeHead,
     TreeHeadTBS,
 };
-use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
+use kt_wire::proofs::{CombinedTreeProof, InclusionProof, PrefixLeaf, PrefixProof};
 use kt_wire::requests::{
     BinaryLadderStep, ContactMonitorRequest, LabelValue, MonitorMapEntry, OwnerInitRequest,
     OwnerMonitorRequest, SearchRequest, UpdateInfo, UpdateRequest, UpdateTBS,
@@ -38,13 +38,13 @@ use crate::vectors::{
     DistinguishedExpect, DistinguishedInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
     InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
     LogMathInput, LogTreeExpect, LogTreeInput, MonitorExpect, MonitorInput, MutationExpect,
-    MutationInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, SearchExpect,
-    SearchInput, TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile,
-    VrfCaseInput, VrfExpect,
+    MutationInput, OwnerUpdateExpect, OwnerUpdateInput, PrefixTreeExpect, PrefixTreeInput,
+    RequestExpect, RequestInput, SearchExpect, SearchInput, TamperedExpect, TamperedInput,
+    UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 18] = [
+pub const FILES: [&str; 19] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -60,6 +60,7 @@ pub const FILES: [&str; 18] = [
     "auditor-update.json",
     "search.json",
     "monitor.json",
+    "update.json",
     "tree-head.json",
     "requests.json",
     "tampered.json",
@@ -184,6 +185,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         auditor_suite(dir)?,
         search_suite(dir)?,
         monitor_suite(dir)?,
+        owner_update_suite(dir)?,
         head_suite(dir)?,
         request_suite(dir)?,
         tampered_suite(dir)?,
@@ -3516,4 +3518,271 @@ fn log_math_suite(dir: &Path) -> Result<Suite, Error> {
 
 fn alloc_display(err: &impl core::fmt::Display) -> String {
     format!("{err}")
+}
+
+/// §9.1 and §13.5: a label owner verifying that new versions were inserted correctly.
+///
+/// These vectors carry a `CombinedTreeProof` and no response envelope, and the reason is recorded
+/// in the file itself: katie's `tree.Update` cannot answer any request, so no `UpdateResponse` was
+/// ever measured. What is here is the part that matters for interoperability — §9.1's element
+/// ordering, which no hand-built example can pin — and the claim is scoped to it.
+fn owner_update_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "update.json";
+    let file: VectorFile<OwnerUpdateInput, OwnerUpdateExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let bytes = unhex(FILE, name, "expect.proof", &case.expect.proof)?;
+
+        let mut dec = Decoder::new(&bytes);
+        let parsed = CombinedTreeProof::decode(&mut dec).and_then(|proof| {
+            if dec.is_empty() {
+                Ok(proof)
+            } else {
+                Err(kt_wire::codec::Error::TrailingBytes {
+                    remaining: dec.remaining(),
+                })
+            }
+        });
+
+        let mut checks = vec![Check::new(
+            "CombinedTreeProof round-trips (§12.3)",
+            case.expect.proof.clone(),
+            match &parsed {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(proof) => render_result(kt_wire::codec::encode(proof), hex::encode),
+            },
+        )];
+        checks.push(Check::new(
+            "timestamps, in the order §9.1 asks for them (§12.3.5)",
+            render_list(
+                &case
+                    .expect
+                    .timestamps
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .timestamps
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "prefix proofs: step 2.2's ladders, then step 3 or 4's lookups (§9.1)",
+            render_list(
+                &case
+                    .expect
+                    .prefix_proofs
+                    .iter()
+                    .map(|proof| proof.encoding.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .prefix_proofs
+                        .iter()
+                        .map(|element| render_result(kt_wire::codec::encode(element), hex::encode))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "prefix roots — the entries with a timestamp but no proof (§12.3.2)",
+            render_list(&case.expect.prefix_roots),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .prefix_roots
+                        .iter()
+                        .map(|root| hex::encode(root.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "log tree inclusion elements (§12.3)",
+            render_list(&case.expect.inclusion),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .inclusion
+                        .elements
+                        .iter()
+                        .map(|element| hex::encode(element.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+
+        // The replay. §12.3's exact-count rule is what turns this into a test of the *reading*:
+        // an implementation that orders §9.1's requests differently does not compute something
+        // subtly wrong, it finishes holding elements it never used.
+        let expected_branch = format!(
+            "every element read, none left over · entry {} {} · {}",
+            case.input.position,
+            if case.expect.distinguished {
+                "distinguished (step 3)"
+            } else {
+                "not distinguished (step 4)"
+            },
+            case.expect.contact.as_ref().map_or_else(
+                || "no contact monitoring entry".to_owned(),
+                |entry| format!(
+                    "contact monitoring entry {} → version {}",
+                    entry.position, entry.version
+                ),
+            ),
+        );
+        checks.push(Check::new(
+            "replaying §9.1 consumes the proof exactly (§12.3)",
+            expected_branch,
+            match &parsed {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(proof) => {
+                    replay_owner_update(case, proof, suite).unwrap_or_else(|detail| detail)
+                }
+            },
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{}-entry log · {} new version{} in entry {} · {} timestamps, {} proofs, {} roots",
+                case.input.mutations.len(),
+                case.input.versions,
+                if case.input.versions == 1 { "" } else { "s" },
+                case.input.position,
+                case.expect.timestamps.len(),
+                case.expect.prefix_proofs.len(),
+                case.expect.prefix_roots.len(),
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Update proofs for a label owner".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// Replays §9.1 over a recorded proof and reports what it established.
+fn replay_owner_update(
+    case: &crate::vectors::Case<OwnerUpdateInput, OwnerUpdateExpect>,
+    proof: &CombinedTreeProof,
+    suite: CipherSuite,
+) -> Result<String, String> {
+    let mut keys = BTreeMap::new();
+    for known in &case.input.ladder {
+        let vrf_output = hex::decode(&known.vrf_output)
+            .map_err(|err| format!("version {}: vrf_output: {err}", known.version))
+            .and_then(|bytes| {
+                HashValue::from_slice(&bytes).map_err(|err| format!("vrf_output: {err}"))
+            })?;
+        let commitment = match &known.commitment {
+            None => None,
+            Some(value) => Some(
+                hex::decode(value)
+                    .map_err(|err| format!("version {}: commitment: {err}", known.version))
+                    .and_then(|bytes| {
+                        HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
+                    })?,
+            ),
+        };
+        keys.insert(
+            known.version,
+            combined::LadderKey {
+                vrf_output,
+                commitment,
+            },
+        );
+    }
+
+    let size = case.input.tree_size;
+    let mut retained = combined::Retained::none();
+    if let Some(advertised) = case.input.last {
+        for position in ibst::frontier(advertised).map_err(|err| format!("frontier: {err}"))? {
+            let timestamp = usize::try_from(position)
+                .ok()
+                .and_then(|index| case.input.entry_timestamps.get(index))
+                .copied()
+                .ok_or_else(|| format!("no recorded timestamp for log entry {position}"))?;
+            retained.timestamps.insert(position, timestamp);
+        }
+    }
+    let mut reader = combined::Reader::new(proof, &retained);
+
+    // §12.3.1's view update first, as for every other operation.
+    let view = match case.input.last {
+        None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
+        Some(advertised) => ibst::update_view(size, Some(advertised))
+            .map_err(|err| format!("update view: {err}"))?,
+    };
+    for position in &view {
+        reader
+            .timestamp(*position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let owner = combined::OwnerState {
+        starting: case.input.owner.starting,
+        version_at_starting: case.input.owner.version_at_starting,
+        upcoming: case.input.owner.upcoming.clone(),
+    };
+    let updated = combined::owner_update(
+        suite,
+        size,
+        case.input.monitoring_window,
+        case.input.position,
+        case.input.versions,
+        &owner,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§9.1: {err}"))?;
+
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
+    reader.finish().map_err(|err| format!("§12.3: {err}"))?;
+
+    Ok(format!(
+        "every element read, none left over · entry {} {} · {}",
+        case.input.position,
+        if updated.distinguished {
+            "distinguished (step 3)"
+        } else {
+            "not distinguished (step 4)"
+        },
+        updated.contact.map_or_else(
+            || "no contact monitoring entry".to_owned(),
+            |(position, version)| format!(
+                "contact monitoring entry {position} → version {version}"
+            ),
+        ),
+    ))
 }

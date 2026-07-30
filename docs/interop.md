@@ -697,6 +697,60 @@ the entry's ladder, and a verifier that expects them consumes the proof exactly.
 entry reaches step 5 without recursing. Worth an editorial issue if the register is ever filed —
 an implementer following §12.3.6 literally builds a proof that no client can root.
 
+**[KT-04] katie cannot serve an update at all.** `Tree.Update` and `Tree.ManagerUpdate` return a
+channel of `UpdateResponse`, and every element of it is an error: `updater.next` builds its monitor
+with `algorithms.NewMonitor`, which leaves `Monitor.Owner` nil, and then calls `Monitor.Update`,
+whose first line refuses when `Owner` is nil. Measured at the pinned commit, on both the path that
+creates new versions and the path that only reports existing ones: `label owner state has not been
+initialized`, before any proof is built. No katie test exercises `Tree.Update`, which is consistent
+with the path never having run.
+
+This blocks the forward direction for §13.5 outright — there is no `UpdateResponse` to record, so
+none is claimed. §9.1's proof is still measurable, because the consumer half of the same code takes
+the owner state from its caller: `update.json` drives `ProducedProofHandle`, `UpdateView`,
+`NewMonitor` and `Monitor.Update` exactly as `updater.next` does, supplying the state the broken
+path leaves nil, and records what comes out. The reverse direction needs nothing special, since
+`StreamVerifier.Verify` sets `Owner` before calling the algorithm — so `from-kt.json` feeds
+kt-built §9.1 proofs to katie's own reading of it.
+
+Filed as [katie#1](https://github.com/Bren2010/katie/issues/1): a blocker by the register's rule,
+and not one measurement can settle. Two lines of initialization would fix it, but which state the
+log should attribute to a requester is katie's decision, not this implementation's — so the report
+asks rather than proposing a patch.
+
+**[DRAFT-11] §14's `ManagerUpdateRequest` lists every field twice, and its field order disagrees
+with the peer's.** The presentation is:
+
+```tls-presentation
+struct {
+  UpdateRequest request;
+  optional<uint64> last;
+
+  opaque label<0..2^8-1>;
+  optional<uint32> greatest_version;
+  UpdateValue values<0..2^8-1>;
+
+  uint32 signed_version;
+} ManagerUpdateRequest;
+```
+
+`UpdateRequest` already contains `last`, `label`, `greatest_version` and `values`, so as written
+every field appears twice. Tracing it upstream shows what happened: the structure was
+`{ UpdateRequest request; opaque signature<0..2^16-1>; }` until a rework in July 2026 spelled the
+fields out inline, and the first member was never deleted.
+
+That leaves the field order undetermined, and it is not a cosmetic question. The listing puts
+`signed_version` last; katie — which implemented this two weeks before the rework landed — puts it
+before `values`. The prose says only that the structure "is the same as `UpdateRequest`" and "also
+contains a `signed_version` field", which does not choose between them. This implementation follows
+the peer, since a corrupt listing is not evidence for anything and the peer's order is what
+interoperates; `kt-wire::requests` pins the choice as bytes and says why.
+
+Filed as [draft-protocol#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50), for
+the same reason as `DRAFT-09`: measuring katie says what katie does, not what the specification
+means, and only its author can say which order was intended. A PR is offered but not sent — sending
+one would mean choosing the order, which is the question being asked.
+
 **[NOTE-03] `opening` sits in a different place in the two implementations.** The draft puts
 `opaque opening[Nc]` inside `CommitmentValue`; katie keeps it outside the struct
 and writes it to the HMAC first. Same bytes, different factoring — the vectors
@@ -750,10 +804,12 @@ is stable.
 Findings are tracked here rather than filed, with one exception. The rule is that a finding gets
 filed when it is a **blocker** — something that cannot be resolved either by reading the
 specification or by measuring the peer, so that no amount of further work here will settle it.
-`DRAFT-09` is the first to meet that bar and is filed as
-[draft-protocol#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48). Everything
-else is resolved: the behaviour is known, a committed vector pins it, and a filing would be a
-courtesy rather than a necessity.
+`DRAFT-09` was the first to meet that bar, and its answer — "the appendix is wrong" — is the
+clearest illustration of why the rule is drawn where it is: katie implements the parameter-free
+version either way, so no amount of measurement could have settled what the text meant.
+`DRAFT-11` and `KT-04` are the other two: one is a specification that contradicts itself, the
+other a peer code path that cannot run. Everything else is resolved: the behaviour is known, a
+committed vector pins it, and a filing would be a courtesy rather than a necessity.
 
 | ID | What | Belongs to | Pinned by | Status |
 |---|---|---|---|---|
@@ -772,6 +828,8 @@ courtesy rather than a necessity.
 | `NOTE-04` | a per-entry ladder's results are a *prefix* of the verifier's ladder, because the log stops on the local greatest version | neither | `search.json`, all five greatest-version cases | no action |
 | `DRAFT-09` | Appendix B's `monitoring_binary_ladder` keeps a `left_inclusion` parameter whose prose was removed; the two readings fail against each other | draft | `monitor.json`, §8.2 replays under the empty-set reading | **resolved**: the appendix is wrong ([#48](https://github.com/ietf-wg-keytrans/draft-protocol/issues/48)); fix sent as [#49](https://github.com/ietf-wg-keytrans/draft-protocol/pull/49) |
 | `DRAFT-10` | §12.3.6 omits the timestamp of an entry that reaches step 5 without recursing, so its own proof cannot be rooted | draft | `monitor.json` `owner-monitor-reaches-step-5` | tracked locally; resolved by measurement |
+| `KT-04` | `Tree.Update` cannot answer any request: the owner state is checked but never initialized | katie | `update.json` drives the algorithm directly, supplying the state | **filed**: [katie#1](https://github.com/Bren2010/katie/issues/1) |
+| `DRAFT-11` | §14's `ManagerUpdateRequest` lists every field twice, leaving `signed_version`'s position undetermined; katie and the listing disagree | draft | `kt-wire::requests` pins the peer's order as bytes | **filed**: [#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
 Two ground rules for anything added here. A finding is only a finding once a committed

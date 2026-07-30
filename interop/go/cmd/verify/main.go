@@ -78,6 +78,12 @@ type caseEnvelope struct {
 	Versions   []versionKey `json:"versions"`
 	Map        []mapEntry   `json:"map"`
 
+	// owner-update — `size`, `timestamps` and `proof` are shared with the kinds above.
+	Position    uint64       `json:"position"`
+	NewVersions int          `json:"new_versions"`
+	Owner       *ownerState  `json:"owner"`
+	Keys        []versionKey `json:"keys"`
+
 	// auditor-update
 	Encoding string `json:"encoding"`
 
@@ -87,6 +93,14 @@ type caseEnvelope struct {
 type mapEntry struct {
 	Position uint64 `json:"position"`
 	Version  uint32 `json:"version"`
+}
+
+// ownerState is a label owner's state as §9.1 reads it. VersionAtStarting is -1 where the label
+// did not exist at the owner's reference point, which is how katie spells "no version".
+type ownerState struct {
+	Starting          uint64   `json:"starting"`
+	VersionAtStarting int      `json:"version_at_starting"`
+	Upcoming          []uint64 `json:"upcoming"`
 }
 
 type versionKey struct {
@@ -148,6 +162,8 @@ func main() {
 			err = checkPrefixMutation(cs, c)
 		case "combined-search":
 			err = checkCombinedSearch(cs, c)
+		case "owner-update":
+			err = checkOwnerUpdate(cs, c)
 		case "auditor-update":
 			err = checkAuditorUpdate(cs, c)
 		default:
@@ -506,4 +522,75 @@ func unhexAll(values []string) ([][]byte, error) {
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "verify: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// checkOwnerUpdate feeds a §9.1 proof built by the Rust side to katie's own reading of the same
+// algorithm.
+//
+// This is the only direction §9.1 can be checked in. katie's `tree.Update` cannot serve an update
+// at all — it builds a monitor with NewMonitor, which leaves Owner nil, then calls Monitor.Update,
+// which refuses when Owner is nil, so every request comes back "label owner state has not been
+// initialized" (KT-04). The consumer half takes the owner state from its caller and works, and it
+// is the more valuable half anyway: it is what catches a proof this side would accept and the peer
+// would not.
+func checkOwnerUpdate(cs suites.CipherSuite, c caseEnvelope) error {
+	if c.Owner == nil {
+		return errors.New("no owner state")
+	}
+	raw, err := hex.DecodeString(c.Proof)
+	if err != nil {
+		return fmt.Errorf("proof: %w", err)
+	}
+	buf := bytes.NewBuffer(raw)
+	proof, err := structs.NewCombinedTreeProof(cs, buf)
+	if err != nil {
+		return fmt.Errorf("parsing the proof: %w", err)
+	} else if buf.Len() != 0 {
+		return fmt.Errorf("%d bytes left after the proof", buf.Len())
+	}
+
+	handle := algorithms.NewReceivedProofHandle(cs, *proof)
+	for _, k := range c.Keys {
+		vrfOutput, err := hex.DecodeString(k.VrfOutput)
+		if err != nil {
+			return fmt.Errorf("version %d vrf_output: %w", k.Version, err)
+		}
+		var commitment []byte
+		if k.Commitment != nil {
+			commitment, err = hex.DecodeString(*k.Commitment)
+			if err != nil {
+				return fmt.Errorf("version %d commitment: %w", k.Version, err)
+			}
+		}
+		if err := handle.AddVersion(k.Version, vrfOutput, commitment); err != nil {
+			return fmt.Errorf("version %d: %w", k.Version, err)
+		}
+	}
+
+	config, err := searchConfig(cs)
+	if err != nil {
+		return err
+	}
+	provider := algorithms.NewDataProvider(cs, handle)
+	// §12.3.1 first, as a client does: the view update consumes the frontier's timestamps before
+	// §9.1 asks for anything.
+	if err := algorithms.UpdateView(config, c.Size, nil, provider); err != nil {
+		return fmt.Errorf("updating the view: %w", err)
+	}
+	monitor, err := algorithms.NewMonitor(config, c.Size, provider)
+	if err != nil {
+		return fmt.Errorf("creating the monitor: %w", err)
+	}
+	monitor.Owner = &algorithms.OwnerState{
+		Starting:      c.Owner.Starting,
+		VerAtStarting: c.Owner.VersionAtStarting,
+		UpcomingVers:  c.Owner.Upcoming,
+	}
+	if err := monitor.Update(c.Position, c.NewVersions); err != nil {
+		return fmt.Errorf("§9.1: %w", err)
+	}
+	if _, err := provider.Finish(c.Size, nil, nil); err != nil {
+		return fmt.Errorf("finishing: %w", err)
+	}
+	return nil
 }
