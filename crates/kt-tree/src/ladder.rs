@@ -22,6 +22,11 @@
 //! a proof given for a log entry to the left or right, which is what makes a
 //! `CombinedTreeProof` as small as it is (§12.3).
 //!
+//! [`update_binary_ladder`] is a fourth shape, and the one Appendix B does not
+//! have: §9.1 defines it in prose as a *set* of versions rather than a sequence
+//! with a stopping rule, because a label owner creating new versions is not
+//! searching for anything.
+//!
 //! # Versions are `uint32`, ladders are not
 //!
 //! Appendix B is Python, so its ladder for `n = 2^32 - 1` happily contains
@@ -187,6 +192,62 @@ pub fn monitoring_binary_ladder(target: u32, left_inclusion: &[u32]) -> Vec<u32>
         .filter_map(|rung| u32::try_from(rung).ok())
         .filter(|version| !left_inclusion.contains(version))
         .collect()
+}
+
+/// The versions an `UpdateResponse` carries VRF proofs for (§9.1).
+///
+/// This is the fourth ladder shape, and the only one that is not in Appendix B: §9.1 spells it
+/// out in prose instead, as three bullets under "VRF proofs for the following versions of the
+/// label". `start_ver` is the first version the update created and `end_ver` the last; they are
+/// equal when only one version was created.
+///
+/// - every version in a search binary ladder for `end_ver`, which is the new greatest version;
+/// - each individual version in `start_ver..end_ver`, so that a multi-version update can be
+///   checked version by version rather than only at its top;
+/// - minus every version in a search binary ladder for `start_ver - 1`, the previous greatest,
+///   "as the label owner is expected to already know these VRF outputs". Where there was no
+///   previous version, §9.1 says to "omit only the version zero" — there is nothing else the
+///   owner could already know.
+///
+/// The result is ascending and free of duplicates, which is what §13.5's `binary_ladder` field
+/// requires ("in ascending order by version"). Unlike the three Appendix B shapes this is a
+/// *set*: it does not stop at a rung and has no notion of termination, because the owner is not
+/// searching. It says only which VRF outputs the response has to carry.
+///
+/// A caller with `start_ver > end_ver` gets the first and third bullets alone; §9.1 has no such
+/// case, since an update creates at least one version, and [`crate::combined::owner_update`]
+/// establishes the ordering before calling here.
+///
+/// # Errors
+///
+/// [`Error::UnrepresentableRung`] if `end_ver` is `u32::MAX`; see the module documentation.
+pub fn update_binary_ladder(start_ver: u32, end_ver: u32) -> Result<Vec<u32>> {
+    let mut out = search_binary_ladder(end_ver, end_ver, &[], &[])?;
+    for version in start_ver..end_ver {
+        if !out.contains(&version) {
+            out.push(version);
+        }
+    }
+
+    // The previous greatest version's own ladder is what the owner already holds. With no
+    // previous version there is no ladder to subtract, and §9.1 names version zero explicitly:
+    // an owner about to create version 0 knows nothing about the label, so version 0's VRF
+    // output is the one thing the log need not repeat — it is the search key the owner used to
+    // ask in the first place.
+    let known = if start_ver == 0 {
+        alloc::vec![0]
+    } else {
+        search_binary_ladder(
+            start_ver.saturating_sub(1),
+            start_ver.saturating_sub(1),
+            &[],
+            &[],
+        )?
+    };
+    out.retain(|version| !known.contains(version));
+
+    out.sort_unstable();
+    Ok(out)
 }
 
 /// Appendix B's `base_binary_ladder`, computed in `u64` so that the rungs above
@@ -468,6 +529,118 @@ mod tests {
                 "target {target}, greatest {greatest}"
             );
         }
+    }
+
+    /// §9.1's worked-through consequence for the simplest possible update: an owner creating
+    /// version 0. The new greatest version is 0, whose ladder is `[0, 1]` — version 0 included,
+    /// version 1 absent — and version 0 itself is the one the bullet omits, so the response
+    /// carries a VRF proof for version 1 alone.
+    #[test]
+    fn the_first_version_needs_only_the_rung_above_it() {
+        assert_eq!(update_binary_ladder(0, 0).unwrap(), vec![1]);
+    }
+
+    /// The three bullets, each visible in the answer, and the third doing more work than it
+    /// looks like it will. An owner at version 3 creating versions 4, 5 and 6: the ladder for 6
+    /// is `[0, 1, 3, 7, 5, 6]` and the individual new versions add 4. But the ladder for the
+    /// previous greatest version is `[0, 1, 3, 7, 5, 4]` — a base ladder does not stop once it
+    /// has bracketed the version, it narrows until it has pinned it, so 5 and 4 are already in
+    /// the owner's hands. One VRF proof survives, for the new greatest version itself.
+    #[test]
+    fn a_multi_version_update_keeps_the_new_versions_and_drops_the_known_ones() {
+        assert_eq!(base_binary_ladder(6).unwrap(), vec![0, 1, 3, 7, 5, 6]);
+        assert_eq!(base_binary_ladder(3).unwrap(), vec![0, 1, 3, 7, 5, 4]);
+        assert_eq!(update_binary_ladder(4, 6).unwrap(), vec![6]);
+    }
+
+    /// Ascending and duplicate-free, which §13.5's `binary_ladder` field requires. Worth
+    /// checking across a range rather than at one point: the second bullet's individual
+    /// versions overlap the first bullet's ladder whenever a new version happens to be a rung,
+    /// and a set that merely appended would repeat it.
+    #[test]
+    fn the_set_is_ascending_and_has_no_repeats() {
+        for start in 0_u32..40 {
+            for end in start..40 {
+                let versions = update_binary_ladder(start, end).unwrap();
+                assert!(
+                    versions.windows(2).all(|pair| pair[0] < pair[1]),
+                    "start {start}, end {end}: {versions:?}"
+                );
+            }
+        }
+    }
+
+    /// Every version the update created is present, and the previous greatest version's own
+    /// rungs are absent. Together these are what make the response checkable: the owner needs a
+    /// search key for each version it is claiming, and needs no repeat of what it holds.
+    #[test]
+    fn new_versions_are_covered_and_known_rungs_are_not() {
+        for start in 0_u32..30 {
+            for end in start..30 {
+                let versions = update_binary_ladder(start, end).unwrap();
+                for created in start..=end {
+                    let known = if start == 0 {
+                        created == 0
+                    } else {
+                        base_binary_ladder(start - 1).unwrap().contains(&created)
+                    };
+                    assert_eq!(
+                        versions.contains(&created),
+                        !known,
+                        "start {start}, end {end}, version {created}"
+                    );
+                }
+                if start > 0 {
+                    for known in base_binary_ladder(start - 1).unwrap() {
+                        assert!(
+                            !versions.contains(&known),
+                            "start {start}, end {end}: {known} is already held"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The `uint32` ceiling reaches this shape too, through the ladder for the new greatest
+    /// version. An owner cannot be told that `u32::MAX` is the greatest version of a label,
+    /// here for the same reason as everywhere else: the proof would need version `2^32`.
+    #[test]
+    fn the_top_version_is_unrepresentable_here_too() {
+        assert_eq!(
+            update_binary_ladder(u32::MAX, u32::MAX),
+            Err(Error::UnrepresentableRung {
+                rung: (1 << 33) - 1,
+                greatest: u32::MAX,
+            })
+        );
+        // One below the ceiling is fine, and comes out empty for the reason below.
+        assert_eq!(
+            update_binary_ladder(u32::MAX - 1, u32::MAX - 1).unwrap(),
+            []
+        );
+    }
+
+    /// A single-version update can need no VRF proofs at all, and that is not the log holding
+    /// something back. Pinning version 1 as the greatest takes a non-inclusion proof for
+    /// version 2 — a base ladder narrows until it has the version exactly — so an owner going
+    /// from 1 to 2 already holds every search key the new ladder asks for. §13.5's
+    /// `binary_ladder` is legitimately empty there, and a verifier that treats empty as
+    /// suspicious would reject honest responses.
+    ///
+    /// It is worth knowing how often: 19 of the first 39 single-version updates need nothing at
+    /// all. Roughly half, not all, because a version that ends a base ladder's first phase — a
+    /// power of two minus one — is bracketed by the previous ladder rather than pinned by it,
+    /// and its own ladder reaches a rung further right.
+    #[test]
+    fn a_single_version_update_often_needs_nothing() {
+        assert_eq!(update_binary_ladder(2, 2).unwrap(), []);
+        let empty = (1_u32..40)
+            .filter(|version| update_binary_ladder(*version, *version).unwrap().is_empty())
+            .count();
+        assert_eq!(empty, 19);
+        // Version 3 is `2^2 - 1`, so its ladder probes 7 and the owner has never seen it.
+        assert_eq!(update_binary_ladder(3, 3).unwrap(), vec![4, 5, 7]);
     }
 }
 

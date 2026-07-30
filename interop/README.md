@@ -150,7 +150,8 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `commitment.json` | commitment | §11.6 | 6 positive, 1 negative |
 | `ibst.json` | implicit binary search tree | §4.1, Appendix A | 38 log sizes |
 | `binary-ladder.json` | binary ladder | §5, Appendix B | 76 across base, search, monitoring |
-| `vrf.json` | VRF | §11.7 | 10 positive, 1 negative |
+| `vrf.json` | VRF, Ed25519 suite | §11.7 | 10 positive, 1 negative |
+| `vrf-p256.json` | VRF, P-256 suite | §11.7, §17.1 | 10 positive, 1 negative |
 | `log-math.json` | log tree structure, in node indices | §3.2, §4.2, §12.1 | 1679 decompositions |
 | `log-tree.json` | log tree | §3.2, §11.8, §12.1 | 19 sizes, 297 batch proofs |
 | `prefix-tree.json` | prefix tree | §3.3, §11.9, §12.2 | 11 trees |
@@ -159,13 +160,15 @@ dropped. `binary-ladder.json` stops at version `2^31-2` for exactly that reason.
 | `auditor-update.json` | `AuditorUpdate` bytes, the auditor's verdict, and the root it would sign | §15.2, §11.3 | 14, 8 negative |
 | `search.json` | responses served by a real in-memory log | §6.3, §7.1–§7.2, §12.3, §13.1 | 13 requests, 1 refused |
 | `monitor.json` | monitoring responses from the same log | §13.2–§13.4 | 5 operations |
+| `update.json` | §9.1 update proofs from the same log | §9.1, §13.5 | 8 owner/window/version shapes |
 | `ladder-interpretation.json` | search ladder interpretation | §6.2 | 211 target/greatest pairs |
 | `update-view.json` | updating a view | §4.2 | 190 size/advertised pairs |
 | `distinguished.json` | distinguished log entries | §6.1 | 42 size/window/timestamp shapes |
 | `tree-head.json` | configuration, signatures, and `FullTreeHead` bytes | §11.2–§11.4 | 9, all three modes |
+| `tree-head-p256.json` | the same under ECDSA/P-256 | §11.2–§11.4, §17.1 | 9, all three modes |
 | `requests.json` | §13 requests and building blocks | §11.5, §13.1–§13.5 | 22 structures |
 | `tampered.json` | **must reject** | §11.2, §11.6, §11.7, §12.1, §12.2 | 22, all negative |
-| `from-kt.json` | must accept / must reject, in reverse | as above | 218, roughly half negative |
+| `from-kt.json` | must accept / must reject, in reverse | as above | 225, roughly half negative |
 
 ## Two kinds of agreement
 
@@ -189,11 +192,18 @@ subtree over `[start, start+len)` is node `2*start + len - 1`, and because a §1
 only ever carries balanced subtree heads, that translation is total on exactly the
 values that matter. A range that failed to map would itself be the bug.
 
-## The two files that cannot be reproducible
+## The four files that cannot be reproducible
 
 Every vector file here regenerates to the same bytes, and CI diffs them so that an upstream
-bump changing behaviour fails loudly instead of passing quietly. `search.json` and
-`monitor.json` are the exceptions, and it is not fixable: both are served by a live log, and
+bump changing behaviour fails loudly instead of passing quietly. Four are exceptions.
+
+`tree-head-p256.json` is the simple case: it carries ECDSA signatures, and Go's `crypto/ecdsa`
+draws a nonce per signature. §17.1 fixes how `r` and `s` are encoded, not how they are produced.
+Here the non-reproducibility is a feature — CI regenerates and re-checks, so every run verifies
+signatures nobody has seen, and a verifier that happened to work for one nonce would fail.
+
+`search.json`, `monitor.json` and `update.json` are the harder case, and it is not fixable: all
+three come from a live log, and
 katie stamps each entry with `time.Now()` and generates a fresh random opening for every
 commitment, with no injection point for either. Every commitment, prefix root, log root and
 signature in a response therefore differs run to run.
@@ -208,11 +218,21 @@ where everything or nothing expired would pass while testing nothing.
 The alternative to giving up the property was to weaken it — compare the regenerated file
 structurally, ignoring the values that move. That would have checked less than what is done
 instead: CI regenerates the vectors and runs **the whole Rust check suite against the
-regenerated tree**, so both files' checks execute against bytes nobody has ever seen. A change
+regenerated tree**, so all four files' checks execute against bytes nobody has ever seen. A change
 in how the peer shapes a response fails there. The committed files remain as pinned artifacts
 for `cargo test` and for the page, and are excluded from the reproducibility diff.
 
-Net effect: the deterministic files are pinned *and* reproducible; the two nondeterministic ones
+`update.json` is the odd one out in a second way, and it is worth being precise about what it
+claims. It carries `CombinedTreeProof` structures and no response envelope, because katie's
+`tree.Update` cannot serve an update at all: it builds a monitor that leaves the owner state
+nil and then calls the algorithm that requires it, so every request comes back "label owner
+state has not been initialized" (`KT-04`). The vectors therefore drive katie's §9.1
+implementation directly — the same calls `tree.Update` makes, with the owner state supplied —
+and record what it produces. What is measured is §9.1's element ordering, which is the part no
+hand-built example can pin. The `UpdateResponse` around it was never measured and is not
+claimed; its members are pinned by `tree-head.json` and `requests.json` instead.
+
+Net effect: the deterministic files are pinned *and* reproducible; the four nondeterministic ones
 are pinned and re-derived. Nothing is checked only against itself, which is the property that
 actually matters.
 

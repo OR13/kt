@@ -21,7 +21,25 @@ import (
 
 // vrfVectors covers draft §11.7 for KT_128_SHA256_Ed25519.
 func vrfVectors(sha string) (*File, error) {
-	cs := suites.KTSha256Ed25519{}
+	return vrfVectorsFor(sha, suites.KTSha256Ed25519{},
+		"ECVRF-EDWARDS25519-SHA512-TAI (RFC 9381) over the presentation-language "+
+			"encoding of a VrfInput, with the output truncated to VRF.Nh = 32 bytes per "+
+			"§17.1. ")
+}
+
+// vrfVectorsP256 covers the same section for KT_128_SHA256_P256, where the ECVRF
+// ciphersuite, the hash, the integer byte order and every encoded length differ. The
+// cases are the same inputs, so a diff between the two files is entirely attributable
+// to the suite.
+func vrfVectorsP256(sha string) (*File, error) {
+	return vrfVectorsFor(sha, suites.KTSha256P256{},
+		"ECVRF-P256-SHA256-TAI (RFC 9381) over the presentation-language encoding of a "+
+			"VrfInput. Unlike the Ed25519 suite there is no truncation — beta_string is "+
+			"already VRF.Nh = 32 bytes — the integers are big-endian, an encoded point is "+
+			"33 bytes SEC1 compressed, and VRF.Np is 81. ")
+}
+
+func vrfVectorsFor(sha string, cs suites.CipherSuite, notes string) (*File, error) {
 
 	// A fixed key, so regeneration is a no-op diff. Deliberately not the RFC 9381
 	// key: those vectors are already run directly, and reusing one here would
@@ -57,12 +75,11 @@ func vrfVectors(sha string) (*File, error) {
 		Primitive:   "vrf",
 		Draft:       draftRev + " §11.7",
 		Generator:   Generator{Impl: "katie", SHA: sha},
-		CipherSuite: 0x0002, // KT_128_SHA256_Ed25519
-		Notes: "ECVRF-EDWARDS25519-SHA512-TAI (RFC 9381) over the presentation-language " +
-			"encoding of a VrfInput, with the output truncated to VRF.Nh = 32 bytes per " +
-			"§17.1. `vrf_input` is that encoding, which is what alpha_string must be; " +
+		CipherSuite: cs.Id(),
+		Notes: notes +
+			"`vrf_input` is that encoding, which is what alpha_string must be; " +
 			"`output` is the prefix tree search key for the label-version pair; `proof` is " +
-			"VRF.Np = 80 bytes. The RFC's own Appendix B vectors pin the ECVRF core and are " +
+			"VRF.Np bytes. The RFC's own Appendix B vectors pin the ECVRF core and are " +
 			"run directly by the Rust side; these pin the KT wrapping around it. The " +
 			"negative case is a proof for one label-version pair checked against another, " +
 			"which must not verify.",

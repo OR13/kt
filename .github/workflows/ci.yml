@@ -104,9 +104,11 @@ jobs:
       - name: The checks must pass against freshly generated vectors
         run: cargo run -p kt-interop --bin kt-interop-report -- --vectors interop/vectors --out "$RUNNER_TEMP/fresh"
 
-      # search.json and monitor.json are excluded because they cannot be reproducible: both
-      # are served by a live log that stamps wall-clock times and draws random commitment
-      # openings. See interop/README.md. Every other file must regenerate to the same bytes,
+      # Four files are excluded because they cannot be reproducible. search.json, monitor.json
+      # and update.json come from a live log that stamps wall-clock times and draws random
+      # commitment openings; tree-head-p256.json carries ECDSA signatures, and Go's crypto/ecdsa
+      # draws a nonce per signature. See interop/README.md. Every other file must regenerate to
+      # the same bytes,
       # so an upstream bump that changes behaviour shows up as a diff rather than a silent
       # pass — and the two exceptions are covered by the fresh-generation run above, which
       # is a stronger check for them than a diff would be.
@@ -114,4 +116,6 @@ jobs:
         run: |
           git diff --exit-code -- interop/vectors \
             ':(exclude)interop/vectors/search.json' \
-            ':(exclude)interop/vectors/monitor.json'
+            ':(exclude)interop/vectors/monitor.json' \
+            ':(exclude)interop/vectors/update.json' \
+            ':(exclude)interop/vectors/tree-head-p256.json'

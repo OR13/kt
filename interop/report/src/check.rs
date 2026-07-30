@@ -15,12 +15,12 @@ use kt_crypto::suite::CipherSuite;
 use kt_crypto::{signature, vrf};
 use kt_tree::{audit, combined, ibst, ladder, log, prefix};
 use kt_wire::audit::AuditorUpdate;
-use kt_wire::codec::Decoder;
+use kt_wire::codec::{Decode as _, Decoder};
 use kt_wire::heads::{
     AuditorConfig, AuditorTreeHead, AuditorTreeHeadTBS, Configuration, FullTreeHead, TreeHead,
     TreeHeadTBS,
 };
-use kt_wire::proofs::{InclusionProof, PrefixLeaf, PrefixProof};
+use kt_wire::proofs::{CombinedTreeProof, InclusionProof, PrefixLeaf, PrefixProof};
 use kt_wire::requests::{
     BinaryLadderStep, ContactMonitorRequest, LabelValue, MonitorMapEntry, OwnerInitRequest,
     OwnerMonitorRequest, SearchRequest, UpdateInfo, UpdateRequest, UpdateTBS,
@@ -38,13 +38,13 @@ use crate::vectors::{
     DistinguishedExpect, DistinguishedInput, HeadExpect, HeadInput, IbstExpect, IbstInput,
     InterpretationExpect, InterpretationInput, LadderExpect, LadderInput, LogMathExpect,
     LogMathInput, LogTreeExpect, LogTreeInput, MonitorExpect, MonitorInput, MutationExpect,
-    MutationInput, PrefixTreeExpect, PrefixTreeInput, RequestExpect, RequestInput, SearchExpect,
-    SearchInput, TamperedExpect, TamperedInput, UpdateViewExpect, UpdateViewInput, VectorFile,
-    VrfCaseInput, VrfExpect,
+    MutationInput, OwnerUpdateExpect, OwnerUpdateInput, PrefixTreeExpect, PrefixTreeInput,
+    RequestExpect, RequestInput, SearchExpect, SearchInput, TamperedExpect, TamperedInput,
+    UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
 /// The vector files this crate knows how to check, in dependency order.
-pub const FILES: [&str; 18] = [
+pub const FILES: [&str; 21] = [
     "commitment.json",
     "ibst.json",
     "binary-ladder.json",
@@ -52,6 +52,7 @@ pub const FILES: [&str; 18] = [
     "update-view.json",
     "distinguished.json",
     "vrf.json",
+    "vrf-p256.json",
     "log-math.json",
     "log-tree.json",
     "log-append.json",
@@ -60,7 +61,9 @@ pub const FILES: [&str; 18] = [
     "auditor-update.json",
     "search.json",
     "monitor.json",
+    "update.json",
     "tree-head.json",
+    "tree-head-p256.json",
     "requests.json",
     "tampered.json",
 ];
@@ -176,6 +179,7 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         update_view_suite(dir)?,
         distinguished_suite(dir)?,
         vrf_suite(dir)?,
+        vrf_p256_suite(dir)?,
         log_math_suite(dir)?,
         log_tree_suite(dir)?,
         append_suite(dir)?,
@@ -184,7 +188,9 @@ pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
         auditor_suite(dir)?,
         search_suite(dir)?,
         monitor_suite(dir)?,
+        owner_update_suite(dir)?,
         head_suite(dir)?,
+        head_p256_suite(dir)?,
         request_suite(dir)?,
         tampered_suite(dir)?,
     ])
@@ -1084,7 +1090,8 @@ fn search_suite(dir: &Path) -> Result<Suite, Error> {
             checks.push(Check::new(
                 "replaying §6.3 consumes the proof exactly (§12.3)",
                 if case.name == "label-does-not-exist" {
-                    "every element read, none left over (the label has no versions)"
+                    "every element read, none left over \
+                     (a negative result, which §13.1 requires rejecting)"
                 } else {
                     "every element read, none left over"
                 },
@@ -1147,7 +1154,9 @@ fn ladder_keys(
     let label = hex::decode(&case.input.label).map_err(|err| format!("label: {err}"))?;
     let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
         .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
-        .and_then(|bytes| vrf::PublicKey::from_bytes(bytes).map_err(|err| err.to_string()))?;
+        .and_then(|bytes| {
+            vrf::edwards25519::PublicKey::from_bytes(bytes).map_err(|err| err.to_string())
+        })?;
 
     // The response's ladder can be shorter than §5's full sequence, for the same reason a
     // per-entry ladder can: the sequence stops once it has placed the greatest version. So the
@@ -1182,7 +1191,7 @@ fn ladder_keys(
             label: label.clone(),
             version: *version,
         };
-        let proof = vrf::Proof::from_slice(&step.proof)
+        let proof = vrf::edwards25519::Proof::from_slice(&step.proof)
             .map_err(|err| format!("version {version}: {err}"))?;
         let output = vrf_key
             .verify(suite, &input, &proof)
@@ -1249,7 +1258,10 @@ fn replay_greatest_version(
     // when the user advertised a size.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1270,9 +1282,10 @@ fn replay_greatest_version(
     let (inspected_pairs, note) = match &outcome {
         combined::Outcome::Found(search) => (&search.inspected, ""),
         // The label has no versions. §6.3 does not describe this response; see DRAFT-08.
-        combined::Outcome::NoVersions { inspected, .. } => {
-            (inspected, " (the label has no versions)")
-        }
+        combined::Outcome::NegativeResult { inspected, .. } => (
+            inspected,
+            " (a negative result, which §13.1 requires rejecting)",
+        ),
     };
 
     // Any entry that got a timestamp but no proof needs its prefix root, which is what
@@ -1325,7 +1338,10 @@ fn replay_fixed_version(
     // §12.3.1's view update comes first, exactly as for a greatest-version search.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1531,7 +1547,9 @@ fn replay_contact_monitor(
         hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
     let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
         .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
-        .and_then(|value| vrf::PublicKey::from_bytes(value).map_err(|err| err.to_string()))?;
+        .and_then(|value| {
+            vrf::edwards25519::PublicKey::from_bytes(value).map_err(|err| err.to_string())
+        })?;
 
     // What the client already holds. A monitoring response carries no ladder and no
     // commitments, so these come from the user's own state — recorded by the generator as a
@@ -1590,7 +1608,10 @@ fn replay_contact_monitor(
     // §12.3.4's view update comes first, as for every other operation.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        Some(advertised) => ibst::update_view(size, Some(advertised))
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1644,7 +1665,9 @@ fn replay_owner_init(
         hex::decode(&case.input.vrf_public_key).map_err(|err| format!("vrf key: {err}"))?;
     let vrf_key = <[u8; 32]>::try_from(vrf_key.as_slice())
         .map_err(|_| "the VRF public key is not 32 bytes".to_owned())
-        .and_then(|value| vrf::PublicKey::from_bytes(value).map_err(|err| err.to_string()))?;
+        .and_then(|value| {
+            vrf::edwards25519::PublicKey::from_bytes(value).map_err(|err| err.to_string())
+        })?;
 
     // §8.3 step 3: the ladder covers version zero and every version a search ladder for any of
     // the greatest versions would look up. Recovering which version each step is for means
@@ -1674,7 +1697,7 @@ fn replay_owner_init(
             label: label.clone(),
             version: *version,
         };
-        let proof = vrf::Proof::from_slice(&step.proof)
+        let proof = vrf::edwards25519::Proof::from_slice(&step.proof)
             .map_err(|err| format!("version {version}: {err}"))?;
         let output = vrf_key
             .verify(suite, &input, &proof)
@@ -2392,7 +2415,7 @@ fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
     let mut cases = Vec::new();
     for case in &file.cases {
         let name = case.name.as_str();
-        let seed: [u8; vrf::SECRET_KEY_SIZE] =
+        let seed: [u8; vrf::edwards25519::SECRET_KEY_SIZE] =
             unhex(FILE, name, "private_key", &case.input.private_key)?
                 .try_into()
                 .map_err(|_| Error::Hex {
@@ -2400,7 +2423,7 @@ fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
                     case: name.to_owned(),
                     field: "private_key".to_owned(),
                 })?;
-        let secret = vrf::SecretKey::from_seed(seed);
+        let secret = vrf::edwards25519::SecretKey::from_seed(seed);
         let label = unhex(FILE, name, "label", &case.input.label)?;
         let input = VrfInput::new(label, case.input.version);
 
@@ -2423,7 +2446,7 @@ fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
                     field: "input.proof".to_owned(),
                 })?;
             let bytes = unhex(FILE, name, "input.proof", raw)?;
-            let got = match vrf::Proof::from_slice(&bytes) {
+            let got = match vrf::edwards25519::Proof::from_slice(&bytes) {
                 Err(err) => format!("unusable proof: {err}"),
                 Ok(proof) => match secret.public_key().verify(suite, &input, &proof) {
                     Err(_) => "rejected".to_owned(),
@@ -2494,13 +2517,13 @@ fn vrf_suite(dir: &Path) -> Result<Suite, Error> {
             // And the peer's own proof must verify and yield the peer's output —
             // the direction a client actually runs.
             let bytes = unhex(FILE, name, "expect.proof", expected_proof)?;
-            let public = vrf::PublicKey::from_slice(&unhex(
+            let public = vrf::edwards25519::PublicKey::from_slice(&unhex(
                 FILE,
                 name,
                 "public_key",
                 &case.input.public_key,
             )?);
-            let verified = match (public, vrf::Proof::from_slice(&bytes)) {
+            let verified = match (public, vrf::edwards25519::Proof::from_slice(&bytes)) {
                 (Err(err), _) => format!("unusable public key: {err}"),
                 (_, Err(err)) => format!("unusable proof: {err}"),
                 (Ok(public), Ok(proof)) => {
@@ -2654,8 +2677,8 @@ fn tampered_suite(dir: &Path) -> Result<Suite, Error> {
                 let bytes = unhex(FILE, name, "proof", proof)?;
                 let input = VrfInput::new(unhex(FILE, name, "label", label)?, *version);
                 let got = match (
-                    vrf::PublicKey::from_slice(&key),
-                    vrf::Proof::from_slice(&bytes),
+                    vrf::edwards25519::PublicKey::from_slice(&key),
+                    vrf::edwards25519::Proof::from_slice(&bytes),
                 ) {
                     (Err(err), _) => format!("rejected with the key: {err}"),
                     (_, Err(err)) => format!("rejected with the proof: {err}"),
@@ -2768,12 +2791,24 @@ fn tampered_suite(dir: &Path) -> Result<Suite, Error> {
 
 /// §11.2, §11.3, §11.4: the configuration and the signatures over it.
 fn head_suite(dir: &Path) -> Result<Suite, Error> {
-    const FILE: &str = "tree-head.json";
-    let file: VectorFile<HeadInput, HeadExpect> = load(dir, FILE)?;
+    head_suite_file(dir, "tree-head.json", "Signed tree heads")
+}
+
+/// The same set under `KT_128_SHA256_P256`: ECDSA over SHA-256, and `0x0001` in every
+/// `Configuration`. Not reproducible, because ECDSA signing draws a nonce — which makes CI's
+/// regeneration run the stronger check, since each one verifies signatures nobody has seen.
+fn head_p256_suite(dir: &Path) -> Result<Suite, Error> {
+    head_suite_file(dir, "tree-head-p256.json", "Signed tree heads, ECDSA/P-256")
+}
+
+fn head_suite_file(dir: &Path, name: &str, title: &str) -> Result<Suite, Error> {
+    // The two suites' files are the same shape, so only the name and the title differ.
+    let file_name = name.to_owned();
+    let file: VectorFile<HeadInput, HeadExpect> = load(dir, name)?;
 
     let code = file.cipher_suite.unwrap_or_default();
     let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
-        file: FILE.to_owned(),
+        file: file_name.clone(),
         value: code,
     })?;
 
@@ -2781,7 +2816,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
     for case in &file.cases {
         let name = case.name.as_str();
         let mode = DeploymentMode::from_u8(case.input.mode).map_err(|_| Error::Computation {
-            file: FILE.to_owned(),
+            file: file_name.clone(),
             case: name.to_owned(),
             detail: format!("unknown deployment mode {}", case.input.mode),
         })?;
@@ -2790,22 +2825,22 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
             cipher_suite: code,
             mode,
             signature_public_key: unhex(
-                FILE,
+                name,
                 name,
                 "signature_public_key",
                 &case.input.signature_public_key,
             )?,
-            vrf_public_key: unhex(FILE, name, "vrf_public_key", &case.input.vrf_public_key)?,
+            vrf_public_key: unhex(name, name, "vrf_public_key", &case.input.vrf_public_key)?,
             leaf_public_key: match &case.input.leaf_public_key {
                 None => None,
-                Some(key) => Some(unhex(FILE, name, "leaf_public_key", key)?),
+                Some(key) => Some(unhex(name, name, "leaf_public_key", key)?),
             },
             auditor: match &case.input.auditor_public_key {
                 None => None,
                 Some(key) => Some(AuditorConfig {
                     max_auditor_lag: case.input.max_auditor_lag.unwrap_or_default(),
                     auditor_start_pos: case.input.auditor_start_pos.unwrap_or_default(),
-                    auditor_public_key: unhex(FILE, name, "auditor_public_key", key)?,
+                    auditor_public_key: unhex(name, name, "auditor_public_key", key)?,
                 }),
             },
             max_ahead: case.input.max_ahead,
@@ -2813,7 +2848,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
             reasonable_monitoring_window: case.input.reasonable_monitoring_window,
             maximum_lifetime: None,
         };
-        let root = hash_field(FILE, name, "root", &case.input.root)?;
+        let root = hash_field(name, name, "root", &case.input.root)?;
 
         // The configuration's encoding, which every signature depends on. This is
         // the check that pins §11.2's grouped-case ambiguity: under contact
@@ -2827,7 +2862,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
 
         // And the peer's own bytes must decode back to the same configuration.
         let peer_config = unhex(
-            FILE,
+            name,
             name,
             "expect.configuration",
             &case.expect.configuration,
@@ -2855,7 +2890,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
 
         let head = TreeHead {
             tree_size: case.input.tree_size,
-            signature: unhex(FILE, name, "expect.signature", &case.expect.signature)?,
+            signature: unhex(name, name, "expect.signature", &case.expect.signature)?,
         };
         checks.push(Check::new(
             "TreeHead encoding (§11.2)",
@@ -2883,7 +2918,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
             ("same", &case.expect.full_tree_head_same),
             ("updated", &case.expect.full_tree_head_updated),
         ] {
-            let bytes = unhex(FILE, name, "expect.full_tree_head", expected)?;
+            let bytes = unhex(name, name, "expect.full_tree_head", expected)?;
             let mut dec = Decoder::new(&bytes);
             let parsed = FullTreeHead::decode_with_mode(&mut dec, mode);
             checks.push(Check::new(
@@ -2932,7 +2967,7 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
                 render_result(kt_wire::codec::encode(&auditor_tbs), hex::encode),
             ));
 
-            let bytes = unhex(FILE, name, "expect.auditor_tree_head", expected_head)?;
+            let bytes = unhex(name, name, "expect.auditor_tree_head", expected_head)?;
             let parsed = kt_wire::codec::decode::<AuditorTreeHead>(&bytes);
             checks.push(Check::new(
                 "the auditor's signature verifies (§11.3)",
@@ -3006,9 +3041,9 @@ fn head_suite(dir: &Path) -> Result<Suite, Error> {
 
     Ok(Suite {
         primitive: file.primitive,
-        title: "Tree head signatures".to_owned(),
+        title: title.to_owned(),
         draft_section: section_of(&file.draft),
-        file: FILE.to_owned(),
+        file: file_name.clone(),
         generator: Generator {
             implementation: file.generator.implementation,
             sha: file.generator.sha,
@@ -3028,13 +3063,43 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
         let size = case.input.size;
         let advertised = case.input.advertised;
 
+        // The peer implements §4.2 as it read before 2026-07-28, so that is what its
+        // answers are compared against. The current text's procedure is checked below,
+        // against the property the amendment added rather than against the peer.
         let mut checks = vec![Check::new(
-            "update_view(size, advertised) (§4.2)",
+            "update_view as the peer reads §4.2 (before 2026-07-28)",
             render_list(&case.expect.entries),
-            render_result(ibst::update_view(size, advertised), |entries| {
-                render_list(&entries)
-            }),
+            render_result(
+                ibst::update_view_ancestors_only(size, advertised),
+                |entries| render_list(&entries),
+            ),
         )];
+
+        // What the amendment guarantees: the list ends at the new rightmost entry, so a
+        // user always learns the timestamp their clock bounds are checked against. There is
+        // no peer answer to compare this to — the peer predates the clause — so the check
+        // is against the draft's own guarantee, and it is the only check here that is not a
+        // cross-implementation comparison.
+        let current = ibst::update_view(size, advertised);
+        let up_to_date = advertised == Some(size);
+        checks.push(Check::new(
+            "update_view under the current §4.2 ends at the rightmost entry",
+            if up_to_date {
+                "nothing to send".to_owned()
+            } else {
+                format!("ends at entry {}", size.saturating_sub(1))
+            },
+            render_result(current, |entries| {
+                if up_to_date && entries.is_empty() {
+                    "nothing to send".to_owned()
+                } else {
+                    entries.last().map_or_else(
+                        || "nothing at all".to_owned(),
+                        |last| format!("ends at entry {last}"),
+                    )
+                }
+            }),
+        ));
 
         if let Some(expected) = &case.expect.frontier {
             checks.push(Check::new(
@@ -3051,7 +3116,7 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
                 "whether the rightmost entry is left unchecked (§4.2)",
                 expected.to_string(),
                 render_result(
-                    ibst::leaves_right_edge_unchecked(size, advertised),
+                    ibst::ancestors_only_leaves_right_edge_unchecked(size, advertised),
                     |flag| flag.to_string(),
                 ),
             ));
@@ -3516,4 +3581,410 @@ fn log_math_suite(dir: &Path) -> Result<Suite, Error> {
 
 fn alloc_display(err: &impl core::fmt::Display) -> String {
     format!("{err}")
+}
+
+/// §9.1 and §13.5: a label owner verifying that new versions were inserted correctly.
+///
+/// These vectors carry a `CombinedTreeProof` and no response envelope, and the reason is recorded
+/// in the file itself: katie's `tree.Update` cannot answer any request, so no `UpdateResponse` was
+/// ever measured. What is here is the part that matters for interoperability — §9.1's element
+/// ordering, which no hand-built example can pin — and the claim is scoped to it.
+fn owner_update_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "update.json";
+    let file: VectorFile<OwnerUpdateInput, OwnerUpdateExpect> = load(dir, FILE)?;
+    let suite = CipherSuite::Kt128Sha256Ed25519;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let bytes = unhex(FILE, name, "expect.proof", &case.expect.proof)?;
+
+        let mut dec = Decoder::new(&bytes);
+        let parsed = CombinedTreeProof::decode(&mut dec).and_then(|proof| {
+            if dec.is_empty() {
+                Ok(proof)
+            } else {
+                Err(kt_wire::codec::Error::TrailingBytes {
+                    remaining: dec.remaining(),
+                })
+            }
+        });
+
+        let mut checks = vec![Check::new(
+            "CombinedTreeProof round-trips (§12.3)",
+            case.expect.proof.clone(),
+            match &parsed {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(proof) => render_result(kt_wire::codec::encode(proof), hex::encode),
+            },
+        )];
+        checks.push(Check::new(
+            "timestamps, in the order §9.1 asks for them (§12.3.5)",
+            render_list(
+                &case
+                    .expect
+                    .timestamps
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .timestamps
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "prefix proofs: step 2.2's ladders, then step 3 or 4's lookups (§9.1)",
+            render_list(
+                &case
+                    .expect
+                    .prefix_proofs
+                    .iter()
+                    .map(|proof| proof.encoding.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .prefix_proofs
+                        .iter()
+                        .map(|element| render_result(kt_wire::codec::encode(element), hex::encode))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "prefix roots — the entries with a timestamp but no proof (§12.3.2)",
+            render_list(&case.expect.prefix_roots),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .prefix_roots
+                        .iter()
+                        .map(|root| hex::encode(root.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+        checks.push(Check::new(
+            "log tree inclusion elements (§12.3)",
+            render_list(&case.expect.inclusion),
+            match &parsed {
+                Err(_) => "decode failed".to_owned(),
+                Ok(proof) => render_list(
+                    &proof
+                        .inclusion
+                        .elements
+                        .iter()
+                        .map(|element| hex::encode(element.as_bytes()))
+                        .collect::<Vec<_>>(),
+                ),
+            },
+        ));
+
+        // The replay. §12.3's exact-count rule is what turns this into a test of the *reading*:
+        // an implementation that orders §9.1's requests differently does not compute something
+        // subtly wrong, it finishes holding elements it never used.
+        let expected_branch = format!(
+            "every element read, none left over · entry {} {} · {}",
+            case.input.position,
+            if case.expect.distinguished {
+                "distinguished (step 3)"
+            } else {
+                "not distinguished (step 4)"
+            },
+            case.expect.contact.as_ref().map_or_else(
+                || "no contact monitoring entry".to_owned(),
+                |entry| format!(
+                    "contact monitoring entry {} → version {}",
+                    entry.position, entry.version
+                ),
+            ),
+        );
+        checks.push(Check::new(
+            "replaying §9.1 consumes the proof exactly (§12.3)",
+            expected_branch,
+            match &parsed {
+                Err(err) => format!("decode failed: {err}"),
+                Ok(proof) => {
+                    replay_owner_update(case, proof, suite).unwrap_or_else(|detail| detail)
+                }
+            },
+        ));
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: false,
+            input: format!(
+                "{}-entry log · {} new version{} in entry {} · {} timestamps, {} proofs, {} roots",
+                case.input.mutations.len(),
+                case.input.versions,
+                if case.input.versions == 1 { "" } else { "s" },
+                case.input.position,
+                case.expect.timestamps.len(),
+                case.expect.prefix_proofs.len(),
+                case.expect.prefix_roots.len(),
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "Update proofs for a label owner".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
+}
+
+/// Replays §9.1 over a recorded proof and reports what it established.
+fn replay_owner_update(
+    case: &crate::vectors::Case<OwnerUpdateInput, OwnerUpdateExpect>,
+    proof: &CombinedTreeProof,
+    suite: CipherSuite,
+) -> Result<String, String> {
+    let mut keys = BTreeMap::new();
+    for known in &case.input.ladder {
+        let vrf_output = hex::decode(&known.vrf_output)
+            .map_err(|err| format!("version {}: vrf_output: {err}", known.version))
+            .and_then(|bytes| {
+                HashValue::from_slice(&bytes).map_err(|err| format!("vrf_output: {err}"))
+            })?;
+        let commitment = match &known.commitment {
+            None => None,
+            Some(value) => Some(
+                hex::decode(value)
+                    .map_err(|err| format!("version {}: commitment: {err}", known.version))
+                    .and_then(|bytes| {
+                        HashValue::from_slice(&bytes).map_err(|err| format!("commitment: {err}"))
+                    })?,
+            ),
+        };
+        keys.insert(
+            known.version,
+            combined::LadderKey {
+                vrf_output,
+                commitment,
+            },
+        );
+    }
+
+    let size = case.input.tree_size;
+    let mut retained = combined::Retained::none();
+    if let Some(advertised) = case.input.last {
+        for position in ibst::frontier(advertised).map_err(|err| format!("frontier: {err}"))? {
+            let timestamp = usize::try_from(position)
+                .ok()
+                .and_then(|index| case.input.entry_timestamps.get(index))
+                .copied()
+                .ok_or_else(|| format!("no recorded timestamp for log entry {position}"))?;
+            retained.timestamps.insert(position, timestamp);
+        }
+    }
+    let mut reader = combined::Reader::new(proof, &retained);
+
+    // §12.3.1's view update first, as for every other operation.
+    let view = match case.input.last {
+        None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
+        // The peer's procedure, not the current text's: a proof's elements are ordered by
+        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
+        // 2026-07-28. See `ibst::update_view_ancestors_only`.
+        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
+            .map_err(|err| format!("update view: {err}"))?,
+    };
+    for position in &view {
+        reader
+            .timestamp(*position)
+            .map_err(|err| format!("view update at entry {position}: {err}"))?;
+    }
+
+    let owner = combined::OwnerState {
+        starting: case.input.owner.starting,
+        version_at_starting: case.input.owner.version_at_starting,
+        upcoming: case.input.owner.upcoming.clone(),
+    };
+    let updated = combined::owner_update(
+        suite,
+        size,
+        case.input.monitoring_window,
+        case.input.position,
+        case.input.versions,
+        &owner,
+        &keys,
+        &mut reader,
+    )
+    .map_err(|err| format!("§9.1: {err}"))?;
+
+    for position in reader.entries_owed_roots() {
+        reader
+            .prefix_root(position)
+            .map_err(|err| format!("prefix root for entry {position}: {err}"))?;
+    }
+    reader.finish().map_err(|err| format!("§12.3: {err}"))?;
+
+    Ok(format!(
+        "every element read, none left over · entry {} {} · {}",
+        case.input.position,
+        if updated.distinguished {
+            "distinguished (step 3)"
+        } else {
+            "not distinguished (step 4)"
+        },
+        updated.contact.map_or_else(
+            || "no contact monitoring entry".to_owned(),
+            |(position, version)| format!(
+                "contact monitoring entry {position} → version {version}"
+            ),
+        ),
+    ))
+}
+
+/// §11.7 for `KT_128_SHA256_P256`, where the peer proves and this side verifies.
+///
+/// The Ed25519 suite's checks include reproducing the peer's proof byte for byte, because that
+/// module implements proving. This one cannot: RFC 9381 §5.4.2.1 derives P-256's nonce with
+/// RFC 6979, which is a signing concern a verifier has no use for. So what is checked here is
+/// what a client actually does — take the peer's 81-byte proof and recover the search key it
+/// commits to — plus the two things RFC 9381 leaves to §11.7: that `alpha_string` is the encoded
+/// `VrfInput`, and that a proof for one label-version pair does not verify for another.
+///
+/// RFC 9381's own Appendix B.1 vectors are run in `kt-crypto`'s unit tests, and they are the
+/// oracle for the ECVRF core; these pin the KT wrapping around it.
+fn vrf_p256_suite(dir: &Path) -> Result<Suite, Error> {
+    const FILE: &str = "vrf-p256.json";
+    let file: VectorFile<VrfCaseInput, VrfExpect> = load(dir, FILE)?;
+
+    let code = file.cipher_suite.unwrap_or_default();
+    let suite = CipherSuite::from_code(code).map_err(|_| Error::CipherSuite {
+        file: FILE.to_owned(),
+        value: code,
+    })?;
+
+    let mut cases = Vec::new();
+    for case in &file.cases {
+        let name = case.name.as_str();
+        let label = unhex(FILE, name, "label", &case.input.label)?;
+        let input = VrfInput::new(label, case.input.version);
+        let key_bytes = unhex(FILE, name, "public_key", &case.input.public_key)?;
+        let key = vrf::p256::PublicKey::from_slice(&key_bytes);
+
+        let mut checks = Vec::new();
+        if case.expect.error {
+            let raw = case
+                .input
+                .proof
+                .as_deref()
+                .ok_or_else(|| Error::MissingField {
+                    file: FILE.to_owned(),
+                    case: name.to_owned(),
+                    field: "input.proof".to_owned(),
+                })?;
+            let bytes = unhex(FILE, name, "input.proof", raw)?;
+            let got = match (key, vrf::p256::Proof::from_slice(&bytes)) {
+                (Err(err), _) => format!("unusable public key: {err}"),
+                (_, Err(err)) => format!("unusable proof: {err}"),
+                (Ok(key), Ok(proof)) => match key.verify(&input, &proof) {
+                    Err(_) => "rejected".to_owned(),
+                    Ok(_) => "accepted".to_owned(),
+                },
+            };
+            checks.push(Check::new(
+                "verify() rejects a proof for another label-version pair (§11.7)",
+                "rejected",
+                got,
+            ));
+        } else {
+            let expected_input =
+                case.expect
+                    .vrf_input
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.vrf_input".to_owned(),
+                    })?;
+            let expected_output =
+                case.expect
+                    .output
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.output".to_owned(),
+                    })?;
+            let expected_proof =
+                case.expect
+                    .proof
+                    .as_deref()
+                    .ok_or_else(|| Error::MissingField {
+                        file: FILE.to_owned(),
+                        case: name.to_owned(),
+                        field: "expect.proof".to_owned(),
+                    })?;
+
+            checks.push(Check::new(
+                "VrfInput encoding is alpha_string (§2.1, §11.7)",
+                expected_input,
+                render_result(kt_wire::codec::encode(&input), hex::encode),
+            ));
+            // The length is a claim in its own right: an 81-byte proof read as 80 shifts every
+            // field of every `BinaryLadderStep` after it.
+            checks.push(Check::new(
+                "VRF.Np = 81 bytes (§17.1)",
+                (expected_proof.len() / 2).to_string(),
+                vrf::p256::PROOF_SIZE.to_string(),
+            ));
+            let bytes = unhex(FILE, name, "expect.proof", expected_proof)?;
+            let verified = match (key, vrf::p256::Proof::from_slice(&bytes)) {
+                (Err(err), _) => format!("unusable public key: {err}"),
+                (_, Err(err)) => format!("unusable proof: {err}"),
+                (Ok(key), Ok(proof)) => render_result(key.verify(&input, &proof), |output| {
+                    hex::encode(output.as_bytes())
+                }),
+            };
+            checks.push(Check::new(
+                "verifying the peer's proof yields the peer's search key (§11.7)",
+                expected_output,
+                verified,
+            ));
+        }
+
+        cases.push(Case {
+            name: name.to_owned(),
+            negative: case.expect.error,
+            input: format!(
+                "label {} bytes, version {}",
+                case.input.label.len() / 2,
+                case.input.version
+            ),
+            checks,
+        });
+    }
+
+    Ok(Suite {
+        primitive: file.primitive,
+        title: "VRF: ECVRF-P256-SHA256-TAI, verified against the peer".to_owned(),
+        draft_section: section_of(&file.draft),
+        file: FILE.to_owned(),
+        generator: Generator {
+            implementation: file.generator.implementation,
+            sha: file.generator.sha,
+        },
+        cipher_suite: Some(format!("0x{:04x} {}", suite.code(), suite.name())),
+        cases,
+    })
 }

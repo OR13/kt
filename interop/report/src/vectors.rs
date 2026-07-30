@@ -501,6 +501,93 @@ pub struct MonitorExpect {
     pub binary_ladder: Option<Vec<LadderStepExpect>>,
 }
 
+/// `update.json` input (§9.1, §13.5).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerUpdateInput {
+    /// One log entry per element, each adding the label-value pairs listed.
+    pub mutations: Vec<SearchMutation>,
+    /// The label being updated, hex.
+    pub label: String,
+    /// The deployment mode.
+    pub mode: u8,
+    /// The log's signature key, hex.
+    pub signature_public_key: String,
+    /// The log's VRF key, hex.
+    pub vrf_public_key: String,
+    /// The Reasonable Monitoring Window, which decides which entries are distinguished and
+    /// therefore which branch §9.1 takes.
+    pub monitoring_window: u64,
+    /// The log's tree size when the proof was produced.
+    pub tree_size: u64,
+    /// The log entry the new versions were inserted into.
+    pub position: u64,
+    /// How many new versions were created there.
+    pub versions: usize,
+    /// The owner's state before the update.
+    pub owner: OwnerStateInput,
+    /// The tree size the owner advertised, if any.
+    #[serde(default)]
+    pub last: Option<u64>,
+    /// Every log entry's timestamp, by position.
+    pub entry_timestamps: Vec<u64>,
+    /// Every search key the proof's lookups need: the union of what the owner already held and
+    /// what §13.5's `binary_ladder` would add.
+    ///
+    /// §9.1 sends VRF proofs only for the versions the owner cannot already know, so a verifier
+    /// replaying one of these proofs needs both halves. Splitting them would be more faithful to
+    /// the wire and would test nothing extra, since which half a key came from does not change
+    /// any lookup.
+    pub ladder: Vec<KnownVersion>,
+    /// What the case is for, recorded by the generator.
+    pub note: String,
+}
+
+/// A label owner's state, as §9.1 reads it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerStateInput {
+    /// The reference point the owner verified with §8.3's first algorithm.
+    pub starting: u64,
+    /// The greatest version that existed there, absent if the label did not exist.
+    #[serde(default)]
+    pub version_at_starting: Option<u32>,
+    /// The entry each version created since then was inserted into, ascending, one per version.
+    pub upcoming: Vec<u64>,
+}
+
+/// `update.json` expectations.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerUpdateExpect {
+    /// The whole encoded `CombinedTreeProof`, hex.
+    pub proof: String,
+    /// Its timestamps, in the algorithm's request order.
+    pub timestamps: Vec<u64>,
+    /// Its prefix proofs, in request order.
+    pub prefix_proofs: Vec<PrefixProofExpect>,
+    /// Its prefix roots, hex.
+    pub prefix_roots: Vec<String>,
+    /// Its log tree inclusion elements, hex.
+    pub inclusion: Vec<String>,
+    /// Whether the entry holding the new versions is distinguished, which decides whether §9.1
+    /// takes its step 3 or step 4 branch.
+    pub distinguished: bool,
+    /// The contact monitoring entry step 4 adds, absent when step 3 applied.
+    #[serde(default)]
+    pub contact: Option<ContactEntryExpect>,
+}
+
+/// The entry §9.1 step 4 adds to the owner's contact monitoring map.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContactEntryExpect {
+    /// The log entry holding the new versions.
+    pub position: u64,
+    /// The new greatest version.
+    pub version: u32,
+}
+
 /// `distinguished.json` input (§6.1).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

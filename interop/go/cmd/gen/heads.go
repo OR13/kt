@@ -37,19 +37,33 @@ import (
 	"fmt"
 
 	"github.com/Bren2010/katie/crypto/suites"
-	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/tree/transparency/structs"
 )
 
 // headVectors covers draft §11.2, §11.3, and §11.4.
 func headVectors(sha string) (*File, error) {
-	cs := suites.KTSha256Ed25519{}
+	return headVectorsFor(sha, suites.KTSha256Ed25519{})
+}
 
+// headVectorsP256 is the same set under KT_128_SHA256_P256, where the signature is
+// ECDSA over SHA-256 rather than Ed25519 and the suite code in every Configuration is
+// 0x0001. Unlike its Ed25519 counterpart this file is *not* reproducible: Go's
+// crypto/ecdsa draws a fresh nonce per signature, and §17.1 fixes the encoding of r
+// and s but not how they are produced.
+//
+// That is a feature here rather than a nuisance. CI regenerates the vectors and runs
+// the Rust checks against them, so every run verifies signatures nobody has seen — a
+// verifier that happened to work for one nonce would fail.
+func headVectorsP256(sha string) (*File, error) {
+	return headVectorsFor(sha, suites.KTSha256P256{})
+}
+
+func headVectorsFor(sha string, cs suites.CipherSuite) (*File, error) {
 	f := &File{
 		Primitive:   "tree-head",
 		Draft:       draftRev + " §11.2, §11.3, §11.4",
 		Generator:   Generator{Impl: "katie", SHA: sha},
-		CipherSuite: 0x0002, // KT_128_SHA256_Ed25519
+		CipherSuite: cs.Id(),
 		Notes: "Signed tree heads and the configuration every signature covers. " +
 			"`configuration` is the encoded Configuration, `tree_head_tbs` is what the " +
 			"signature is computed over, and `tree_head` is the wire TreeHead. Note the " +
@@ -74,7 +88,7 @@ func headVectors(sha string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing the leaf signing key: %w", err)
 	}
-	vrfKey, err := edwards25519.NewPrivateKey(repeat(0x74, 32))
+	vrfKey, err := cs.ParseVRFPrivateKey(repeat(0x74, 32))
 	if err != nil {
 		return nil, fmt.Errorf("parsing the VRF key: %w", err)
 	}

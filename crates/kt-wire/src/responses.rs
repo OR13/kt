@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use crate::codec::{Decode, Decoder, Encode, Encoder, Result, VectorSpec};
 use crate::heads::FullTreeHead;
 use crate::proofs::CombinedTreeProof;
-use crate::requests::BinaryLadderStep;
+use crate::requests::{BinaryLadderStep, LabelValue, UpdateInfo};
 use crate::structs::{DeploymentMode, UpdateValue};
 
 /// The log's answer to a `SearchRequest` (§13.1).
@@ -275,6 +275,135 @@ impl Encode for OwnerInitResponse {
     }
 }
 
+/// The log's answer to an `UpdateRequest` (§13.5).
+///
+/// ```text
+/// struct {
+///   FullTreeHead full_tree_head;
+///
+///   uint64 position;
+///   select (Configuration.mode) {
+///     case thirdPartyManagement:
+///       uint32 skipped_versions;
+///   }
+///   LabelValue values<0..2^8-1>;
+///   UpdateInfo info<0..2^8-1>;
+///
+///   BinaryLadderStep binary_ladder<0..2^8-1>;
+///   CombinedTreeProof update;
+/// } UpdateResponse;
+/// ```
+///
+/// `position` is where the new versions were inserted, and §13.5 warns that it "may or may not be
+/// the rightmost log entry" — an update is sequenced into whatever entry the log is building, and
+/// entries to its right may already exist by the time the response is sent.
+///
+/// `skipped_versions` counts version counters that were skipped "due to desynchronization between
+/// the Service Operator and the Third-Party Manager": under `thirdPartyManagement` the Service
+/// Operator signs a version number before the Manager assigns one, and where its number is ahead
+/// the Manager fills the gap with dummy versions whose commitment is all zeros. They take the
+/// *lower* counters, so the versions this response reports begin after them.
+///
+/// `values` carries a meaning by its emptiness rather than its contents. Empty means every version
+/// in the request was created and nothing else was: the ordinary success. Non-empty means the
+/// request was *disregarded* — the user's `greatest_version` was behind, so the log is reporting
+/// the versions that already exist above it instead. `info` corresponds to whichever list is in
+/// play, one element per version created, and §13.5 step 2 requires it to be non-empty either way.
+///
+/// # One request, several responses
+///
+/// §13.5 lets a log answer one `UpdateRequest` with a *stream* of `UpdateResponse`s, each covering
+/// a later `position`. They are processed "serially as if an `UpdateRequest` with the following
+/// parameters had been sent": `last` set to the previous response's tree size, `greatest_version`
+/// advanced over the versions it reported, and `values` left alone "until the first
+/// `UpdateResponse` with an empty `values` field is received", empty from then on.
+///
+/// That last rule is the subtle one, and it follows from what an empty `values` means. Until an
+/// empty one arrives the log has been reporting versions the user did not ask for, so the user's
+/// own values are still outstanding; the response that comes back empty is the one that finally
+/// created them, and there is nothing left to submit. A client that kept resubmitting would ask
+/// for the same values twice.
+///
+/// The state each step advances is the owner state of
+/// [`kt_tree::combined::owner_update`](../../kt_tree/combined/fn.owner_update.html), which is why
+/// there is no combined "verify the stream" entry point here: each response is verified against the
+/// state the previous one produced.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateResponse {
+    /// The tree head, and the auditor's where the mode has one.
+    pub full_tree_head: FullTreeHead,
+    /// The log entry the new versions were inserted into.
+    pub position: u64,
+    /// Version counters skipped by dummy entries, under `thirdPartyManagement` only (§14).
+    pub skipped_versions: Option<u32>,
+    /// The values created, when the request was disregarded; empty when it was honoured.
+    pub values: Vec<LabelValue>,
+    /// One entry per version created: its commitment opening, and its signature under
+    /// `thirdPartyManagement`.
+    pub info: Vec<UpdateInfo>,
+    /// One step per version in §9.1's version set, ascending by version.
+    pub binary_ladder: Vec<BinaryLadderStep>,
+    /// The proof: the view update, then §9.1's algorithm.
+    pub update: CombinedTreeProof,
+}
+
+impl UpdateResponse {
+    /// `LabelValue values<0..2^8-1>`.
+    pub const VALUES: VectorSpec = VectorSpec::new((1 << 8) - 1);
+    /// `UpdateInfo info<0..2^8-1>`.
+    pub const INFO: VectorSpec = VectorSpec::new((1 << 8) - 1);
+    /// `BinaryLadderStep binary_ladder<0..2^8-1>`.
+    pub const LADDER: VectorSpec = VectorSpec::new((1 << 8) - 1);
+
+    /// Reads an `UpdateResponse` under `mode`, with `nc`-byte openings and `VRF.Np`-byte proofs.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from any member.
+    pub fn decode_with(
+        dec: &mut Decoder<'_>,
+        mode: DeploymentMode,
+        nc: usize,
+        proof_size: usize,
+    ) -> Result<Self> {
+        let full_tree_head = FullTreeHead::decode_with_mode(dec, mode)?;
+        let position = dec.u64()?;
+        let skipped_versions = match mode {
+            DeploymentMode::ThirdPartyManagement => Some(dec.u32()?),
+            DeploymentMode::ContactMonitoring | DeploymentMode::ThirdPartyAuditing => None,
+        };
+        let values = dec.vector(Self::VALUES)?;
+        let info = dec.vector_with(Self::INFO, |dec| UpdateInfo::decode_with(dec, nc, mode))?;
+        let binary_ladder = dec.vector_with(Self::LADDER, |dec| {
+            BinaryLadderStep::decode_with_proof_size(dec, proof_size)
+        })?;
+        let update = CombinedTreeProof::decode(dec)?;
+        Ok(Self {
+            full_tree_head,
+            position,
+            skipped_versions,
+            values,
+            info,
+            binary_ladder,
+            update,
+        })
+    }
+}
+
+impl Encode for UpdateResponse {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        self.full_tree_head.encode(enc)?;
+        enc.u64(self.position);
+        if let Some(skipped) = self.skipped_versions {
+            enc.u32(skipped);
+        }
+        enc.vector(Self::VALUES, &self.values)?;
+        enc.vector(Self::INFO, &self.info)?;
+        enc.vector(Self::LADDER, &self.binary_ladder)?;
+        self.update.encode(enc)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::indexing_slicing,
@@ -285,7 +414,7 @@ mod tests {
     use super::*;
     use crate::codec::encode;
     use crate::heads::TreeHead;
-    use crate::proofs::{InclusionProof, PrefixProof, PrefixSearchResult};
+    use crate::proofs::{InclusionProof, PrefixLeaf, PrefixProof, PrefixSearchResult};
     use crate::structs::{HashValue, UpdateSuffix};
     use alloc::vec;
 
@@ -429,6 +558,136 @@ mod tests {
                 "reading a greatest-version response as a fixed-version one must not \
                  reproduce it"
             ),
+        }
+    }
+
+    /// An update response round-trips under `thirdPartyManagement`, which is the mode with the most
+    /// context-dependent parts: an `UpdateInfo` carries both an `Nc`-byte opening and a signature
+    /// suffix, and neither length is on the wire.
+    #[test]
+    fn an_update_response_round_trips() {
+        let value = UpdateResponse {
+            full_tree_head: FullTreeHead::Updated {
+                tree_head: TreeHead {
+                    tree_size: 12,
+                    signature: vec![3; 64],
+                },
+                auditor_tree_head: None,
+            },
+            position: 9,
+            skipped_versions: Some(2),
+            values: vec![LabelValue::new(vec![1, 2, 3])],
+            info: vec![UpdateInfo {
+                opening: vec![0xcd; 16],
+                suffix: UpdateSuffix::ThirdPartyManagement {
+                    signature: vec![0xef; 64],
+                },
+            }],
+            binary_ladder: vec![BinaryLadderStep {
+                proof: vec![0x77; 80],
+                commitment: None,
+            }],
+            update: CombinedTreeProof {
+                timestamps: vec![5],
+                prefix_proofs: vec![PrefixProof {
+                    results: vec![PrefixSearchResult::NonInclusionLeaf {
+                        leaf: PrefixLeaf {
+                            vrf_output: HashValue::from_bytes([0x88; 32]),
+                            commitment: HashValue::from_bytes([0x89; 32]),
+                        },
+                        depth: 3,
+                    }],
+                    elements: vec![HashValue::from_bytes([0x99; 32])],
+                }],
+                prefix_roots: Vec::new(),
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+        };
+        let bytes = encode(&value).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        let decoded =
+            UpdateResponse::decode_with(&mut dec, DeploymentMode::ThirdPartyManagement, 16, 80)
+                .unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    /// The empty cases, all of which §13.5 gives a meaning to. `values` empty means the request was
+    /// honoured; `binary_ladder` empty means every search key the update needs is one the owner
+    /// already holds, which is the common case for a single-version update. Both have to survive a
+    /// round-trip as *empty* rather than being read as absent.
+    #[test]
+    fn an_update_response_with_nothing_optional_round_trips() {
+        let value = UpdateResponse {
+            full_tree_head: FullTreeHead::Same,
+            position: 0,
+            skipped_versions: None,
+            values: Vec::new(),
+            info: vec![UpdateInfo {
+                opening: vec![0; 16],
+                suffix: UpdateSuffix::Empty,
+            }],
+            binary_ladder: Vec::new(),
+            update: CombinedTreeProof {
+                timestamps: Vec::new(),
+                prefix_proofs: Vec::new(),
+                prefix_roots: Vec::new(),
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+        };
+        let bytes = encode(&value).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        let decoded =
+            UpdateResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring, 16, 80)
+                .unwrap();
+        assert_eq!(decoded, value);
+        assert!(decoded.values.is_empty() && decoded.binary_ladder.is_empty());
+    }
+
+    /// The mode decides whether four bytes sit between `position` and `values`, and nothing in
+    /// the bytes says which — the same hazard as every other context-dependent field here, with
+    /// a sharper edge: `skipped_versions` and the length prefix of `values` are both plausible
+    /// readings of the same offset, so a response read under the wrong mode does not fail, it
+    /// silently reports a different position and a different number of values.
+    #[test]
+    fn skipped_versions_is_present_only_under_third_party_management() {
+        let value = UpdateResponse {
+            full_tree_head: FullTreeHead::Same,
+            position: 4,
+            skipped_versions: Some(3),
+            values: Vec::new(),
+            info: vec![UpdateInfo {
+                opening: vec![0x11; 16],
+                suffix: UpdateSuffix::ThirdPartyManagement {
+                    signature: vec![0x22; 64],
+                },
+            }],
+            binary_ladder: Vec::new(),
+            update: CombinedTreeProof {
+                timestamps: Vec::new(),
+                prefix_proofs: Vec::new(),
+                prefix_roots: Vec::new(),
+                inclusion: InclusionProof::new(Vec::new()),
+            },
+        };
+        let bytes = encode(&value).unwrap();
+        // 1 byte of head type, 8 of position, then the four that only this mode carries.
+        assert_eq!(&bytes[9..13], &[0, 0, 0, 3]);
+
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            UpdateResponse::decode_with(&mut dec, DeploymentMode::ThirdPartyManagement, 16, 80)
+                .unwrap(),
+            value
+        );
+
+        // The same bytes under a mode that has no such field: the four bytes are read as the
+        // start of `values` instead, so everything after `position` shifts. It must not
+        // reproduce the original — here it fails outright, because the misread count runs off
+        // the end of the input.
+        let mut dec = Decoder::new(&bytes);
+        match UpdateResponse::decode_with(&mut dec, DeploymentMode::ContactMonitoring, 16, 80) {
+            Err(_) => {}
+            Ok(decoded) => assert_ne!(decoded, value),
         }
     }
 }

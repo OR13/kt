@@ -382,6 +382,97 @@ impl Decode for UpdateRequest {
     }
 }
 
+/// An update request as forwarded to a Third-Party Manager (§14 `ManagerUpdateRequest`).
+///
+/// Under `thirdPartyManagement` a user's `UpdateRequest` goes to the Service Operator, which
+/// checks access control and forwards it to the Manager with its own signature over each new
+/// value attached. So this is an [`UpdateRequest`] with `values` promoted from [`LabelValue`] to
+/// [`UpdateValue`] — the difference being the signature — plus `signed_version`.
+///
+/// `signed_version` exists because the signature covers a *version number* (§11.5's `UpdateTBS`),
+/// and the Service Operator has to pick one before knowing what the Manager will assign. §14 says
+/// it is "the version that was used in the computation of the Service Operator's signature over
+/// the first element of `values`", zero when `values` is empty, and that a Manager seeing a
+/// `signed_version` above the next version to be created MUST insert dummy entries — an all-zero
+/// commitment per version — until the numbers line up. A `signed_version` *below* it "generally
+/// indicates a bug in the Service Operator" and MUST be rejected.
+///
+/// # The field order is the draft's, and the peer disagrees
+///
+/// §14's presentation used to open with `UpdateRequest request;` and then list every field of an
+/// `UpdateRequest` again inline, so each appeared twice — a leftover from when the structure was
+/// `{ UpdateRequest request; opaque signature<...>; }`. That was fixed on 2026-07-28, and with the
+/// listing well formed it is now the statement of the field order: `signed_version` comes **after**
+/// `values`.
+///
+/// The Go peer puts it before, having implemented this a fortnight before the rework landed. This
+/// follows the draft, and the draft's editor has confirmed that is right: "the spec is correct.
+/// Katie is out-of-date here" (draft-protocol#50). Recorded as `DRAFT-11` (the duplication, since
+/// fixed) and `KT-07` (the order the peer uses).
+///
+/// Note what is *not* done about `KT-07`, and why it differs from `KT-05`. §4.2's divergence needed
+/// the peer's reading implemented alongside the draft's, because a `CombinedTreeProof`'s elements
+/// are ordered by the algorithm that built one, so consuming a peer's proof means asking in the
+/// peer's order. Nothing of the sort applies here: this structure travels from the Service Operator
+/// to the Third-Party Manager, never to a user, so there is no peer artifact to read and no reason
+/// to carry a second encoding. One order, the specified one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ManagerUpdateRequest {
+    /// The tree size the user last observed.
+    pub last: Option<u64>,
+    /// The label being updated.
+    pub label: Vec<u8>,
+    /// The greatest version the user is aware of.
+    pub greatest_version: Option<u32>,
+    /// The version the Service Operator's first signature was computed over, or zero.
+    pub signed_version: u32,
+    /// The values to publish, each with the Service Operator's signature.
+    pub values: Vec<UpdateValue>,
+}
+
+impl ManagerUpdateRequest {
+    /// `UpdateValue values<0..2^8-1>`.
+    pub const VALUES: VectorSpec = VectorSpec::new((1 << 8) - 1);
+
+    /// Reads a `ManagerUpdateRequest` under `mode`.
+    ///
+    /// The mode is needed for `values`: an [`UpdateValue`]'s suffix is present only under
+    /// `thirdPartyManagement`, which is also the only mode where this structure exists at all.
+    ///
+    /// # Errors
+    ///
+    /// Codec errors from any member.
+    pub fn decode_with_mode(
+        dec: &mut Decoder<'_>,
+        mode: crate::structs::DeploymentMode,
+    ) -> Result<Self> {
+        let last = dec.optional()?;
+        let label = dec.opaque_vector(LABEL)?.to_vec();
+        let greatest_version = dec.optional()?;
+        let values =
+            dec.vector_with(Self::VALUES, |dec| UpdateValue::decode_with_mode(dec, mode))?;
+        let signed_version = dec.u32()?;
+        Ok(Self {
+            last,
+            label,
+            greatest_version,
+            signed_version,
+            values,
+        })
+    }
+}
+
+impl Encode for ManagerUpdateRequest {
+    fn encode(&self, enc: &mut Encoder) -> Result<()> {
+        enc.optional(self.last.as_ref())?;
+        enc.opaque_vector(LABEL, &self.label)?;
+        enc.optional(self.greatest_version.as_ref())?;
+        enc.vector(Self::VALUES, &self.values)?;
+        enc.u32(self.signed_version);
+        Ok(())
+    }
+}
+
 /// The signed statement a Service Operator makes about an update (§11.5 `UpdateTBS`).
 ///
 /// ```tls-presentation
@@ -757,5 +848,68 @@ mod tests {
                 "a {len}-byte prefix decoded as a whole request"
             );
         }
+    }
+
+    /// A `ManagerUpdateRequest` round-trips, and its field order is the one recorded in the type's
+    /// documentation: `signed_version` after `values`, as §14's listing has had it since the
+    /// duplicated members were removed on 2026-07-28. The Go peer puts it before. Pinning it as
+    /// bytes here is what makes the divergence visible if either side changes its mind.
+    #[test]
+    fn a_manager_update_request_round_trips() {
+        let request = ManagerUpdateRequest {
+            last: Some(7),
+            label: b"alice".to_vec(),
+            greatest_version: Some(3),
+            signed_version: 4,
+            values: vec![UpdateValue {
+                value: vec![9, 9],
+                suffix: UpdateSuffix::ThirdPartyManagement {
+                    signature: vec![0xab; 64],
+                },
+            }],
+        };
+        let bytes = encode(&request).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            ManagerUpdateRequest::decode_with_mode(
+                &mut dec,
+                crate::structs::DeploymentMode::ThirdPartyManagement
+            )
+            .unwrap(),
+            request
+        );
+
+        // `signed_version` is the last four bytes, after `values`. Everything before it is an
+        // `UpdateRequest` with `UpdateValue`s in place of `LabelValue`s.
+        assert_eq!(&bytes[bytes.len() - 4..], &[0, 0, 0, 4]);
+        // And `values` begins where an `UpdateRequest`'s would: `last` is 1 + 8 bytes, the label
+        // 1 + 5, `greatest_version` 1 + 4, then the vector's own count.
+        let prefix = 1 + 8 + 1 + 5 + 1 + 4;
+        assert_eq!(bytes[prefix], 1);
+    }
+
+    /// `signed_version` is zero when there is nothing signed, which §14 states as a rule rather
+    /// than leaving to convention: an empty `values` field means the Service Operator signed
+    /// nothing, so there is no version its signature could have covered.
+    #[test]
+    fn an_empty_manager_update_request_signs_version_zero() {
+        let request = ManagerUpdateRequest {
+            last: None,
+            label: b"bob".to_vec(),
+            greatest_version: None,
+            signed_version: 0,
+            values: Vec::new(),
+        };
+        let bytes = encode(&request).unwrap();
+        let mut dec = Decoder::new(&bytes);
+        assert_eq!(
+            ManagerUpdateRequest::decode_with_mode(
+                &mut dec,
+                crate::structs::DeploymentMode::ThirdPartyManagement
+            )
+            .unwrap(),
+            request
+        );
+        assert!(dec.is_empty());
     }
 }
