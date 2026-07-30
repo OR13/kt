@@ -6,7 +6,7 @@
     "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
   },
   "cipher_suite": 2,
-  "notes": "ECVRF-EDWARDS25519-SHA512-TAI (RFC 9381) over the presentation-language encoding of a VrfInput, with the output truncated to VRF.Nh = 32 bytes per §17.1. `vrf_input` is that encoding, which is what alpha_string must be; `output` is the prefix tree search key for the label-version pair; `proof` is VRF.Np = 80 bytes. The RFC's own Appendix B vectors pin the ECVRF core and are run directly by the Rust side; these pin the KT wrapping around it. The negative case is a proof for one label-version pair checked against another, which must not verify.",
+  "notes": "ECVRF-EDWARDS25519-SHA512-TAI (RFC 9381) over the presentation-language encoding of a VrfInput, with the output truncated to VRF.Nh = 32 bytes per §17.1. `vrf_input` is that encoding, which is what alpha_string must be; `output` is the prefix tree search key for the label-version pair; `proof` is VRF.Np bytes. The RFC's own Appendix B vectors pin the ECVRF core and are run directly by the Rust side; these pin the KT wrapping around it. The negative case is a proof for one label-version pair checked against another, which must not verify.",
   "cases": [
     {
       "name": "empty-label-version-0",
