@@ -462,14 +462,18 @@ pub fn coverage_table() -> Vec<Area> {
             // right after the suite code, and what follows it differs per mode.
             &["tree-head.json"],
         ),
-        // Not a gap: the Ed25519 suite is the target, and both Go peers support it.
-        Area {
-            section: "§11.7, §17.1".to_owned(),
-            name: "VRF: ECVRF-P256-SHA256-TAI (KT_128_SHA256_P256)".to_owned(),
-            module: None,
-            coverage: Coverage::OutOfScope,
-            evidence: Vec::new(),
-        },
+        verified(
+            "§11.7, §17.1",
+            "VRF: ECVRF-P256-SHA256-TAI, verified — proving is a log's operation and is not",
+            "kt-crypto::vrf::p256",
+            &["vrf-p256.json"],
+        ),
+        verified(
+            "§11.3, §11.4, §17.1",
+            "Signatures: ECDSA/P-256 over SHA-256, r||s as 64 fixed-width bytes",
+            "kt-crypto::signature",
+            &["tree-head-p256.json"],
+        ),
         verified(
             "§3.4",
             "Combined tree: log entries committing to prefix tree roots",
