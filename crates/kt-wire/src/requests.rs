@@ -406,11 +406,16 @@ impl Decode for UpdateRequest {
 /// `values`.
 ///
 /// The Go peer puts it before, having implemented this a fortnight before the rework landed. This
-/// follows the draft, because a well-formed presentation outranks a peer and nothing measured is
-/// given up by doing so — no vector exchanges this structure, since it travels between the Service
-/// Operator and the Third-Party Manager rather than to a user. Recorded as `DRAFT-11` (the
-/// duplication, now fixed) and `KT-07` (the order the peer uses); asked upstream as
-/// draft-protocol#50, which was filed before the fix landed and re-scoped to the order alone.
+/// follows the draft, and the draft's editor has confirmed that is right: "the spec is correct.
+/// Katie is out-of-date here" (draft-protocol#50). Recorded as `DRAFT-11` (the duplication, since
+/// fixed) and `KT-07` (the order the peer uses).
+///
+/// Note what is *not* done about `KT-07`, and why it differs from `KT-05`. §4.2's divergence needed
+/// the peer's reading implemented alongside the draft's, because a `CombinedTreeProof`'s elements
+/// are ordered by the algorithm that built one, so consuming a peer's proof means asking in the
+/// peer's order. Nothing of the sort applies here: this structure travels from the Service Operator
+/// to the Third-Party Manager, never to a user, so there is no peer artifact to read and no reason
+/// to carry a second encoding. One order, the specified one.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ManagerUpdateRequest {
     /// The tree size the user last observed.

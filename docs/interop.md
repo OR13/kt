@@ -735,9 +735,17 @@ separates the two, because every case's walk begins to the right of the referenc
 **[KT-07] katie orders `ManagerUpdateRequest.signed_version` before `values`; §14 puts it after.**
 katie implemented the structure a fortnight before the July 2026 rework, and the rework's listing —
 once its duplicated members were removed on 2026-07-28 — puts `signed_version` last. This
-implementation follows the draft: the listing is well formed now, and nothing measured is given up,
-since the structure travels between the Service Operator and the Third-Party Manager rather than to
-a user, so no vector exchanges it.
+implementation follows the draft, and the draft's editor confirmed that is right: *"Yes, the spec is
+correct. Katie is out-of-date here"* ([#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50)).
+
+Worth contrasting with `KT-05`, because the two peer divergences were handled differently on
+purpose. §4.2's needed the peer's reading implemented *alongside* the draft's, since a
+`CombinedTreeProof`'s elements are ordered by the algorithm that built one — consuming a peer's
+proof means asking in the peer's order, whatever the text now says. Nothing of the sort applies
+here: a `ManagerUpdateRequest` travels from the Service Operator to the Third-Party Manager and
+never to a user, so there is no peer artifact to read and no reason to carry a second encoding. One
+order, the specified one. A divergence is worth implementing around only when something has to be
+*parsed* across it.
 
 **[DRAFT-10] §12.3.6 omits the timestamps without which its own proof cannot be rooted.** For
 owner monitoring it lists "the timestamp for each log entry that causes the second algorithm of
@@ -809,7 +817,8 @@ remainder a peer finding (`KT-07`) rather than a draft one. This implementation 
 
 Filed as [draft-protocol#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) against
 a submodule pin that was already two days out of date. Checking upstream before filing would have
-caught it; the issue has been re-scoped to the order alone.
+caught it. Re-scoped to the order alone, and answered: the spec is correct and the peer is out of
+date, which is what this implementation had assumed.
 
 **[DRAFT-12] §13.5 gained `skipped_versions`, and §9.1 was not told.** As of 2026-07-28 an
 `UpdateResponse` under `thirdPartyManagement` carries a `uint32 skipped_versions`: where the Service
@@ -917,7 +926,7 @@ code rather than one.
 | `DRAFT-11` | §14's `ManagerUpdateRequest` listed every field twice | draft | `kt-wire::requests` | **resolved**: duplication removed 2026-07-28, before it was filed; the order half is now `KT-07` |
 | `KT-05` | §4.2 without the 2026-07-28 frontier restart, so 15 advertised sizes get nothing back | katie | `update-view.json`, both readings; `search.json`'s advertised-size replay | tracked locally |
 | `KT-06` | §9.1 step 2.1 skipped unconditionally, where the current text requires a previous version to have existed | katie | `kt-tree::combined` test `a_first_version_skips_nothing_in_the_previous_tree` | tracked locally |
-| `KT-07` | `ManagerUpdateRequest.signed_version` ordered before `values`, where §14 puts it after | katie | `kt-wire::requests` round-trip pins the draft's order as bytes | asked as [#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) |
+| `KT-07` | `ManagerUpdateRequest.signed_version` ordered before `values`, where §14 puts it after | katie | `kt-wire::requests` round-trip pins the draft's order as bytes | **confirmed** by the draft's editor: the spec is right, the peer is out of date ([#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50)) |
 | `DRAFT-12` | §13.5 gained `skipped_versions`, but §9.1 does not say how its ladder set or additional-proof set treats a skipped version | draft | `kt-wire::responses` decodes the field; the algorithm is untouched | tracked locally |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
