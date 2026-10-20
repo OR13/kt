@@ -245,8 +245,8 @@ impl Decode for PrefixSearchResult {
 ///
 /// ```tls-presentation
 /// struct {
-///   PrefixSearchResult results<0..2^8-1>;
-///   HashValue elements<0..2^16-1>;
+///   PrefixSearchResult results<0..2^32-1>;
+///   HashValue elements<0..2^32-1>;
 /// } PrefixProof;
 /// ```
 ///
@@ -263,10 +263,13 @@ pub struct PrefixProof {
 }
 
 impl PrefixProof {
-    /// `PrefixSearchResult results<0..2^8-1>`.
-    pub const RESULTS: VectorSpec = VectorSpec::new((1 << 8) - 1);
-    /// `HashValue elements<0..2^16-1>`.
-    pub const ELEMENTS: VectorSpec = VectorSpec::new((1 << 16) - 1);
+    /// `PrefixSearchResult results<0..2^32-1>`.
+    ///
+    /// Both bounds were `2^8-1` and `2^16-1` until draft commit `a214b15` widened them so a
+    /// batch import can be proven in one proof; the length prefix is therefore four bytes.
+    pub const RESULTS: VectorSpec = VectorSpec::new((1 << 32) - 1);
+    /// `HashValue elements<0..2^32-1>`.
+    pub const ELEMENTS: VectorSpec = VectorSpec::new((1 << 32) - 1);
 }
 
 impl Encode for PrefixProof {
@@ -439,7 +442,7 @@ mod tests {
         }
     }
 
-    /// A `results` vector of variable-size elements: the one-byte prefix counts
+    /// A `results` vector of variable-size elements: the four-byte prefix counts
     /// results, and the elements are 2, 66, and 2 bytes respectively.
     #[test]
     fn prefix_proof_round_trips_with_mixed_result_sizes() {
@@ -456,8 +459,8 @@ mod tests {
             elements: vec![hash(0x33), HashValue::ZERO],
         };
         let bytes = encode(&proof).unwrap();
-        assert_eq!(bytes[0], 3, "three results");
-        assert_eq!(bytes.len(), 1 + (2 + 66 + 2) + 2 + 64);
+        assert_eq!(&bytes[..4], &[0, 0, 0, 3], "three results");
+        assert_eq!(bytes.len(), 4 + (2 + 66 + 2) + 4 + 64);
         assert_eq!(decode::<PrefixProof>(&bytes).unwrap(), proof);
     }
 
@@ -480,9 +483,9 @@ mod tests {
         // Claims two elements, provides one.
         assert!(decode::<InclusionProof>(&[0x00, 0x02, 0xaa]).is_err());
         // Claims one result, provides none.
-        assert!(decode::<PrefixProof>(&[0x01]).is_err());
+        assert!(decode::<PrefixProof>(&[0, 0, 0, 1]).is_err());
         // A nonInclusionLeaf result truncated inside its leaf.
-        let mut bytes = vec![0x01, 0x02];
+        let mut bytes = vec![0, 0, 0, 1, 0x02];
         bytes.extend_from_slice(&[0xcc; 40]);
         assert!(decode::<PrefixProof>(&bytes).is_err());
     }

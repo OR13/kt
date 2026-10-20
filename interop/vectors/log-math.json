@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §3.2, §4.2, §12.1",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "notes": "Log tree structure in flat node indices: leaf i is node 2i, and a balanced subtree over leaves [start, start+len) is node 2*start+len-1. `full_subtrees` are the heads a verifier retains for a tree of that size. `batch_copath` is the ordered list of nodes a batch proof carries for the requested leaves, optionally against a retained size. Where log-tree.json pins the proof bytes, this pins how the tree is taken apart to produce them.",
   "cases": [

@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §11.6",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "cipher_suite": 2,
   "notes": "commitment = HMAC-SHA256(Kc, opening || label || version || update). commitment_value is the serialized CommitmentValue per the draft, i.e. opening followed by the label/version/update encoding; the Rust wire codec should reproduce it byte for byte.",

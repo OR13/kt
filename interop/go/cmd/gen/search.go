@@ -46,7 +46,6 @@ import (
 
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
-	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/prefix"
 	"github.com/Bren2010/katie/tree/transparency"
 	"github.com/Bren2010/katie/tree/transparency/structs"
@@ -395,7 +394,7 @@ func buildLog(
 			spec.lifetime, window)
 	}
 
-	tree, err := transparency.NewTree(private, memory.NewTransparencyStore(), nil)
+	tree, err := transparency.NewTree(private, newTransparencyStore(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("creating the tree: %w", err)
 	}

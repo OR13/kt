@@ -61,6 +61,11 @@ pub const KEY_BITS: usize = HashValue::SIZE * 8;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
+    /// A key to remove was not in the tree.
+    KeyNotFound {
+        /// The key that was asked for.
+        key: HashValue,
+    },
     /// The same search key was inserted twice.
     ///
     /// Each label-version pair has one VRF output, so a repeat means the caller
@@ -146,6 +151,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::KeyNotFound { .. } => f.write_str("search key is not in the tree"),
             Self::DuplicateKey { .. } => f.write_str("search key is already in the tree"),
             Self::DuplicateSearch { .. } => {
                 f.write_str("the same search key appears twice in one batch")
@@ -309,6 +315,78 @@ impl PrefixTree {
         Ok(())
     }
 
+    /// Removes `removed` and then inserts `added`, and returns the leaves that ended up
+    /// closer to the root because of it — what an `AuditorUpdate` carries as `leaves`
+    /// (§15.2).
+    ///
+    /// Removals come first so that a key in both lists is a replacement. §3.3: when a
+    /// removed leaf's sibling is a leaf, that sibling replaces their parent, repeatedly,
+    /// until it has a sibling or is the root; when the sibling is a parent nothing else
+    /// changes. The tree that results depends only on its contents, not on history.
+    ///
+    /// A leaf counts as moved when it is in the tree both before and after, is neither
+    /// added nor removed, and sits at a smaller depth afterwards. A leaf that was
+    /// promoted and then pushed back down by an addition has not moved, and is not
+    /// reported. The result is sorted ascending by `vrf_output`.
+    ///
+    /// This is the log's side of §15.2. A verifier never needs it, but an honest update
+    /// cannot be built without it. On error the tree is left as it was.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::KeyNotFound`] for a removal that is not present, and
+    /// [`Error::DuplicateKey`] for an addition that is present and not also removed.
+    pub fn mutate(
+        &mut self,
+        added: &[PrefixLeaf],
+        removed: &[HashValue],
+    ) -> Result<Vec<PrefixLeaf>> {
+        let backup = self.root.clone();
+        let result = self.mutate_in_place(added, removed);
+        if result.is_err() {
+            self.root = backup;
+        }
+        result
+    }
+
+    fn mutate_in_place(
+        &mut self,
+        added: &[PrefixLeaf],
+        removed: &[HashValue],
+    ) -> Result<Vec<PrefixLeaf>> {
+        let mut before = Vec::new();
+        collect_leaves(self.root.as_ref(), 0, &mut before);
+        for key in removed {
+            if !remove_from(&mut self.root, key, 0) {
+                return Err(Error::KeyNotFound { key: *key });
+            }
+        }
+        for leaf in added {
+            self.insert(*leaf)?;
+        }
+        let mut after = Vec::new();
+        collect_leaves(self.root.as_ref(), 0, &mut after);
+
+        let touched = |key: &HashValue| {
+            removed.contains(key) || added.iter().any(|leaf| leaf.vrf_output == *key)
+        };
+        let mut moved: Vec<PrefixLeaf> = Vec::new();
+        for (leaf, depth) in &after {
+            if touched(&leaf.vrf_output) {
+                continue;
+            }
+            let was = before
+                .iter()
+                .find(|(old, _)| old.vrf_output == leaf.vrf_output)
+                .map(|(_, depth)| *depth);
+            if was.is_some_and(|was| *depth < was) {
+                moved.push(*leaf);
+            }
+        }
+        moved.sort_unstable_by(|a, b| a.vrf_output.as_bytes().cmp(b.vrf_output.as_bytes()));
+        Ok(moved)
+    }
+
     /// Searches for `key` and reports where the search ended (§12.2).
     ///
     /// # Errors
@@ -411,6 +489,57 @@ fn insert_into(slot: &mut Option<Node>, leaf: PrefixLeaf, depth: usize) -> Resul
             *child = owned.map(Box::new);
             *slot = Some(Node::Parent { left, right });
             result
+        }
+    }
+}
+
+/// Every leaf under `node` with the depth it sits at.
+fn collect_leaves(node: Option<&Node>, depth: usize, out: &mut Vec<(PrefixLeaf, usize)>) {
+    match node {
+        None => {}
+        Some(Node::Leaf(leaf)) => out.push((*leaf, depth)),
+        Some(Node::Parent { left, right }) => {
+            collect_leaves(left.as_deref(), depth.saturating_add(1), out);
+            collect_leaves(right.as_deref(), depth.saturating_add(1), out);
+        }
+    }
+}
+
+/// Removes `key` from the subtree in `slot`, restoring §3.3's canonical shape on the way
+/// back up. Returns whether it was there.
+fn remove_from(slot: &mut Option<Node>, key: &HashValue, depth: usize) -> bool {
+    match slot.take() {
+        None => false,
+        Some(Node::Leaf(leaf)) => {
+            if leaf.vrf_output == *key {
+                true
+            } else {
+                *slot = Some(Node::Leaf(leaf));
+                false
+            }
+        }
+        Some(Node::Parent {
+            mut left,
+            mut right,
+        }) => {
+            let child = if bit(key, depth) {
+                &mut right
+            } else {
+                &mut left
+            };
+            let mut owned = child.take().map(|boxed| *boxed);
+            let found = remove_from(&mut owned, key, depth.saturating_add(1));
+            *child = owned.map(Box::new);
+            *slot = match (left, right) {
+                (None, None) => None,
+                // A lone leaf takes its parent's place; a lone parent stays where it is
+                // with its empty sibling, because the leaves below still need it.
+                (Some(only), None) | (None, Some(only)) if matches!(*only, Node::Leaf(_)) => {
+                    Some(*only)
+                }
+                (left, right) => Some(Node::Parent { left, right }),
+            };
+            found
         }
     }
 }
@@ -1468,6 +1597,7 @@ pub fn evaluate_before_after(
     suite: CipherSuite,
     added: &[PrefixLeaf],
     removed: &[PrefixLeaf],
+    leaves: &[PrefixLeaf],
     proof: &PrefixProof,
 ) -> Result<Mutation> {
     // §15.2: the proof answers the additions first, then the removals. Both are
@@ -1485,6 +1615,12 @@ pub fn evaluate_before_after(
         entries.push(SearchEntry::included(leaf.vrf_output, commitment));
     }
     for leaf in removed {
+        entries.push(SearchEntry::included(leaf.vrf_output, leaf.commitment));
+    }
+    // draft-ietf-keytrans-protocol (post -05) §15.2: then the leaves the mutation moved up.
+    // They are in the tree before and after, so each is an inclusion; naming them is what
+    // lets a removal's sibling be seen as a leaf, so the collapse below can happen.
+    for leaf in leaves {
         entries.push(SearchEntry::included(leaf.vrf_output, leaf.commitment));
     }
 
@@ -1725,7 +1861,7 @@ mod mutation_tests {
         let keys: Vec<HashValue> = added.iter().map(|l| l.vrf_output).collect();
         let proof = before_tree.prove(SUITE, &keys).unwrap();
 
-        let got = evaluate_before_after(SUITE, &added, &[], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &added, &[], &[], &proof).unwrap();
         assert_eq!(
             got.before,
             before_tree.root(SUITE),
@@ -1753,7 +1889,7 @@ mod mutation_tests {
 
         let keys: Vec<HashValue> = added.iter().map(|l| l.vrf_output).collect();
         let proof = before_tree.prove(SUITE, &keys).unwrap();
-        let got = evaluate_before_after(SUITE, &added, &[], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &added, &[], &[], &proof).unwrap();
         assert_eq!(got.before, before_tree.root(SUITE));
         assert_eq!(got.after, after_tree.root(SUITE));
         assert!(got.determined());
@@ -1766,7 +1902,7 @@ mod mutation_tests {
         let tree = tree_of(&[only]);
         let proof = tree.prove(SUITE, &[only.vrf_output]).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &[only], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &[only], &[], &proof).unwrap();
         assert_eq!(got.before, tree.root(SUITE));
         assert_eq!(
             got.after,
@@ -1790,7 +1926,7 @@ mod mutation_tests {
         let keys: Vec<HashValue> = leaves.iter().map(|l| l.vrf_output).collect();
         let proof = tree.prove(SUITE, &keys).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &leaves, &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &leaves, &[], &proof).unwrap();
         assert_eq!(got.before, tree.root(SUITE));
         assert_eq!(got.after, HashValue::ZERO);
         assert!(
@@ -1819,7 +1955,7 @@ mod mutation_tests {
         let proof = before_tree
             .prove(SUITE, &[added.vrf_output, target.vrf_output])
             .unwrap();
-        let got = evaluate_before_after(SUITE, &[added], &[target], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[added], &[target], &[], &proof).unwrap();
         assert_eq!(got.before, before_tree.root(SUITE));
         assert_eq!(got.after, after_tree.root(SUITE));
         assert!(got.determined());
@@ -1857,7 +1993,7 @@ mod mutation_tests {
         let mut doubled = proof.clone();
         doubled.results.push(proof.results[0]);
 
-        let got = evaluate_before_after(SUITE, &[new], &[old], &doubled)
+        let got = evaluate_before_after(SUITE, &[new], &[old], &[], &doubled)
             .unwrap_or_else(|err| panic!("replacement should reconstruct: {err}"));
         assert_eq!(got.before, before_tree.root(SUITE));
         assert_eq!(got.after, after_tree.root(SUITE));
@@ -1895,7 +2031,7 @@ mod mutation_tests {
         let target = leaves[0];
         let proof = before_tree.prove(SUITE, &[target.vrf_output]).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &[target], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &[target], &[], &proof).unwrap();
         assert_eq!(
             got.before,
             before_tree.root(SUITE),
@@ -1930,7 +2066,7 @@ mod mutation_tests {
         let target = leaves[0];
         let proof = before_tree.prove(SUITE, &[target.vrf_output]).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &[target], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &[target], &[], &proof).unwrap();
         assert_eq!(got.before, before_tree.root(SUITE));
         assert_eq!(got.after, after_tree.root(SUITE), "right by luck");
         assert_eq!(got.assumed_no_collapse, Some(1), "but not derived");
@@ -1946,7 +2082,7 @@ mod mutation_tests {
         let absent = leaf(0x40, 0, 9, 0xe5);
         let proof = tree.prove(SUITE, &[absent.vrf_output]).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &[absent], &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &[absent], &[], &proof).unwrap();
         assert_eq!(got.before, tree.root(SUITE));
         assert_eq!(got.after, tree.root(SUITE));
         assert!(got.determined());
@@ -1971,7 +2107,7 @@ mod mutation_tests {
         let keys: Vec<HashValue> = removed.iter().map(|l| l.vrf_output).collect();
         let proof = tree.prove(SUITE, &keys).unwrap();
 
-        let got = evaluate_before_after(SUITE, &[], &removed, &proof).unwrap();
+        let got = evaluate_before_after(SUITE, &[], &removed, &[], &proof).unwrap();
         assert_eq!(
             got.assumed_no_collapse,
             Some(1),

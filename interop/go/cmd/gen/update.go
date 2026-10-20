@@ -44,7 +44,6 @@ import (
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
 	"github.com/Bren2010/katie/db"
-	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/transparency"
 	"github.com/Bren2010/katie/tree/transparency/algorithms"
 	ktmath "github.com/Bren2010/katie/tree/transparency/math"
@@ -432,11 +431,11 @@ func updateVectors(sha string) (*File, error) {
 
 // verAtStarting converts the owner's greatest version at its reference point to katie's
 // representation, where -1 means the label did not exist.
-func verAtStarting(version *uint32) int {
+func verAtStarting(version *uint32) int64 {
 	if version == nil {
 		return -1
 	}
-	return int(*version)
+	return int64(*version)
 }
 
 // maps returns the keys of a set as a slice, since RequiredVersions hands back a map and Go
@@ -487,9 +486,9 @@ func retainedEntries(
 		return nil, err
 	}
 	out := make(map[uint64]structs.LogEntry, len(frontier))
-	for _, position := range frontier {
-		encoded, ok := raw[position]
-		if !ok {
+	for i, position := range frontier {
+		encoded := raw[i]
+		if encoded == nil {
 			return nil, fmt.Errorf("no log entry at %d", position)
 		}
 		buf := bytes.NewBuffer(encoded)
@@ -523,7 +522,7 @@ func buildUpdateLog(
 ) {
 	logKey, err := cs.ParseSigningPrivateKey(repeat(0x71, 32))
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("parsing the log signing key: %w", err)
+		return nil, db.TransparencyStore{}, nil, nil, nil, fmt.Errorf("parsing the log signing key: %w", err)
 	}
 	private := structs.PrivateConfig{
 		SignatureKey: logKey,
@@ -536,10 +535,10 @@ func buildUpdateLog(
 			ReasonableMonitoringWindow: spec.window,
 		},
 	}
-	store := memory.NewTransparencyStore()
+	store := newTransparencyStore()
 	tree, err := transparency.NewTree(private, store, nil)
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("creating the tree: %w", err)
+		return nil, db.TransparencyStore{}, nil, nil, nil, fmt.Errorf("creating the tree: %w", err)
 	}
 
 	timestamps := make([]uint64, 0, len(spec.mutations))
@@ -559,7 +558,7 @@ func buildUpdateLog(
 		}
 		update, err := tree.Mutate(add, nil)
 		if err != nil {
-			return nil, nil, nil, nil, nil, fmt.Errorf("mutation %d: %w", i, err)
+			return nil, db.TransparencyStore{}, nil, nil, nil, fmt.Errorf("mutation %d: %w", i, err)
 		}
 		timestamps = append(timestamps, update.Timestamp)
 	}

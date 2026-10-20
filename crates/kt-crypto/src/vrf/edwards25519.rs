@@ -1,41 +1,26 @@
-//! Verifiable Random Function (`draft-ietf-keytrans-protocol-05` §11.7).
-//!
-//! Each label-version pair's search key in the prefix tree is the VRF output over
-//! a [`VrfInput`] (§11.7). That is what keeps labels private: the tree is indexed
-//! by a value only the log can compute, so a user who is handed a search key
-//! learns nothing about the label behind it, and — because the VRF is *verifiable*
-//! — the log cannot use a different key for the same label than the one it
-//! proves.
-//!
-//! # What this implements
-//!
-//! `ECVRF-EDWARDS25519-SHA512-TAI` from [RFC 9381], which §17.1 selects for
+//! `ECVRF-EDWARDS25519-SHA512-TAI` (RFC 9381 §5.5), which §17.1 selects for
 //! `KT_128_SHA256_Ed25519`, **with the output truncated to 32 bytes** as §17.1
-//! requires. The `KT_128_SHA256_P256` suite's `ECVRF-P256-SHA256-TAI` is not
-//! implemented yet; [`Error::UnsupportedSuite`] says so rather than quietly using
-//! the wrong curve.
+//! requires.
 //!
 //! Note the two hash functions in play. The cipher suite's hash is SHA-256 and is
-//! what [`crate::hash`] provides; the VRF's hash is **SHA-512**, fixed by the
-//! ECVRF ciphersuite, and is used only inside this module. They are not the same
-//! parameter and conflating them produces a VRF that verifies against itself and
-//! nothing else.
+//! what [`crate::hash`] provides; this VRF's hash is **SHA-512**, fixed by the
+//! ECVRF ciphersuite, and is used only here. They are not the same parameter, and
+//! conflating them produces a VRF that verifies against itself and nothing else.
 //!
 //! # Byte-order trap
 //!
 //! For the edwards25519 ciphersuites, RFC 9381's `int_to_string` and
 //! `string_to_int` are **little-endian**, following RFC 8032 — unlike the
-//! big-endian integers everywhere else in the KT wire format. `c` and `s` in a
-//! proof are little-endian, and so is the challenge read out of a hash. The RFC's
-//! own test vectors are what adjudicate this, and they are in the tests below.
+//! big-endian integers everywhere else in the KT wire format, and unlike
+//! [`super::p256`], where they are big-endian. `c` and `s` in a proof are
+//! little-endian, and so is the challenge read out of a hash. The RFC's own test
+//! vectors are what adjudicate this, and they are in the tests below.
 //!
 //! # Oracles
 //!
 //! Three, in increasing distance from this code: RFC 9381's Appendix B vectors
 //! (implementation-independent, and the ones that matter most), the peer's
 //! `crypto/vrf/edwards25519`, and `interop/vectors/vrf.json`.
-//!
-//! [RFC 9381]: https://www.rfc-editor.org/rfc/rfc9381.html
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -49,6 +34,8 @@ use kt_wire::codec::{self, Encode as _};
 use kt_wire::structs::{HashValue, VrfInput};
 
 use crate::suite::CipherSuite;
+
+use super::{Error, OUTPUT_SIZE, Output, Result};
 
 /// `suite_string` for `ECVRF-EDWARDS25519-SHA512-TAI` (RFC 9381 §5.5).
 const SUITE_STRING: u8 = 0x03;
@@ -69,117 +56,11 @@ const PT_LEN: usize = 32;
 /// `VRF.Np` for `KT_128_SHA256_Ed25519`: the proof size in bytes (§17.1).
 pub const PROOF_SIZE: usize = PT_LEN + C_LEN + Q_LEN;
 
-/// `VRF.Nh` for both registered suites: the output length in bytes (§17.1).
-///
-/// RFC 9381's `beta_string` for this ciphersuite is 64 bytes; §17.1 specifies
-/// "with the output truncated to 32 bytes", so that is what a search key is.
-pub const OUTPUT_SIZE: usize = 32;
-
 /// A secret key's length in bytes (RFC 8032 §5.1.5).
 pub const SECRET_KEY_SIZE: usize = 32;
 
 /// A public key's length in bytes.
 pub const PUBLIC_KEY_SIZE: usize = 32;
-
-/// Something wrong with a VRF key, proof, or the suite asked for.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Error {
-    /// The cipher suite's VRF is not implemented here.
-    UnsupportedSuite {
-        /// The suite that was asked for.
-        suite: CipherSuite,
-    },
-    /// A public key was not a valid compressed Edwards point.
-    MalformedPublicKey,
-    /// A public key was of small order, so it commits to nothing.
-    ///
-    /// RFC 9381 §5.4.5 `ECVRF_validate_key`. Checked here because in this protocol
-    /// the VRF public key arrives in a `Configuration` from the log, and a
-    /// small-order key would let it produce the same output for every label.
-    SmallOrderPublicKey,
-    /// A proof was not `VRF.Np` bytes.
-    ProofLength {
-        /// `VRF.Np`.
-        expected: usize,
-        /// What was supplied.
-        actual: usize,
-    },
-    /// A proof's `Gamma` was not a valid compressed Edwards point.
-    MalformedGamma,
-    /// A proof's `s` was not a canonical scalar, i.e. `s >= q`.
-    ///
-    /// RFC 9381 §5.4.4 step 7 requires rejecting these. Accepting them would make
-    /// proofs malleable: several byte strings would verify for one signature.
-    NonCanonicalScalar,
-    /// The proof did not verify: the recomputed challenge differed.
-    BadProof,
-    /// A `VrfInput` could not be encoded, e.g. a label above the `2^8-1` ceiling.
-    Wire(codec::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnsupportedSuite { suite } => {
-                write!(f, "the VRF for {suite} is not implemented")
-            }
-            Self::MalformedPublicKey => f.write_str("VRF public key is not a valid point"),
-            Self::SmallOrderPublicKey => f.write_str("VRF public key is of small order"),
-            Self::ProofLength { expected, actual } => {
-                write!(f, "VRF proof must be {expected} bytes, got {actual}")
-            }
-            Self::MalformedGamma => f.write_str("VRF proof's Gamma is not a valid point"),
-            Self::NonCanonicalScalar => f.write_str("VRF proof's s is not a canonical scalar"),
-            Self::BadProof => f.write_str("VRF proof does not verify"),
-            Self::Wire(err) => write!(f, "encoding the VRF input: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for Error {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            // The wrapping variant has to be walkable, like the one in
-            // `crate::Error` and `kt_tree::log::Error`: a caller that wants to know
-            // *which* field of a VrfInput was too long should not have to parse the
-            // rendered message to find out.
-            Self::Wire(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl From<codec::Error> for Error {
-    fn from(err: codec::Error) -> Self {
-        Self::Wire(err)
-    }
-}
-
-/// A specialized [`Result`] for VRF operations.
-pub type Result<T> = core::result::Result<T, Error>;
-
-/// A VRF output: the search key for a label-version pair (§11.7).
-///
-/// 32 bytes, which is `VRF.Nh` — the truncation §17.1 applies to ECVRF's 64-byte
-/// `beta_string`. Only [`PublicKey::verify`] and [`SecretKey::evaluate`] produce
-/// one, so an output can only exist alongside a proof that justifies it.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Output(HashValue);
-
-impl Output {
-    /// The output as a prefix-tree search key.
-    #[must_use]
-    pub const fn search_key(&self) -> HashValue {
-        self.0
-    }
-
-    /// The output bytes.
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; OUTPUT_SIZE] {
-        self.0.as_bytes()
-    }
-}
 
 /// A VRF proof: `VRF.Np` bytes of `Gamma || c || s` (RFC 9381 §5.4.4).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -869,8 +750,11 @@ mod tests {
         );
     }
 
-    /// The P-256 suite is not implemented, and asking for it says so instead of
-    /// evaluating the wrong curve.
+    /// Asking this module for the P-256 suite says so instead of evaluating the wrong
+    /// curve. The suite argument is not redundant: both suites are implemented, in
+    /// separate modules with separate key and proof types, and this is what stops an
+    /// edwards25519 key from being used under a `Configuration` that names P-256.
+    /// [`super::p256`] is the module that answers for that suite.
     #[test]
     fn p256_suite_is_refused() {
         let secret = SecretKey::from_seed([9; 32]);

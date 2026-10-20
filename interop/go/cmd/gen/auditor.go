@@ -55,7 +55,7 @@ import (
 
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
-	"github.com/Bren2010/katie/db/memory"
+	"github.com/Bren2010/katie/db"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
 	"github.com/Bren2010/katie/tree/transparency/auditor"
@@ -119,7 +119,7 @@ func auditorVectors(sha string) (*File, error) {
 		if len(spec.entries) == 0 {
 			// An empty tree still has to be mutated into existence before it will answer
 			// a search; §11.9's all-zero root is what it answers with.
-			if _, _, _, err := tree.Mutate(0, nil, nil); err != nil {
+			if _, err := tree.Mutate(0, nil, nil); err != nil {
 				return nil, fmt.Errorf("case %q: creating the empty tree: %w", spec.name, err)
 			}
 		}
@@ -244,9 +244,9 @@ func auditorVerdict(
 	spec auditorCase,
 	before []byte,
 	update *structs.AuditorUpdate,
-) (verdict string, detail string, accepted *acceptedState, primed *auditor.AuditorState, err error) {
-	store := memory.NewAuditorStore()
-	a, err := auditor.NewAuditor(config, auditorKey, store)
+) (verdict string, detail string, accepted *acceptedState, primed *auditorStateView, err error) {
+	store := db.NewMemoryAuditorStore()
+	a, err := auditor.NewAuditor(config, auditorKey, store, true)
 	if err != nil {
 		return "", "", nil, nil, fmt.Errorf("constructing the auditor: %w", err)
 	}
@@ -322,12 +322,12 @@ func (c auditorCase) priming() []historyStep {
 
 // committedState reads back what the auditor persisted, which is the only way to see the
 // full subtree heads it is carrying.
-func committedState(config *structs.PublicConfig, store *memory.AuditorStore) (*auditor.AuditorState, error) {
+func committedState(config *structs.PublicConfig, store db.AuditorStore) (*auditorStateView, error) {
 	raw, err := store.GetState()
 	if err != nil {
 		return nil, err
 	}
-	return auditor.NewAuditorState(config.Suite, bytes.NewBuffer(raw))
+	return decodeAuditorState(config.Suite, raw)
 }
 
 // historyStep is one update used to bring the auditor to the state a case starts from.
@@ -522,8 +522,8 @@ func treeProof(
 	if len(held) == 0 {
 		return emptyTreeProof(cs, searched)
 	}
-	tree := prefix.NewTree(cs, memory.NewPrefixStore())
-	if _, _, _, err := tree.Mutate(0, held, nil); err != nil {
+	tree := prefix.NewTree(cs, newPrefixStore())
+	if _, err := tree.Mutate(0, held, nil); err != nil {
 		return nil, err
 	}
 	keys := make([][]byte, 0, len(searched))
@@ -548,11 +548,11 @@ func emptyTreeProof(cs suites.CipherSuite, entries []prefix.Entry) (*prefix.Pref
 	if len(entries) == 0 {
 		return &prefix.PrefixProof{}, nil
 	}
-	tree := prefix.NewTree(cs, memory.NewPrefixStore())
+	tree := prefix.NewTree(cs, newPrefixStore())
 	// A tree has to be mutated into existence before it can be searched, even to say
 	// that it is empty. Mutating with nothing gives version 1 of an empty tree, whose
 	// root is §11.9's all-zero stand-in.
-	if _, _, _, err := tree.Mutate(0, nil, nil); err != nil {
+	if _, err := tree.Mutate(0, nil, nil); err != nil {
 		return nil, err
 	}
 	keys := make([][]byte, 0, len(entries))

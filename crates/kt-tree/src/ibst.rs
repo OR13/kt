@@ -574,15 +574,19 @@ pub fn direct_path(x: u64, size: u64) -> Result<Vec<u64>> {
 ///
 /// Returns an empty sequence only when the user is already up to date.
 ///
-/// # The restart, and why the peer does not do it
+/// # The restart
 ///
 /// The clause "unless there were no such log entries, in which case the log entry with
-/// index `size-1` lies on the new tree's frontier" was added on 2026-07-28. Before it,
-/// the walk had nothing to start from when the direct path contributed nothing, and the
-/// procedure yielded *no entries at all* even though the log had grown — the hole
-/// recorded as `DRAFT-06`. The Go peer implements the earlier text and is preserved here
-/// as [`update_view_ancestors_only`], because a proof the peer built is ordered by the
-/// procedure the peer ran: consuming one requires asking in its order, not this one.
+/// index `size-1` lies on the new tree's frontier" was added on 2026-07-28. Before it, the
+/// walk had nothing to start from when the direct path contributed nothing, and the
+/// procedure yielded *no entries at all* even though the log had grown (`DRAFT-06`).
+///
+/// In that case the starting entry is the user's own rightmost, which they retained, so it
+/// is where the walk begins but not something the log sends: only "the log entry's right
+/// child, the right child's right child, and so on" are provided. When the direct path did
+/// contribute, its last entry is on the frontier *and* is sent. The first reading of the
+/// clause here sent the starting entry in the restart case too; the Go peer, which
+/// implemented the amendment, caught it (`update-view.json`, 15 cases).
 ///
 /// # Errors
 ///
@@ -590,6 +594,7 @@ pub fn direct_path(x: u64, size: u64) -> Result<Vec<u64>> {
 /// exceeds `size`.
 pub fn update_view(size: u64, advertised: Option<u64>) -> Result<Vec<u64>> {
     let last = root(size).and(Ok(size.saturating_sub(1)))?;
+    let mut restarted = false;
 
     let mut out = match advertised {
         // Already current: nothing to send, nothing to check.
@@ -616,7 +621,9 @@ pub fn update_view(size: u64, advertised: Option<u64>) -> Result<Vec<u64>> {
                 // the log entry with index `size-1` lies on the new tree's frontier".
                 // `from` is that entry — the rightmost the user retained — and it is on
                 // the new frontier precisely when the filter above removed everything,
-                // since a frontier entry's ancestors all have smaller indices.
+                // since a frontier entry's ancestors all have smaller indices. It is where
+                // the walk starts, not something sent: the user already holds it.
+                restarted = true;
                 alloc::vec![from]
             } else {
                 ancestors
@@ -633,97 +640,10 @@ pub fn update_view(size: u64, advertised: Option<u64>) -> Result<Vec<u64>> {
         };
         out.push(right(node, size)?);
     }
-    Ok(out)
-}
-
-/// §4.2 as it read before 2026-07-28, which is what the Go peer implements.
-///
-/// Identical to [`update_view`] except that it does not restart the frontier walk from
-/// the user's own rightmost entry: where the direct-path filter removes everything, this
-/// returns an empty sequence. That is `DRAFT-06`, and it is not a rare corner — see
-/// [`ancestors_only_leaves_right_edge_unchecked`].
-///
-/// This is not offered as an alternative reading of the current text. It exists because
-/// a `CombinedTreeProof` carries its elements "in the order that the algorithm the user
-/// is executing would request them" (§12.3), so the order a proof was *built* in is the
-/// order it must be *read* in. Consuming a proof from a log that runs the earlier
-/// procedure means asking in the earlier procedure's order; asking in the current one
-/// assigns the wrong timestamp to the wrong entry, which the monotonicity check then
-/// rejects. Measured: adopting the current text alone turns 31 checks against the pinned
-/// peer from agreements into disagreements, one of them a live proof.
-///
-/// # Errors
-///
-/// [`Error::EmptyLog`] if `size` is 0, or [`Error::IndexOutOfRange`] if `advertised`
-/// exceeds `size`.
-pub fn update_view_ancestors_only(size: u64, advertised: Option<u64>) -> Result<Vec<u64>> {
-    let last = root(size).and(Ok(size.saturating_sub(1)))?;
-
-    let mut out = match advertised {
-        Some(previous) if previous == size => return Ok(Vec::new()),
-        Some(previous) if previous > size => {
-            return Err(Error::IndexOutOfRange {
-                index: previous,
-                size,
-            });
-        }
-        None | Some(0) => alloc::vec![root(size)?],
-        Some(previous) => {
-            let mut ancestors: Vec<u64> = direct_path(previous.saturating_sub(1), size)?
-                .into_iter()
-                .filter(|ancestor| *ancestor >= previous)
-                .collect();
-            ancestors.reverse();
-            ancestors
-        }
-    };
-
-    while out.last().is_some_and(|node| *node != last) {
-        let Some(node) = out.last().copied() else {
-            break;
-        };
-        out.push(right(node, size)?);
+    if restarted {
+        out.remove(0);
     }
     Ok(out)
-}
-
-/// Whether the superseded reading leaves the new rightmost entry's timestamp unchecked.
-///
-/// Reports on [`update_view_ancestors_only`], not on [`update_view`]: the current text
-/// restarts the walk and so can never leave the rightmost entry out. The Go peer
-/// reproduces the gap exactly (`UpdateView(12, 8)` is empty there too), so it was a
-/// property of the procedure rather than of either implementation.
-///
-/// It is not a rare corner. The condition is exactly that `advertised - 1` still lies
-/// on the *new* tree's frontier: everything above a frontier node is reached by
-/// turning left, so such a node has no ancestors greater than itself, so the filter
-/// "index at or beyond `advertised`" removes the whole direct path. And a user's
-/// previous rightmost entry is `advertised - 1`, which was the end of the frontier
-/// they retained — so the case arises whenever the log grows in a way that keeps that
-/// entry on the frontier, which is common rather than exotic. `advertised - 1 ==
-/// root(size)` is one instance of it.
-///
-/// What the user then fails to learn is everything §4.2 is for: the timestamps of the
-/// entries added since, the monotonic series those timestamps are supposed to form,
-/// and the clock bounds `max_ahead` and `max_behind`, which are checked against the
-/// rightmost entry's timestamp — the one they are never given.
-///
-/// This function exists so a client talking to a log that runs the earlier procedure can
-/// notice and refuse rather than treat an empty response as "nothing to check". Tracked as
-/// `DRAFT-06` in `docs/interop.md`, fixed in the draft on 2026-07-28, and still live
-/// against the pinned peer.
-///
-/// # Errors
-///
-/// [`Error::EmptyLog`] if `size` is 0, or [`Error::IndexOutOfRange`] if `advertised`
-/// exceeds `size`.
-pub fn ancestors_only_leaves_right_edge_unchecked(
-    size: u64,
-    advertised: Option<u64>,
-) -> Result<bool> {
-    let view = update_view_ancestors_only(size, advertised)?;
-    let up_to_date = advertised == Some(size);
-    Ok(!up_to_date && view.last() != Some(&size.saturating_sub(1)))
 }
 
 #[cfg(test)]
@@ -864,86 +784,37 @@ mod view_tests {
         }
     }
 
-    /// The superseded procedure provides nothing when the user's previous rightmost entry
-    /// is still on the new frontier, leaving everything added since unverified. The Go peer
-    /// does the same, so this was the procedure and not an implementation choice; the test
-    /// pins the condition, and the amendment's effect on each affected case is pinned
-    /// alongside it.
+    /// §4.2's restart: a user whose previous rightmost entry is still on the new frontier
+    /// is sent the entries to its right, and not the entry itself, which they hold. Pinned
+    /// against the Go peer, which implements the amendment (`update-view.json`).
     #[test]
-    fn the_procedure_checks_nothing_from_a_frontier_size() {
-        // The example from the write-up: a user who saw 8 entries, shown 12.
-        assert!(update_view_ancestors_only(12, Some(8)).unwrap().is_empty());
-        assert!(ancestors_only_leaves_right_edge_unchecked(12, Some(8)).unwrap());
-        // What the 2026-07-28 clause does with the same case: restart from entry 7 — the
-        // user's own rightmost — and walk the rest of the frontier, so the timestamp their
-        // clock bounds are checked against arrives after all.
-        assert_eq!(update_view(12, Some(8)).unwrap(), alloc::vec![7, 11]);
-        // Yet the frontier grew, so there was something the user should have checked.
+    fn a_frontier_size_restarts_beyond_the_users_own_entry() {
+        // A user who saw 8 entries, shown 12: entry 7 is theirs, so only 11 is sent.
+        assert_eq!(update_view(12, Some(8)).unwrap(), alloc::vec![11]);
         assert_eq!(frontier(12).unwrap(), alloc::vec![7, 11]);
-        assert_eq!(frontier(8).unwrap(), alloc::vec![7]);
+        assert_eq!(update_view(3, Some(2)).unwrap(), alloc::vec![2]);
 
-        // The condition is exactly that `advertised - 1` is still on the frontier:
-        // a frontier node is reached only by turning left from above, so it has no
-        // ancestors greater than itself and the direct path filters away entirely.
+        // The restart is exactly the case where `advertised - 1` is on the new frontier,
+        // and in every such case the list is non-empty and ends at the rightmost entry.
         for size in 2_u64..=400 {
             let edge = frontier(size).unwrap();
             for advertised in 1..size {
-                let unchecked =
-                    ancestors_only_leaves_right_edge_unchecked(size, Some(advertised)).unwrap();
-                assert_eq!(
-                    unchecked,
-                    edge.contains(&(advertised - 1)),
-                    "size {size}, advertised {advertised}"
+                let view = update_view(size, Some(advertised)).unwrap();
+                assert_eq!(view.last(), Some(&(size - 1)), "size {size}/{advertised}");
+                assert!(
+                    !view.contains(&(advertised - 1)),
+                    "size {size}, advertised {advertised}: never resends the user's own entry"
                 );
-            }
-        }
-
-        // How often that is: for a log of 1000 entries, these advertised sizes get
-        // nothing back — the frontier shifted by one, less the up-to-date case.
-        let affected: Vec<u64> = (1..1000)
-            .filter(|m| ancestors_only_leaves_right_edge_unchecked(1000, Some(*m)).unwrap())
-            .collect();
-        assert_eq!(affected, alloc::vec![512, 768, 896, 960, 992]);
-        assert_eq!(
-            frontier(1000).unwrap(),
-            alloc::vec![511, 767, 895, 959, 991, 999]
-        );
-
-        // A user who is up to date, or who has never synchronised, is unaffected.
-        assert!(!ancestors_only_leaves_right_edge_unchecked(12, Some(12)).unwrap());
-        assert!(!ancestors_only_leaves_right_edge_unchecked(12, None).unwrap());
-    }
-
-    /// Where the two readings agree, and where they do not. They differ only on the cases
-    /// the amendment was written for — and there the superseded one sends nothing — so a
-    /// client that has to talk to a log running either can tell which it is dealing with
-    /// from the first element it receives.
-    #[test]
-    fn the_two_readings_differ_only_where_the_earlier_one_sent_nothing() {
-        for size in 1_u64..=200 {
-            for advertised in 0..=size {
-                let current = update_view(size, Some(advertised)).unwrap();
-                let earlier = update_view_ancestors_only(size, Some(advertised)).unwrap();
-                if earlier.is_empty() && advertised != size {
-                    assert_eq!(
-                        *current.first().unwrap(),
-                        advertised - 1,
-                        "size {size}, advertised {advertised}: the restart begins at the \
-                         user's own rightmost entry"
-                    );
-                    assert_eq!(*current.last().unwrap(), size - 1);
-                } else {
-                    assert_eq!(current, earlier, "size {size}, advertised {advertised}");
+                if edge.contains(&(advertised - 1)) {
+                    assert!(view.iter().all(|entry| *entry >= advertised));
                 }
             }
         }
-        // With nothing advertised the two are the same procedure: the whole frontier.
-        for size in 1_u64..=200 {
-            assert_eq!(
-                update_view(size, None).unwrap(),
-                update_view_ancestors_only(size, None).unwrap()
-            );
-        }
+
+        // A user who is up to date gets nothing; one who has never synchronised gets the
+        // whole frontier.
+        assert!(update_view(12, Some(12)).unwrap().is_empty());
+        assert_eq!(update_view(12, None).unwrap(), frontier(12).unwrap());
     }
 
     /// The monotonicity §4.2 depends on, checked against timestamps built to respect

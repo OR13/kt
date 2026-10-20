@@ -68,6 +68,7 @@ type caseEnvelope struct {
 	// prefix-mutation
 	Added   []leaf `json:"added"`
 	Removed []leaf `json:"removed"`
+	Leaves  []leaf `json:"leaves"`
 	Before  string `json:"before"`
 	After   string `json:"after"`
 
@@ -204,12 +205,10 @@ func main() {
 // checkPrefixMutation replays a §15.2 update through katie's own EvaluateBeforeAfter and
 // requires it to land on both roots the Rust side computed.
 //
-// Only the shapes where the two implementations are known to agree are sent: katie does
-// not recognize §11.9's all-zero copath element as an empty subtree, and it refuses a
-// replacement outright, so those two are excluded by the emitter rather than expected to
-// fail here. Both are recorded in ../../vectors/prefix-mutation.json and written up in
-// ../../../docs/interop.md — this direction is for checking agreement, not for restating
-// a divergence the other direction already pins.
+// `Leaves` carries the leaves the mutation moved up, which the draft added so that a removal
+// beside a leaf is determined by the update. A case whose update omits them is expected to be
+// refused: katie then reaches a root that is not the tree's, and that mismatch is the
+// failure this direction exists to produce.
 func checkPrefixMutation(cs suites.CipherSuite, c caseEnvelope) error {
 	added, err := unhexLeaves(c.Added)
 	if err != nil {
@@ -218,6 +217,10 @@ func checkPrefixMutation(cs suites.CipherSuite, c caseEnvelope) error {
 	removed, err := unhexLeaves(c.Removed)
 	if err != nil {
 		return fmt.Errorf("removed: %w", err)
+	}
+	moved, err := unhexLeaves(c.Leaves)
+	if err != nil {
+		return fmt.Errorf("leaves: %w", err)
 	}
 	wantBefore, err := hex.DecodeString(c.Before)
 	if err != nil {
@@ -239,7 +242,7 @@ func checkPrefixMutation(cs suites.CipherSuite, c caseEnvelope) error {
 		return fmt.Errorf("%d bytes left after the proof", buf.Len())
 	}
 
-	before, after, err := prefix.EvaluateBeforeAfter(cs, added, removed, proof)
+	before, after, err := prefix.EvaluateBeforeAfter(cs, added, removed, moved, proof)
 	if err != nil {
 		return fmt.Errorf("evaluating: %w", err)
 	}
@@ -583,7 +586,7 @@ func checkOwnerUpdate(cs suites.CipherSuite, c caseEnvelope) error {
 	}
 	monitor.Owner = &algorithms.OwnerState{
 		Starting:      c.Owner.Starting,
-		VerAtStarting: c.Owner.VersionAtStarting,
+		VerAtStarting: int64(c.Owner.VersionAtStarting),
 		UpcomingVers:  c.Owner.Upcoming,
 	}
 	if err := monitor.Update(c.Position, c.NewVersions); err != nil {

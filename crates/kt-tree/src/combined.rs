@@ -898,7 +898,7 @@ pub fn greatest_version_search(
             claimed_greatest,
             &left_inclusion,
             &right_non_inclusion,
-        )?;
+        );
 
         // §12.3.2 says the search needs no timestamps of its own, because the frontier's are
         // either in the view update or retained. Asking anyway is free — §12.3's rule that a
@@ -1308,7 +1308,7 @@ pub fn fixed_version_search(
         // greatest version at this entry relative to the target.
         let (left_inclusion, right_non_inclusion) = established.sets_for(current);
         let versions =
-            ladder::search_binary_ladder(target, target, &left_inclusion, &right_non_inclusion)?;
+            ladder::search_binary_ladder(target, target, &left_inclusion, &right_non_inclusion);
         let proof = reader.prefix_proof(current)?;
         let used = versions
             .get(..proof.results.len())
@@ -1505,8 +1505,7 @@ mod search_tests {
         loop {
             let local_greatest = u32::try_from(current).unwrap();
             let versions =
-                ladder::search_binary_ladder(claimed, local_greatest, &left_inclusion, &[])
-                    .unwrap();
+                ladder::search_binary_ladder(claimed, local_greatest, &left_inclusion, &[]);
             let tree = tree_at(current);
             let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
             let proof = tree.prove(SUITE, &searches).unwrap();
@@ -1662,7 +1661,7 @@ mod search_tests {
         let size = 1_u64;
         let window = 604_800_000;
         let empty = prefix::PrefixTree::new();
-        let versions = ladder::search_binary_ladder(0, 0, &[], &[]).unwrap();
+        let versions = ladder::search_binary_ladder(0, 0, &[], &[]);
         // The log truncates to the first lookup, as katie does: one non-inclusion is enough to
         // say the label has never existed.
         let searches = vec![key_for(versions[0])];
@@ -1795,9 +1794,9 @@ mod search_tests {
             }),
             SearchError::from(prefix::Error::DepthOverflow { depth: 256 }),
             SearchError::from(ibst::Error::EmptyLog),
-            SearchError::from(ladder::Error::UnrepresentableRung {
-                rung: 1 << 32,
-                greatest: u32::MAX,
+            SearchError::from(ladder::Error::LadderShape {
+                rungs: 3,
+                results: 5,
             }),
             SearchError::from(distinguished::Error::MissingTimestamp { position: 1 }),
         ];
@@ -1859,7 +1858,7 @@ mod fixed_tests {
             }
             let local = u32::try_from(current).unwrap();
             let (left, right) = established.sets_for(current);
-            let versions = ladder::search_binary_ladder(target, local, &left, &right).unwrap();
+            let versions = ladder::search_binary_ladder(target, local, &left, &right);
             let tree = tree_at(current);
             let searches: Vec<HashValue> = versions
                 .iter()
@@ -2804,7 +2803,7 @@ pub fn owner_init(
     let mut inspected = Vec::new();
     for (index, entry) in list.iter().enumerate() {
         let target = greatest_versions.get(index).copied().unwrap_or(0);
-        let versions = ladder::search_binary_ladder(target, target, &[], &[])?;
+        let versions = ladder::search_binary_ladder(target, target, &[], &[]);
         let proof = reader.prefix_proof(*entry)?;
         let used = versions
             .get(..proof.results.len())
@@ -3133,7 +3132,7 @@ mod init_tests {
         let mut proofs = Vec::new();
         for (index, entry) in list.iter().enumerate() {
             let target = greatest_versions[index];
-            let versions = ladder::search_binary_ladder(target, target, &[], &[]).unwrap();
+            let versions = ladder::search_binary_ladder(target, target, &[], &[]);
             let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
             proofs.push(tree_at(*entry).prove(SUITE, &searches).unwrap());
         }
@@ -3317,9 +3316,9 @@ mod init_tests {
             }),
             InitError::from(prefix::Error::DepthOverflow { depth: 256 }),
             InitError::from(ibst::Error::EmptyLog),
-            InitError::from(ladder::Error::UnrepresentableRung {
-                rung: 1 << 32,
-                greatest: u32::MAX,
+            InitError::from(ladder::Error::LadderShape {
+                rungs: 3,
+                results: 5,
             }),
         ];
         for error in &errors {
@@ -3489,7 +3488,7 @@ fn owner_monitor_at(
 
     // A full ladder for the version the owner expects to be greatest *here*.
     let greatest = expected(current);
-    let versions = ladder::search_binary_ladder(greatest, greatest, &[], &[])?;
+    let versions = ladder::search_binary_ladder(greatest, greatest, &[], &[]);
     let proof = reader.prefix_proof(current)?;
     let used = versions
         .get(..proof.results.len())
@@ -3571,7 +3570,7 @@ mod owner_monitor_tests {
     fn owner_keys(greatest: u32) -> BTreeMap<u32, LadderKey> {
         let mut keys = BTreeMap::new();
         for version in 0..=greatest {
-            for rung in ladder::search_binary_ladder(version, version, &[], &[]).unwrap() {
+            for rung in ladder::search_binary_ladder(version, version, &[], &[]) {
                 keys.entry(rung).or_insert(LadderKey {
                     vrf_output: key_for(rung),
                     commitment: (rung <= greatest).then(|| commitment_for(rung)),
@@ -3686,7 +3685,7 @@ mod owner_monitor_tests {
             }
             push(current, timestamps, seen);
             let target = expected(current);
-            let versions = ladder::search_binary_ladder(target, target, &[], &[]).unwrap();
+            let versions = ladder::search_binary_ladder(target, target, &[], &[]);
             let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
             proofs.push(tree_at(current).prove(SUITE, &searches).unwrap());
             proved.push(current);
@@ -4063,7 +4062,7 @@ pub fn owner_update(
     // up. Steps 3 and 4 both ask for a plain inclusion proof for these, ascending: the ladder
     // proves where the top of the history is, and these prove the rest of the update is really
     // there rather than merely claimed.
-    let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[])?;
+    let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[]);
     let additional: Vec<u32> = (start_ver..=end_ver)
         .filter(|version| !covered.contains(version))
         .collect();
@@ -4093,7 +4092,7 @@ pub fn owner_update(
         // entries inspected there are to this entry's left.
         let (left_inclusion, right_non_inclusion) = established.sets_for(position);
         let ladder_versions =
-            ladder::search_binary_ladder(end_ver, end_ver, &left_inclusion, &right_non_inclusion)?;
+            ladder::search_binary_ladder(end_ver, end_ver, &left_inclusion, &right_non_inclusion);
         let computed = evaluate_ladder(
             suite,
             position,
@@ -4209,7 +4208,7 @@ fn verify_previous_tree(
     // ladder a greatest-version search would have produced at the parent of the entry the walk
     // starts from, and one at the entry itself.
     if let Some(greatest) = previous_greatest {
-        let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[])?;
+        let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[]);
         let root = ibst::root(previous_size)?;
         if current != root {
             let parent = *ibst::direct_path(current, previous_size)?
@@ -4243,12 +4242,8 @@ fn verify_previous_tree(
             // exist — there is no lower version to ask about.
             let target = previous_greatest.unwrap_or(0);
             let (left_inclusion, right_non_inclusion) = established.sets_for(current);
-            let versions = ladder::search_binary_ladder(
-                target,
-                target,
-                &left_inclusion,
-                &right_non_inclusion,
-            )?;
+            let versions =
+                ladder::search_binary_ladder(target, target, &left_inclusion, &right_non_inclusion);
             let root = evaluate_previous_ladder(
                 suite,
                 current,
@@ -4446,7 +4441,7 @@ pub fn update_ladder_keys(
     outputs: &[HashValue],
     commitments: &[Option<HashValue>],
 ) -> core::result::Result<BTreeMap<u32, LadderKey>, UpdateError> {
-    let versions = ladder::update_binary_ladder(start_ver, end_ver)?;
+    let versions = ladder::update_binary_ladder(start_ver, end_ver);
     if outputs.len() != versions.len() || commitments.len() != versions.len() {
         return Err(UpdateError::LadderCount {
             expected: versions.len(),
@@ -4874,7 +4869,7 @@ mod update_tests {
                 current = ibst::left(current).unwrap();
             }
             if let Some(greatest) = previous_greatest {
-                let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[]).unwrap();
+                let ladder = ladder::search_binary_ladder(greatest, greatest, &[], &[]);
                 if current != ibst::root(position).unwrap() {
                     let parent = ibst::direct_path(current, position).unwrap()[0];
                     established.assume(parent, owner.greatest_version_at(parent).unwrap(), &ladder);
@@ -4899,8 +4894,7 @@ mod update_tests {
                             greatest,
                             &left_inclusion,
                             &right_non_inclusion,
-                        )
-                        .unwrap(),
+                        ),
                         None => vec![0],
                     };
                     let searches: Vec<HashValue> = asked.iter().map(|v| key_for(*v)).collect();
@@ -4929,8 +4923,7 @@ mod update_tests {
                 log.greatest_at(position).unwrap_or(0),
                 &left_inclusion,
                 &right_non_inclusion,
-            )
-            .unwrap();
+            );
             let searches: Vec<HashValue> = asked.iter().map(|v| key_for(*v)).collect();
             let proof = log.tree_at(position).prove(SUITE, &searches).unwrap();
             established.record(position, &asked, &proof.results);
@@ -4940,7 +4933,7 @@ mod update_tests {
         }
 
         // Steps 3 and 4's proof of the new versions the ladder did not cover.
-        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[]).unwrap();
+        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[]);
         let additional: Vec<u32> = (start_ver..=end_ver)
             .filter(|version| !covered.contains(version))
             .collect();
@@ -5091,7 +5084,7 @@ mod update_tests {
             version_at_starting: Some(0),
             upcoming: Vec::new(),
         };
-        let covered = ladder::search_binary_ladder(3, 3, &[], &[]).unwrap();
+        let covered = ladder::search_binary_ladder(3, 3, &[], &[]);
         assert!(!covered.contains(&2), "version 2 should need its own proof");
 
         let proof = build_update(&log, WEEK, 5, 3, &owner);
@@ -5326,7 +5319,7 @@ mod update_tests {
     /// asked about and has no way to check.
     #[test]
     fn the_response_ladder_is_checked_for_shape() {
-        let versions = ladder::update_binary_ladder(1, 1).unwrap();
+        let versions = ladder::update_binary_ladder(1, 1);
         assert_eq!(versions, vec![2, 3]);
 
         let outputs: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
@@ -5417,9 +5410,9 @@ mod update_tests {
             }),
             UpdateError::from(prefix::Error::DepthOverflow { depth: 256 }),
             UpdateError::from(ibst::Error::EmptyLog),
-            UpdateError::from(ladder::Error::UnrepresentableRung {
-                rung: 1 << 33,
-                greatest: u32::MAX,
+            UpdateError::from(ladder::Error::LadderShape {
+                rungs: 3,
+                results: 5,
             }),
             UpdateError::from(distinguished::Error::MissingTimestamp { position: 1 }),
         ];

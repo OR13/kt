@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §4.2",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "notes": "Log entry indices whose timestamps must be provided for a user to advance their view, in the order the user checks them. `advertised` is the tree size the user last observed, absent if they have none. An empty `entries` is a real result and appears twice over: once when the user is already up to date, and once — noted as `right_edge_unchecked` — when the procedure yields nothing despite the log having grown, which happens when the user's previous rightmost entry is still on the new frontier.",
   "cases": [
@@ -107,8 +107,10 @@
         "size": 3
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          2
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -253,8 +255,10 @@
         "size": 5
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          4
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -334,8 +338,10 @@
         "size": 6
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          5
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -433,8 +439,11 @@
         "size": 7
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          5,
+          6
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -458,8 +467,10 @@
         "size": 7
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          6
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -720,8 +731,10 @@
         "size": 9
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          8
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -861,8 +874,10 @@
         "size": 12
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          11
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -1403,8 +1418,10 @@
         "size": 17
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          16
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -1719,8 +1736,13 @@
         "size": 31
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          23,
+          27,
+          29,
+          30
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -1847,8 +1869,12 @@
         "size": 31
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          27,
+          29,
+          30
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -1904,8 +1930,11 @@
         "size": 31
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          29,
+          30
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -1929,8 +1958,10 @@
         "size": 31
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          30
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -2482,8 +2513,11 @@
         "size": 50
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          47,
+          49
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -2641,8 +2675,11 @@
         "size": 100
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          95,
+          99
+        ],
+        "right_edge_unchecked": false
       }
     },
     {
@@ -2745,8 +2782,14 @@
         "size": 1000
       },
       "expect": {
-        "entries": [],
-        "right_edge_unchecked": true
+        "entries": [
+          767,
+          895,
+          959,
+          991,
+          999
+        ],
+        "right_edge_unchecked": false
       }
     },
     {

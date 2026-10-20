@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §3.2, §11.8",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "cipher_suite": 2,
   "notes": "A log tree grown one leaf at a time, as a §15.2 auditor must grow it: it holds no leaves, only the head values of the current tree's full subtrees. Each case is the state after appending leaf `size-1` — `full_subtrees` left to right, and the `root` they fold to. The head count is the population count of the size, because each merge is a carry. `leaves` are the leaf values, so the root can be rebuilt from every leaf instead and compared.",

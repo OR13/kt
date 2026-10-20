@@ -16,11 +16,18 @@
 //! disagreement about how a `Configuration` encodes breaks every signature; see
 //! [`kt_wire::heads`] for one such disagreement between the two Go peers.
 //!
-//! # Scope
+//! # Both registered suites
 //!
-//! Ed25519 (RFC 8032) for `KT_128_SHA256_Ed25519`, which is the suite this
-//! workspace targets. ECDSA/P-256 for the other registered suite is out of scope
-//! and returns [`Error::UnsupportedSuite`] rather than guessing.
+//! Ed25519 (RFC 8032) for `KT_128_SHA256_Ed25519`, and ECDSA/P-256 over SHA-256 for
+//! `KT_128_SHA256_P256`. §17.1 fixes the latter's encoding as "the concatenation of
+//! two 256-bit big endian integers r and s", so 64 fixed-width bytes rather than the
+//! ASN.1 sequence ECDSA usually travels in.
+//!
+//! The two suites also differ in how the *key* is encoded, which §11.2 does not say:
+//! the peer emits an Ed25519 key as its 32 raw bytes and a P-256 signature key
+//! uncompressed (65 bytes, SEC1 tag `0x04`), while the same `Configuration` carries a
+//! P-256 *VRF* key compressed (33 bytes). Rather than fix a length, the P-256 path
+//! accepts whatever SEC1 admits; `tree-head.json` pins what the peer sends.
 
 use alloc::vec::Vec;
 
@@ -135,9 +142,30 @@ pub fn verify_raw(
     signature: &[u8],
 ) -> Result<()> {
     match suite {
-        // ECDSA/P-256, whose signatures are "the concatenation of two 256-bit big
-        // endian integers r and s" (§17.1). Out of scope for this workspace.
-        CipherSuite::Kt128Sha256P256 => Err(Error::UnsupportedSuite { suite }),
+        // ECDSA/P-256 over SHA-256, whose signatures are "the concatenation of two
+        // 256-bit big endian integers r and s" (§17.1) — so 64 fixed-width bytes,
+        // not the ASN.1 sequence ECDSA is usually seen in.
+        //
+        // Note the two key encodings this suite uses. The *signature* key arrives
+        // uncompressed (65 bytes, SEC1 tag 0x04), because that is what the peer's
+        // `ParseSigningPublicKey` accepts and what its `Bytes()` emits; the *VRF*
+        // key arrives compressed (33 bytes). Both live in the same `Configuration`,
+        // as `opaque signature_public_key<0..2^16-1>` and
+        // `opaque vrf_public_key<0..2^16-1>`, and §11.2 says nothing about either
+        // encoding — so this accepts whatever SEC1 admits rather than fixing a
+        // length, and `tree-head.json` pins what the peer actually sends.
+        CipherSuite::Kt128Sha256P256 => {
+            use p256::ecdsa::signature::Verifier as _;
+
+            let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(public_key)
+                .map_err(|_| Error::MalformedPublicKey)?;
+            let signature = p256::ecdsa::Signature::from_slice(signature)
+                .map_err(|_| Error::MalformedSignature)?;
+            // `Verifier` hashes with the curve's associated digest, SHA-256, which is
+            // also the suite's hash — unlike the VRF, where the two differ.
+            key.verify(message, &signature)
+                .map_err(|_| Error::BadSignature)
+        }
         CipherSuite::Kt128Sha256Ed25519 => {
             let key_bytes = <[u8; PUBLIC_KEY_SIZE]>::try_from(public_key)
                 .map_err(|_| Error::MalformedPublicKey)?;
@@ -491,12 +519,11 @@ mod tests {
             Err(Error::UnknownCipherSuite { value: 0xf00d })
         );
 
-        // P-256 is out of scope and says so rather than trying Ed25519 on it.
+        // An Ed25519 key and signature offered to the P-256 path: 32 bytes is not a SEC1
+        // point, so it stops at the key rather than being fed to the wrong curve.
         assert_eq!(
             verify_raw(CipherSuite::Kt128Sha256P256, &public, b"m", &head.signature),
-            Err(Error::UnsupportedSuite {
-                suite: CipherSuite::Kt128Sha256P256
-            })
+            Err(Error::MalformedPublicKey)
         );
     }
 
