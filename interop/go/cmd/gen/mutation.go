@@ -51,7 +51,6 @@ import (
 	"fmt"
 
 	"github.com/Bren2010/katie/crypto/suites"
-	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/prefix"
 )
 
@@ -66,17 +65,17 @@ func mutationVectors(sha string) (*File, error) {
 		CipherSuite: 0x0002, // KT_128_SHA256_Ed25519
 		Notes: "Prefix tree mutations replayed from a proof, as a §15.2 auditor must. " +
 			"`entries` build the tree, `add` and `remove` are the update, and `proof` is " +
-			"the batch proof for their keys in that order. `before` and `after` are the " +
-			"roots of the trees katie's own Tree.Mutate builds, so they are the log's " +
-			"values rather than a verifier's. `peer_before` and `peer_after` are what " +
-			"katie's EvaluateBeforeAfter reconstructs from the proof alone, or " +
-			"`peer_error` where it declines: they differ from `after` in three shapes, " +
-			"noted in the file's source comment and in docs/interop.md. `sibling_uncovered` " +
-			"marks a case where a removal empties a slot whose sibling is a bare copath " +
-			"hash: §3.3's collapse depends on that node's type, the hash does not reveal " +
-			"it, and §15.2 gives no way to ask, so the root is not a function of the proof. " +
-			"For those cases `peer_after` is the value both implementations reach by " +
-			"assuming no collapse, and `after` shows whether the assumption held.",
+			"the batch proof Tree.Mutate returns: one result per key of `add`, then " +
+			"`remove`, then `leaves`. `leaves` are the leaves the mutation moved closer to " +
+			"the root because a sibling was removed (§3.3), which the draft added so " +
+			"an auditor can see that a leaf's position changes. `before` and `after` are " +
+			"the roots of the trees katie builds, and `after` is checked against a tree " +
+			"built from scratch, since §3.3 makes the prefix tree history independent. " +
+			"`peer_before` and `peer_after` are what katie's EvaluateBeforeAfter " +
+			"reconstructs from the proof alone. A case marked `omit_leaves` is the same " +
+			"update from a log that did not name the moved leaves: the proof covers " +
+			"only `add` and `remove`, the sibling arrives as a bare hash, and the " +
+			"auditor reaches a root that is not the log's.",
 	}
 
 	for _, spec := range mutationCases() {
@@ -85,32 +84,54 @@ func mutationVectors(sha string) (*File, error) {
 			return nil, fmt.Errorf("case %q: building the tree: %w", spec.name, err)
 		}
 
-		// The batch an auditor would have been sent: additions first, then removals.
-		searches := make([][]byte, 0, len(spec.add)+len(spec.remove))
-		for _, e := range spec.add {
-			searches = append(searches, e.VrfOutput)
+		// Apply the update to the tree the way the log does. The proof Mutate returns is the
+		// batch proof from just before the mutation, for the keys of `add`, `remove` and the
+		// leaves the mutation moved — the three lists §15.2 now has an auditor read.
+		sortedAdd, sortedRemove := sortedEntries(spec.add), sortedEntries(spec.remove)
+		removeKeys := make([][]byte, 0, len(sortedRemove))
+		for _, e := range sortedRemove {
+			removeKeys = append(removeKeys, e.VrfOutput)
 		}
-		for _, e := range spec.remove {
-			searches = append(searches, e.VrfOutput)
-		}
-		results, err := beforeTree.Search([]prefix.PrefixSearch{{Version: 1, VrfOutputs: searches}})
+		res, err := beforeTree.Mutate(1, sortedAdd, removeKeys)
 		if err != nil {
-			return nil, fmt.Errorf("case %q: searching: %w", spec.name, err)
+			return nil, fmt.Errorf("case %q: mutating: %w", spec.name, err)
 		}
-		if len(results) != 1 {
-			return nil, fmt.Errorf("case %q: expected one search result set", spec.name)
+		proof := res.Proof
+		leaves := res.Leaves
+		if spec.omitLeaves {
+			if len(res.Leaves) == 0 {
+				return nil, fmt.Errorf("case %q: omit_leaves, but the update moves nothing", spec.name)
+			}
+			keys := make([][]byte, 0, len(sortedAdd)+len(sortedRemove))
+			for _, e := range sortedAdd {
+				keys = append(keys, e.VrfOutput)
+			}
+			for _, e := range sortedRemove {
+				keys = append(keys, e.VrfOutput)
+			}
+			searched, err := beforeTree.Search([]prefix.PrefixSearch{{Version: 1, VrfOutputs: keys}})
+			if err != nil {
+				return nil, fmt.Errorf("case %q: searching: %w", spec.name, err)
+			}
+			proof = searched[0].Proof
+			leaves = nil
 		}
-		proof := results[0].Proof
 
 		var buf bytes.Buffer
 		if err := proof.Marshal(&buf); err != nil {
 			return nil, fmt.Errorf("case %q: marshalling proof: %w", spec.name, err)
 		}
 
-		// The tree the update actually produces, built the same way the log builds it.
+		// The tree the update should produce, built from scratch. §3.3 says the prefix tree
+		// is history independent, so Mutate's root and this one must agree.
 		after, err := afterRoot(cs, spec)
 		if err != nil {
 			return nil, fmt.Errorf("case %q: building the updated tree: %w", spec.name, err)
+		}
+		if !bytes.Equal(after, res.Root) {
+			return nil, fmt.Errorf(
+				"case %q: Mutate's root is not the from-scratch root: tree is not history independent",
+				spec.name)
 		}
 
 		expect := map[string]any{
@@ -119,9 +140,10 @@ func mutationVectors(sha string) (*File, error) {
 			"proof":    hex.EncodeToString(buf.Bytes()),
 			"results":  searchResultJSON(proof.Results),
 			"elements": hexAll(proof.Elements),
+			"leaves":   prefixEntriesJSON(leaves),
 		}
 
-		peerBefore, peerAfter, err := prefix.EvaluateBeforeAfter(cs, spec.add, spec.remove, &proof)
+		peerBefore, peerAfter, err := prefix.EvaluateBeforeAfter(cs, sortedAdd, sortedRemove, leaves, &proof)
 		if err != nil {
 			expect["peer_error"] = err.Error()
 		} else {
@@ -135,11 +157,18 @@ func mutationVectors(sha string) (*File, error) {
 			expect["peer_after"] = hex.EncodeToString(peerAfter)
 		}
 
-		// A marked case claims both implementations reach the same assumed root, so the
-		// peer has to have produced one.
-		if spec.siblingUncovered && peerAfter == nil {
+		// A marked case claims the peer reaches a root, and that it is the wrong one.
+		if spec.omitLeaves {
+			if peerAfter == nil {
+				return nil, fmt.Errorf(
+					"case %q is marked omit_leaves but the peer produced no root", spec.name)
+			} else if bytes.Equal(peerAfter, after) {
+				return nil, fmt.Errorf(
+					"case %q is marked omit_leaves but the peer reached the right root anyway", spec.name)
+			}
+		} else if peerAfter != nil && !bytes.Equal(peerAfter, after) {
 			return nil, fmt.Errorf(
-				"case %q is marked sibling_uncovered but the peer produced no root", spec.name)
+				"case %q: katie's verifier reconstructs a root its own tree does not have", spec.name)
 		}
 
 		input := map[string]any{
@@ -147,8 +176,8 @@ func mutationVectors(sha string) (*File, error) {
 			"add":     prefixEntriesJSON(spec.add),
 			"remove":  prefixEntriesJSON(spec.remove),
 		}
-		if spec.siblingUncovered {
-			input["sibling_uncovered"] = true
+		if spec.omitLeaves {
+			input["omit_leaves"] = true
 		}
 
 		f.Cases = append(f.Cases, Case{Name: spec.name, Input: input, Expect: expect})
@@ -162,11 +191,9 @@ type mutationCase struct {
 	entries []prefix.Entry
 	add     []prefix.Entry
 	remove  []prefix.Entry
-	// Set where a removal empties a slot whose sibling is a bare copath hash, so §3.3's
-	// collapse decision rests on a node type the proof does not reveal. A structural
-	// property of the case, not a claim about who gets the right answer: one of the two
-	// marked cases comes out right anyway.
-	siblingUncovered bool
+	// Set where the update moves a leaf but the log does not name it, so the proof
+	// carries its sibling only as a hash.
+	omitLeaves bool
 }
 
 func mutationCases() []mutationCase {
@@ -210,18 +237,37 @@ func mutationCases() []mutationCase {
 			remove:  []prefix.Entry{a, b},
 		},
 		{
-			name:             "remove-beside-a-leaf",
-			entries:          []prefix.Entry{a, b, d},
-			remove:           []prefix.Entry{a},
-			siblingUncovered: true,
+			// The sibling is a leaf, so it takes its parent's place and is named in `leaves`.
+			name:    "remove-beside-a-leaf",
+			entries: []prefix.Entry{a, b, d},
+			remove:  []prefix.Entry{a},
 		},
 		{
-			// Same shape as far as the proof shows, but the sibling is a parent, so
-			// assuming no collapse happens to be right. Still not determined.
-			name:             "remove-beside-a-parent",
-			entries:          []prefix.Entry{a, b, c, d},
-			remove:           []prefix.Entry{a},
-			siblingUncovered: true,
+			// The same update from a log that leaves `leaves` empty. The auditor cannot tell
+			// the sibling is a leaf, assumes it is a parent, and signs a root nobody has.
+			name:       "remove-beside-a-leaf-leaves-omitted",
+			entries:    []prefix.Entry{a, b, d},
+			remove:     []prefix.Entry{a},
+			omitLeaves: true,
+		},
+		{
+			// The sibling is a parent: nothing moves and `leaves` is empty.
+			name:    "remove-beside-a-parent",
+			entries: []prefix.Entry{a, b, c, d},
+			remove:  []prefix.Entry{a},
+		},
+		{
+			// The survivor rises two levels, not one: §3.3 repeats the replacement until it
+			// has a sibling or is the root.
+			name:    "remove-collapsing-a-chain",
+			entries: []prefix.Entry{a, refill, d},
+			remove:  []prefix.Entry{a},
+		},
+		{
+			// Two removals each orphan a leaf, so two leaves move and `leaves` has to be sorted.
+			name:    "remove-two-siblings-apart",
+			entries: []prefix.Entry{a, b, d, entry(0xc0, 0, 6, 0xf6)},
+			remove:  []prefix.Entry{a, d},
 		},
 		{
 			name:    "remove-refilled-by-an-add",
@@ -240,16 +286,16 @@ func mutationCases() []mutationCase {
 
 // buildPrefixTree inserts `entries` into a fresh tree and returns its root.
 func buildPrefixTree(cs suites.CipherSuite, entries []prefix.Entry) ([]byte, *prefix.Tree, error) {
-	tree := prefix.NewTree(cs, memory.NewPrefixStore())
+	tree := prefix.NewTree(cs, newPrefixStore())
 	if len(entries) == 0 {
 		// §11.9: an empty prefix tree is the all-zero stand-in.
 		return repeat(0, cs.HashSize()), tree, nil
 	}
-	root, _, _, err := tree.Mutate(0, entries, nil)
+	res, err := tree.Mutate(0, sortedEntries(entries), nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	return root, tree, nil
+	return res.Root, tree, nil
 }
 
 // afterRoot builds the tree the update produces, from scratch, so the expected root is

@@ -307,22 +307,15 @@ func ibstNodeIndices(size uint64) []uint64 {
 //     target. So monitoring vectors are emitted with an empty set only, and the
 //     deduplicating behaviour is left to Rust-side tests.
 //
-// The largest greatest-version covered is 2^31-2, because the pinned peer does
-// not terminate above that. katie computes its ladder in uint32, and the binary
-// search phase takes the midpoint as `(lower + upper) / 2`; once
-// `lower + upper` exceeds MaxUint32 that sum wraps, the midpoint lands *below*
-// the lower bound, and the loop walks away from its own interval, appending
-// forever. The first affected input is 2^31-1, where the upper bound becomes
-// 2^32-1: verified at pin 00da5254, where 2^31-2 returns a 62-rung ladder and
-// 2^31-1 is killed by the OOM killer. Separately, at MaxUint32 phase 1 itself
-// does not terminate: `uint32(1) << 32` is 0 in Go, so the rung wraps to
-// MaxUint32, which never exceeds MaxUint32.
-//
-// Neither is reachable from the Rust side, which computes rungs in u64 and
-// reports the one genuinely impossible case — a greatest version of MaxUint32,
-// whose ladder needs a non-inclusion proof for version 2^32 — as an error. Those
-// edges are pinned by Rust-side tests. Both peer bugs are worth an upstream
-// report; a client's `n` comes from what the log proves, so a log can choose it.
+// The whole version range is covered, up to and including MaxUint32. At pin 00da5254
+// katie could not do that: it computed its ladder in uint32, the binary search took the
+// midpoint as `(lower + upper) / 2`, and once the sum exceeded MaxUint32 it wrapped, the
+// midpoint landed below the lower bound, and the loop appended forever (2^31-1 was killed
+// by the OOM killer; `uint32(1) << 32` is 0 in Go, so at MaxUint32 even phase 1 spun).
+// Both are fixed from a2959a5, which computes in uint64 and drops rungs above MaxUint32 as
+// the draft's §5 now says to, so the vectors no longer stop at 2^31-2. The generator also
+// checks katie against Appendix B's transcription below, which is what would notice a
+// regression at the top of the range.
 func ladderVectors(sha string) (*File, error) {
 	f := &File{
 		Primitive: "binary-ladder",
@@ -333,19 +326,20 @@ func ladderVectors(sha string) (*File, error) {
 			"(§8.1). Base vectors come from SearchBinaryLadder(n, n) because a search " +
 			"ladder whose target equals the greatest version never terminates early. " +
 			"Monitoring vectors use an empty left_inclusion set only, since the pinned " +
-			"peer predates that parameter. Versions stop at 2^31-2, above which the " +
-			"peer's uint32 midpoint overflows and its binary search does not " +
-			"terminate; see the generator comment.",
+			"peer predates that parameter. Versions run to 2^32-1: rungs at or above " +
+			"2^32 are skipped (§5), so the ladder for the greatest possible version has " +
+			"no non-inclusion rung. Before katie a2959a5 the file stopped at 2^31-2; " +
+			"see the generator comment.",
 	}
 
-	// The peer diverges at 2^31-1 and above, so that is the ceiling here. See the
-	// function comment for the derivation.
-	const peerCeiling = uint32(1)<<31 - 2
+	// The top of the version range, where the ladder stops having a non-inclusion rung.
+	const peerCeiling = uint32(math.MaxUint32)
 
 	greatest := []uint32{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 31, 32, 33,
 		63, 64, 65, 100, 255, 256, 257, 1000, 65535, 65536,
-		1 << 20, 1 << 30, peerCeiling - 1, peerCeiling,
+		1 << 20, 1 << 30, 1<<31 - 2, 1<<31 - 1, 1 << 31, 3 << 30,
+		peerCeiling - 1, peerCeiling,
 	}
 	for _, n := range greatest {
 		ladder := katieBaseBinaryLadder(n)
@@ -431,7 +425,7 @@ func ladderVectors(sha string) (*File, error) {
 
 	monitored := []uint32{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 63, 64, 100, 255, 256,
-		1000, 65535, 1 << 20, 1 << 30, peerCeiling,
+		1000, 65535, 1 << 20, 1 << 30, 1<<31 - 1, 1 << 31, peerCeiling - 1, peerCeiling,
 	}
 	for _, t := range monitored {
 		ladder := ktmath.MonitoringBinaryLadder(t)
@@ -464,15 +458,15 @@ func katieBaseBinaryLadder(n uint32) []uint32 {
 
 // draftBaseBinaryLadder is Appendix B's base_binary_ladder, transcribed from the
 // draft (which is where the pseudocode is meant to be taken from) and computed in
-// uint64 so the rungs above MaxUint32 are representable instead of wrapping.
+// uint64 so the rungs above MaxUint32 exist long enough to be filtered out.
 func draftBaseBinaryLadder(n uint32) []uint32 {
 	wide := draftBaseLadderRungs(uint64(n))
 	out := make([]uint32, 0, len(wide))
 	for _, rung := range wide {
 		if rung > math.MaxUint32 {
-			// Not representable as a version; the caller's `n` never reaches
-			// MaxUint32, so this cannot be hit for the emitted vectors.
-			break
+			// §5: "Any lookup for a greater version is skipped"; Appendix B filters
+			// them out of the result after the binary search has used them.
+			continue
 		}
 		out = append(out, uint32(rung))
 	}

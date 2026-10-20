@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §6.1",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "notes": "Distinguished log entries, the reference points every user checks against. `size` is the tree size, `window` the Reasonable Monitoring Window, and `timestamps` a position-to-timestamp map the algorithm may consult. `rightmost` is the rightmost distinguished entry and `previous_rightmost` the rightmost one left of the log's last entry, both absent where there is none. `requested` lists the positions the peer asked about, in order: the peer reaches these answers by walking the frontier rather than by running §6.1's recursion, so which entries it needed to see is part of what is being pinned.",
   "cases": [

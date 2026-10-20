@@ -71,10 +71,15 @@ Dependency direction is strictly bottom-up; `kt-wire` depends on no other in-tre
 `docs/interop.md` Tier 1 steps 1 through 6 are done and pinned against the
 Go peer: the §2.1 codec, `UpdateValue`/`CommitmentValue` (§11.5, §11.6), the
 §11.6 commitment, the implicit binary search tree (§4.1), the binary ladders
-(§5), the log tree with its §12.1 batch proofs, and the prefix tree with its
-§12.2 proofs. Five vector files are generated from the pinned katie, and
-`from-kt.json` goes the other way: proofs we build, verified by katie via
-`interop/go/cmd/verify`. CI fails on any regeneration diff or any disagreement.
+(§5, over the whole `uint32` range), the log tree with its §12.1 batch proofs, and
+the prefix tree with its §12.2 proofs and §15.2 mutations, including `AuditorUpdate.leaves`.
+Five vector files are generated from the pinned katie, and `from-kt.json` goes the other way:
+proofs we build, verified by katie via `interop/go/cmd/verify`. CI fails on any
+regeneration diff or any disagreement.
+
+The pins: the draft is at `65893f6` (2026-10-17). katie is at `a2959a5` (2026-10-15), **not its tip**,
+which does not compile (`KT-08`); bumping past it means checking `go build ./tree/...` first. katie
+needs Go 1.27, which `GOTOOLCHAIN=auto` fetches.
 
 Two kinds of agreement are worth distinguishing when adding vectors. Pinning *outputs*
 (proof bytes) is the stronger claim about the wire; pinning *structure* (which nodes a
@@ -108,10 +113,10 @@ Verified facts worth not rediscovering:
 - The draft puts `opening` inside `CommitmentValue`; katie keeps it outside the
   struct and writes it to the HMAC first. Same bytes, different factoring.
   Follow the draft.
-- katie's binary ladder does not terminate for a greatest version at or above
-  `2^31-1` (`uint32` midpoint overflow), and the draft cannot express the ladder
-  for `2^32-1` at all. Both are written up under "Findings" in
-  `docs/interop.md`; don't re-derive them, and don't put those inputs in a vector.
+- Binary ladders now cover the whole `uint32` range: §5 skips any lookup above `2^32-1`
+  as if it were a non-inclusion, so the ladder for `2^32-1` is 33 inclusions and
+  nothing else. katie at `00da5254` did not terminate from `2^31-1` up (`KT-01`); at the
+  current pin it agrees. If you pin katie *back* past `a2959a5`, that cap returns.
 - §2.1.2 means *element* counts where RFC 8446 means byte counts. It matters for
   any vector of a type wider than a byte. `kt_wire::codec::VectorSpec` is where
   that lives.
@@ -140,10 +145,10 @@ Verified facts worth not rediscovering:
   `int_to_string`/`string_to_int` are **little-endian** for edwards25519, unlike
   every other integer in this protocol. RFC 9381's Appendix B vectors are in
   `kt-crypto::vrf`'s tests and are what adjudicate both.
-- §4.2's update-view procedure can return nothing while the log has grown — when the
-  user's previous rightmost entry is still on the new frontier. katie agrees, so it is
-  the procedure. `leaves_right_edge_unchecked` reports it; do not "fix" it silently,
-  the vectors pin the peer's behaviour. Written up in `docs/interop.md`.
+- §4.2's update-view procedure used to return nothing while the log has grown (`DRAFT-06`).
+  The 2026-07-28 restart fixed that, and in the restart case the list is the *right
+  children* of the user's own rightmost entry, not that entry — our first reading sent it
+  and katie caught it (`NOTE-05`). `ibst::update_view` is the only reading now.
 - §11.2's `Configuration` is where the two Go peers disagree: `leaf_public_key`
   under `contactMonitoring`. We follow the draft's prose and katie (omit it). Since
   every `TreeHeadTBS` starts with a `Configuration`, this decides whether any

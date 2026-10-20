@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §11.5, §13.1–§13.5",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "cipher_suite": 2,
   "notes": "Request structures and response building blocks, each recorded as its encoded bytes. `kind` selects the structure. Several depend on context the bytes do not carry: a BinaryLadderStep's proof is VRF.Np = 80 bytes with no length prefix, and an UpdateInfo needs both Nc and the deployment mode. The response structures are not here because they embed a CombinedTreeProof, whose shape depends on the algorithm being executed.",

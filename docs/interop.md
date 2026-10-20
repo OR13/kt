@@ -7,19 +7,26 @@ first.
 
 ## Which text, and which peer
 
-The draft submodule is pinned at `12121fd` (2026-07-29), whose `docname` is
+The draft submodule is pinned at `65893f6` (2026-10-17), whose `docname` is
 `draft-ietf-keytrans-protocol-latest` — the editor's copy, some way past published -05. Section
 numbers throughout this repository still cite "-05" because that is the last published revision and
 the numbering has not moved; where the *text* has moved, the code says so at the point it matters
 and the register below records it.
 
-**The two are no longer in step.** The draft took four commits on 2026-07-28/29; katie has not moved
-since 2026-06-30. So there are now places where the draft says one thing, the peer does another, and
-both are recorded rather than reconciled: §4.2's frontier restart (`KT-05`), §14's
-`ManagerUpdateRequest` field order (`KT-07`), §9.1 step 2.1's condition on a previous version
-having existed (`KT-06`). Where a *proof* is at stake the peer's reading has to be implemented as
-well, because a `CombinedTreeProof`'s elements are ordered by the algorithm that built it — see
-`ibst::update_view_ancestors_only`.
+**katie is pinned at `a2959a5` (2026-10-15), not at its tip.** `main` at `f93331d` (2026-10-17) does not
+compile: `tree/transparency` still uses the pre-refactor `ContactState`/`LabelOwnerState` fields, and
+two tests in `tree/transparency/algorithms` fail (`TestUpdateView`, `TestUpdateContactState`). `a2959a5`
+is the newest commit where `go build ./tree/... ./crypto/...` and `go test` both pass. It lacks the three
+commits after it that matter for us — log entry 0 updates (`5c65771`), the owner's greatest version on the
+starting position's left direct path (`176f037`) and the distinguished operation (`e47ae2d`) — so
+those parts of the draft stay unverified against the peer until upstream builds again (`KT-08`).
+
+The two are mostly in step again. Since the previous pin katie took the 2026-07-28 frontier restart
+(`KT-05`, closed), widened `PrefixProof` and `AuditorUpdate` to `<0..2^32-1>` counts, added
+`AuditorUpdate.leaves` (§15.2), made its ladders overflow-safe (`KT-01`, closed), and fixed its
+`EvaluateBeforeAfter` for the two shapes it refused (`KT-02`, `KT-03`, closed). What is still open
+against the peer is §14's `ManagerUpdateRequest` field order (`KT-07`) and §9.1 step 2.1's condition on
+a previous version having existed (`KT-06`); neither has been re-measured at the new pin.
 
 ## What we are interoperating with
 
@@ -85,6 +92,32 @@ out of the box. Consequences:
   explicitly documented upstream as the wire-compatibility seam.
 - Worth an upstream question either way — the server may simply be mid-refactor.
 
+## The other implementations (IETF 125 slides, March 2026)
+
+Brendan McMillion's IETF 125 deck lists six published implementations. Checked 2026-10-19,
+none of them changes the oracle arrangement, and each is recorded here so it is not re-surveyed.
+
+| Implementation | Role | Licence | Usable as |
+|---|---|---|---|
+| [`Bren2010/katie`](https://github.com/Bren2010/katie) | server, client, auditor | AGPL-3.0 | **the oracle**; the slides call proof verification and credentials its biggest gaps, and its server is `//go:build ignore`'d |
+| [`signalapp/key-transparency-server`](https://github.com/signalapp/key-transparency-server) | server (Go, runnable) | AGPL-3.0 | reading only: a Signal-modified protocol over protobuf/gRPC ("contains some modifications"), so a disagreement would be about Signal, not the draft |
+| [`signalapp/libsignal/rust/keytrans`](https://github.com/signalapp/libsignal/tree/main/rust/keytrans) | client (Rust) | AGPL-3.0 | reading only; same protocol variant. Its `res/` holds one captured response (a 313 kB `.dat`) in Signal's encoding |
+| [`signalapp/key-transparency-auditor`](https://github.com/signalapp/key-transparency-auditor) | auditor (Java) | AGPL-3.0 | reading only |
+| [`trailofbits/signal-auditor`](https://github.com/trailofbits/signal-auditor) | auditor (Rust) | AGPL-3.0 | reading only |
+| [`guyfischman/RuKT`](https://github.com/guyfischman/RuKT) | server + client + auditor (Rust) | **none** | reading only, and not even that for anything we would commit: no licence means no permission. It targets `-05` and `architecture-09` over a protobuf gRPC API, so it would need a TLS transcoder to be a wire oracle and lags the draft by the amendments above |
+
+Two things from that survey are worth acting on. The Signal server ships
+`cmd/generate-auditing-test-vectors`, but its vectors are "should fail" cases in Signal's own auditing
+format (`newTree`/`real` proof types in protobuf), not the draft's `AuditorUpdate`, so they test a
+different protocol. And the only runnable servers in the list speak protobuf, not the draft's TLS
+messages, which is the real obstacle to Tier 2: a live peer needs a transcoder in the middle, and the
+transcoder becomes the thing under test. katie's `wire.Interface` remains the cleaner seam.
+
+The slides' protocol changes — the fixed-version search going right through expired entries, and
+pruning by deleting VRF outputs rather than trimming them — are in the pinned draft but not yet
+implemented here; the second is what `AuditorUpdate.leaves` carries, the first is `kt-client` work
+that needs the distinguished operation from katie's unbuilt tip (`KT-08`).
+
 ## Tier 1 — differential test vectors
 
 Data, not linkage. A Go generator emits JSON; Rust tests assert equality; then the
@@ -128,9 +161,9 @@ disagrees:
 
 Steps 1 through 6 are done, step 7 apart from the combined tree, step 9, and §6.1 out of
 step 8.
-Eighteen vector files pass from the Rust side — 6706 checks across 789 cases — and
-`from-kt.json` runs the other way: 218 artifacts built by the Rust side, 112 of which
-katie must accept and 106 of which it must reject. "Agrees" here means a committed
+Twenty-one suites pass from the Rust side — 827 cases — and
+`from-kt.json` runs the other way: 235 artifacts built by the Rust side, 124 of which
+katie must accept and 111 of which it must reject. "Agrees" here means a committed
 vector asserts it, not that the two implementations were eyeballed.
 
 The reverse direction earned its keep immediately. It found that §12.1's proofs
@@ -424,9 +457,11 @@ Adopting it alone would have cost 31 checks against the pinned peer — 30 in `u
 one live proof in `search.json`, which fails with "entry 6's timestamp contradicts entry 3's". That
 is not a bookkeeping difference: §12.3 orders a proof's elements by "the order that the algorithm
 the user is executing would request them", so a proof built under the earlier procedure must be read
-under the earlier procedure. Both readings are therefore implemented —
-`ibst::update_view` for the current text, `ibst::update_view_ancestors_only` for the peer's — and
-the replays consume katie's proofs with the latter. Recorded against the peer as `KT-05`.
+under the earlier procedure. Both readings were therefore implemented while the peer lagged, and the
+replays consumed katie's proofs with the earlier one (`KT-05`). **Update, 2026-10-19:** katie took the
+amendment at `a2959a5`, so the earlier reading, `ibst::update_view_ancestors_only` and its report
+function were deleted. The comparison also caught an error here: the restart case sent the user's own
+retained entry, where the draft says only its right children are provided (`NOTE-05`).
 
 The original write-up follows, because the argument for *why* the hole was not a rare corner is
 what makes the fix worth having.
@@ -454,11 +489,8 @@ entries added since, the monotonic series they are meant to form, and the `max_a
 `max_behind` clock bounds, which are checked against the rightmost entry's timestamp —
 the one they are never given. `katie`'s `UpdateView(12, 8)` is empty too.
 
-`kt-tree::ibst::leaves_right_edge_unchecked` reports the condition so a client can
-refuse rather than read an empty response as "nothing to verify". Worth an upstream
-issue: either the procedure needs to fall back to the frontier when the direct path
-filters away, or §4.2 needs to say why the rightmost timestamp does not have to be
-checked in that case.
+(The function that reported this condition, `ancestors_only_leaves_right_edge_unchecked`, was removed
+with the earlier reading; the draft's restart makes the condition unreachable.)
 
 ### DRAFT-07: the two Go implementations disagree about §11.2
 
@@ -898,15 +930,15 @@ code rather than one.
 
 | ID | What | Belongs to | Pinned by | Status |
 |---|---|---|---|---|
-| `KT-01` | Binary ladder does not terminate for greatest versions at or above `2^31-1` | katie | `binary-ladder.json` capped at `2^31-2`; Rust tests above it | disclosed by email; not filed |
-| `KT-02` | `EvaluateBeforeAfter` treats §11.9's all-zero copath element as an opaque node | katie | `prefix-mutation.json` `remove-every-leaf` | tracked locally |
-| `KT-03` | `EvaluateBeforeAfter` refuses the replacement §15.2 permits | katie | `prefix-mutation.json` `replace-in-place` | tracked locally |
-| `DRAFT-01` | A greatest version of `2^32-1` cannot be proven at all | draft | `kt-tree::ladder` refuses it | tracked locally |
+| `KT-01` | Binary ladder does not terminate for greatest versions at or above `2^31-1` | katie | `binary-ladder.json` now runs to `2^32-1` | **resolved** at `a2959a5`: ladders computed in `uint64`, rungs at or above `2^32` dropped |
+| `KT-02` | `EvaluateBeforeAfter` treats §11.9's all-zero copath element as an opaque node | katie | `prefix-mutation.json` `remove-every-leaf` | **resolved** at `a2959a5`: its verifier now reaches the tree's root |
+| `KT-03` | `EvaluateBeforeAfter` refuses the replacement §15.2 permits | katie | `prefix-mutation.json` `replace-in-place` | **resolved** at `a2959a5` |
+| `DRAFT-01` | A greatest version of `2^32-1` cannot be proven at all | draft | `binary-ladder.json` `base-greatest-4294967295`; `kt-tree::ladder` tests | **resolved**: §5 now says lookups above `2^32-1` are skipped and treated as non-inclusion; the ladder for `2^32-1` is 33 inclusions and no non-inclusion |
 | `DRAFT-02` | §12.2 leaves `nonInclusionParent`'s `depth` and its element accounting implicit | draft | `prefix-tree.json` | **half resolved**: §12.2 now defines `depth` as the missing child's, the reading used here; the element accounting is still implicit |
 | `DRAFT-03` | §12.2's `uint8 depth` cannot express depth 256 | draft | `kt-tree::prefix` `DepthOverflow` | tracked locally |
-| `DRAFT-04` | §15.2 step 7 cannot determine the root when a removal's sibling is uncovered | draft | `prefix-mutation.json`, `auditor-update.json` | tracked locally |
+| `DRAFT-04` | §15.2 step 7 cannot determine the root when a removal's sibling is uncovered | draft | `prefix-mutation.json` (`remove-beside-a-leaf`, `…-leaves-omitted`, `remove-collapsing-a-chain`, `remove-two-siblings-apart`), `from-kt.json` | **resolved**: `AuditorUpdate.leaves` names the promoted sibling. Residual: a log that omits it is indistinguishable from one with nothing to promote, and the auditor's root silently forks from the log's — pinned as a case both implementations reach identically and wrongly |
 | `DRAFT-05` | §15.2 cannot audit a log entry that changes nothing | draft | `auditor-update.json` `change-nothing` | tracked locally |
-| `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json`; `ibst::ancestors_only_leaves_right_edge_unchecked` | **resolved**: the 2026-07-28 restart clause; the peer still lags, so both readings are implemented (`KT-05`) |
+| `DRAFT-06` | §4.2 can send a user no timestamps at all while the log has grown | draft | `update-view.json` | **resolved**: the 2026-07-28 restart clause, which the peer now implements; the pre-amendment reading was removed from `kt-tree` |
 | `DRAFT-07` | §11.2's grouped `select` reads two ways; the two Go implementations took one each, and no signature cross-verifies in contactMonitoring | draft | `tree-head.json`, including a negative case carrying a signature valid under the other reading | **resolved**: `case contactMonitoring:` deleted on 2026-07-28, which is the reading implemented here |
 | `DRAFT-08` | §6.3 cannot verify the response that means "this label does not exist" | draft | `search.json` `label-does-not-exist` | **resolved**: §13.1 now says no negative result is encodable and clients MUST treat one as failed validation; the peer sends them anyway |
 | `NOTE-01` | katie's search ladder is target-indexed, Appendix B's greatest-indexed — equivalent | neither | generator's 131×131 grid; Rust tests | no action |
@@ -915,10 +947,12 @@ code rather than one.
 | `DRAFT-10` | §12.3.6 omits the timestamp of an entry that reaches step 5 without recursing, so its own proof cannot be rooted | draft | `monitor.json` `owner-monitor-reaches-step-5` | tracked locally; resolved by measurement |
 | `KT-04` | `Tree.Update` cannot answer any request: the owner state is checked but never initialized | katie | `update.json` drives the algorithm directly, supplying the state | **filed**: [katie#1](https://github.com/Bren2010/katie/issues/1) |
 | `DRAFT-11` | §14's `ManagerUpdateRequest` listed every field twice | draft | `kt-wire::requests` | **resolved**: duplication removed 2026-07-28, before it was filed; the order half is now `KT-07` |
-| `KT-05` | §4.2 without the 2026-07-28 frontier restart, so 15 advertised sizes get nothing back | katie | `update-view.json`, both readings; `search.json`'s advertised-size replay | tracked locally |
+| `KT-05` | §4.2 without the 2026-07-28 frontier restart, so 15 advertised sizes get nothing back | katie | `update-view.json`; `search.json`'s advertised-size replay | **resolved** at `a2959a5` |
 | `KT-06` | §9.1 step 2.1 skipped unconditionally, where the current text requires a previous version to have existed | katie | `kt-tree::combined` test `a_first_version_skips_nothing_in_the_previous_tree` | tracked locally |
 | `KT-07` | `ManagerUpdateRequest.signed_version` ordered before `values`, where §14 puts it after | katie | `kt-wire::requests` round-trip pins the draft's order as bytes | asked as [#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) |
 | `DRAFT-12` | §13.5 gained `skipped_versions`, but §9.1 does not say how its ladder set or additional-proof set treats a skipped version | draft | `kt-wire::responses` decodes the field; the algorithm is untouched | tracked locally |
+| `KT-08` | `main` at `f93331d` does not build (`tree/transparency`) and fails two algorithms tests; the pin is the last commit that does | katie | `docs/interop.md` pin paragraph; `go build ./tree/... && go test ./tree/...` at the pin | not filed: mid-refactor |
+| `NOTE-05` | our first reading of §4.2's restart sent the user's own retained entry; the draft sends only its right children, and the peer caught it | this repo | `update-view.json`; `ibst` test `a_frontier_size_restarts_beyond_the_users_own_entry` | fixed |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
 Two ground rules for anything added here. A finding is only a finding once a committed

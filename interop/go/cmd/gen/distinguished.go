@@ -80,7 +80,7 @@ func (h *timestampHandle) Output([]uint64, uint64, *uint64, *uint64) (*structs.C
 	return nil, errors.New("unexpected call to Output")
 }
 
-func (h *timestampHandle) StopCondition(uint64, int) bool { return false }
+func (h *timestampHandle) StopCondition(uint64, int64) bool { return false }
 
 func (h *timestampHandle) Tracker() *math.VersionTracker { return &math.VersionTracker{} }
 

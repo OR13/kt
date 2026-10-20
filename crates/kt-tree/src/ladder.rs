@@ -29,51 +29,31 @@
 //!
 //! # Versions are `uint32`, ladders are not
 //!
-//! Appendix B is Python, so its ladder for `n = 2^32 - 1` happily contains
-//! `2^33 - 1`. On the wire a version is a `uint32` (§11.7 `VrfInput`), so that
-//! rung cannot be looked up: there is no way to prove that `2^32 - 1` is the
-//! greatest version of a label, because doing so requires a non-inclusion proof
-//! for a version that does not fit the field. [`base_binary_ladder`] and
-//! [`search_binary_ladder`] report [`Error::UnrepresentableRung`] rather than
-//! truncating silently; [`monitoring_binary_ladder`] cannot hit it, since it
-//! keeps only rungs at or below the monitored version.
+//! Appendix B is Python, so its arithmetic is unbounded, and for `n = 2^32 - 1` the base
+//! ladder of the first drafts contained `2^33 - 1`. On the wire a version is a `uint32`
+//! (§11.7 `VrfInput`), so that rung cannot be looked up. Since the draft revision of
+//! 2026-08-01 §5 says what to do: "the greatest possible version is `2^32-1`. Any lookup for
+//! a greater version is skipped and the algorithm above continues as if the lookup resulted
+//! in a non-inclusion proof." Appendix B's `base_binary_ladder` computes the whole ladder and
+//! drops the rungs at or above `2^32` at the end, so the binary search still treats them as
+//! absent and converges on the top version. The ladder for `2^32 - 1` is therefore the 33
+//! rungs `0, 1, 3, …, 2^32 - 1` with no non-inclusion proof at all, which is how a label is
+//! shown to have reached the end of the version space (`DRAFT-01`, now resolved).
 //!
-//! The Go peer `katie` computes its whole ladder in `uint32`, which does not
-//! survive the top half of the version range. Its binary search takes the
-//! midpoint as `(lower + upper) / 2`, and once that sum exceeds `u32::MAX` it
-//! wraps: the midpoint lands below the lower bound, the interval never closes,
-//! and the loop appends rungs until it is killed. The first affected greatest
-//! version is `2^31 - 1`, where the upper bound becomes `2^32 - 1`. (At
-//! `u32::MAX` even the first phase spins, since `1 << 32` is 0 in Go and the rung
-//! wraps to `u32::MAX`, which never exceeds `u32::MAX`.) Verified at pin
-//! `00da5254`: `2^31 - 2` returns a 62-rung ladder, `2^31 - 1` is OOM-killed.
+//! The Go peer `katie` could not do this at pin `00da5254`: it computed in `uint32`, so
+//! its midpoint wrapped and the search never closed for a greatest version from `2^31 - 1`
+//! upward (`KT-01`). From `a2959a5` it computes in `u64` and filters, as the draft does, and
+//! `interop/vectors/binary-ladder.json` now covers the whole range.
 //!
-//! So `interop/vectors/binary-ladder.json` stops at `2^31 - 2`, and everything
-//! above it — including the one genuinely impossible case above — is pinned by the
-//! tests in this module instead. Computing the rungs in `u64` is what avoids the
-//! problem here; it is not a difference of interpretation, and both peer bugs are
-//! worth an upstream report.
-
 use alloc::vec::Vec;
 use core::fmt;
 
 use kt_wire::proofs::PrefixSearchResult;
 
-/// A ladder that cannot be expressed with `uint32` versions.
+/// Why a ladder could not be built or interpreted.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
-    /// The ladder needs a rung above `u32::MAX`, so it cannot be looked up.
-    ///
-    /// Only reachable when the greatest version is `u32::MAX`: establishing that
-    /// bound requires a non-inclusion proof for version `2^32`, which the
-    /// `uint32` version field cannot express.
-    UnrepresentableRung {
-        /// The rung the ladder called for.
-        rung: u64,
-        /// The greatest version the ladder was built for.
-        greatest: u32,
-    },
     /// A ladder's results do not correspond to its lookups (§6.2).
     ///
     /// Either there are more results than rungs, or a result that should have ended
@@ -90,11 +70,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnrepresentableRung { rung, greatest } => write!(
-                f,
-                "binary ladder for greatest version {greatest} needs version {rung}, \
-                 which does not fit the uint32 version field"
-            ),
             Self::LadderShape { rungs, results } => write!(
                 f,
                 "a ladder of {rungs} lookups cannot be answered by {results} results"
@@ -111,16 +86,14 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// The versions that establish `greatest` as the greatest version of a label
 /// (Appendix B `base_binary_ladder`).
 ///
-/// # Errors
-///
-/// [`Error::UnrepresentableRung`] if `greatest` is `u32::MAX`; see the module
-/// documentation.
-pub fn base_binary_ladder(greatest: u32) -> Result<Vec<u32>> {
-    let mut out = Vec::new();
-    for rung in base_ladder_rungs(greatest) {
-        out.push(narrow(rung, greatest)?);
-    }
-    Ok(out)
+/// Rungs at or above `2^32` are dropped, which for `greatest = u32::MAX` leaves a ladder with
+/// no non-inclusion rung; see the module documentation.
+#[must_use]
+pub fn base_binary_ladder(greatest: u32) -> Vec<u32> {
+    base_ladder_rungs(greatest)
+        .into_iter()
+        .filter_map(|rung| u32::try_from(rung).ok())
+        .collect()
 }
 
 /// The versions looked up in a *search* binary ladder (Appendix B
@@ -137,18 +110,13 @@ pub fn base_binary_ladder(greatest: u32) -> Result<Vec<u32>> {
 /// to the right. Those lookups are dropped, since the answer is already known —
 /// but they still count for termination, because whether the ladder ends does not
 /// depend on whether the proof happened to be sent.
-///
-/// # Errors
-///
-/// [`Error::UnrepresentableRung`] if `target` and `greatest` are both `u32::MAX`:
-/// with nothing to distinguish them, the ladder runs to the end of the base
-/// ladder, whose last rungs do not fit a `uint32`.
+#[must_use]
 pub fn search_binary_ladder(
     target: u32,
     greatest: u32,
     left_inclusion: &[u32],
     right_non_inclusion: &[u32],
-) -> Result<Vec<u32>> {
+) -> Vec<u32> {
     let target_wide = u64::from(target);
     let greatest_wide = u64::from(greatest);
     // Appendix B's `would_end`: an inclusion proof for a version greater than the
@@ -159,16 +127,17 @@ pub fn search_binary_ladder(
     };
 
     let mut out = Vec::new();
-    for rung in base_ladder_rungs(greatest) {
-        let version = narrow(rung, greatest)?;
+    // Rungs that do not fit a `uint32` were never looked up, so they cannot end the ladder
+    // either: Appendix B computes `would_end` over the filtered list.
+    for version in base_binary_ladder(greatest) {
         if !left_inclusion.contains(&version) && !right_non_inclusion.contains(&version) {
             out.push(version);
         }
-        if would_end(rung) {
+        if would_end(u64::from(version)) {
             break;
         }
     }
-    Ok(out)
+    out
 }
 
 /// The versions looked up in a *monitoring* binary ladder (Appendix B
@@ -217,12 +186,9 @@ pub fn monitoring_binary_ladder(target: u32, left_inclusion: &[u32]) -> Vec<u32>
 /// A caller with `start_ver > end_ver` gets the first and third bullets alone; §9.1 has no such
 /// case, since an update creates at least one version, and [`crate::combined::owner_update`]
 /// establishes the ordering before calling here.
-///
-/// # Errors
-///
-/// [`Error::UnrepresentableRung`] if `end_ver` is `u32::MAX`; see the module documentation.
-pub fn update_binary_ladder(start_ver: u32, end_ver: u32) -> Result<Vec<u32>> {
-    let mut out = search_binary_ladder(end_ver, end_ver, &[], &[])?;
+#[must_use]
+pub fn update_binary_ladder(start_ver: u32, end_ver: u32) -> Vec<u32> {
+    let mut out = search_binary_ladder(end_ver, end_ver, &[], &[]);
     for version in start_ver..end_ver {
         if !out.contains(&version) {
             out.push(version);
@@ -242,16 +208,16 @@ pub fn update_binary_ladder(start_ver: u32, end_ver: u32) -> Result<Vec<u32>> {
             start_ver.saturating_sub(1),
             &[],
             &[],
-        )?
+        )
     };
     out.retain(|version| !known.contains(version));
 
     out.sort_unstable();
-    Ok(out)
+    out
 }
 
-/// Appendix B's `base_binary_ladder`, computed in `u64` so that the rungs above
-/// `u32::MAX` are representable and can be reported rather than wrapped.
+/// Appendix B's `base_binary_ladder` before its final filter, computed in `u64` so the rungs
+/// at or above `2^32` exist long enough for the binary search to treat them as absent.
 ///
 /// Both phases are bounded: the first emits at most 34 rungs, since `2^33 - 1`
 /// exceeds every `u32`, and the second halves an interval of at most `2^33`.
@@ -290,11 +256,6 @@ fn base_ladder_rungs(greatest: u32) -> Vec<u64> {
     out
 }
 
-/// Narrows a rung to the `uint32` version field.
-fn narrow(rung: u64, greatest: u32) -> Result<u32> {
-    u32::try_from(rung).map_err(|_| Error::UnrepresentableRung { rung, greatest })
-}
-
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -312,19 +273,16 @@ mod tests {
     /// for version 7, then followed by inclusion proofs for versions 5 and 6."
     #[test]
     fn base_ladder_matches_the_worked_example() {
-        assert_eq!(base_binary_ladder(6).unwrap(), vec![0, 1, 3, 7, 5, 6]);
+        assert_eq!(base_binary_ladder(6), vec![0, 1, 3, 7, 5, 6]);
     }
 
     #[test]
     fn base_ladder_small_cases() {
-        assert_eq!(base_binary_ladder(0).unwrap(), vec![0, 1]);
-        assert_eq!(base_binary_ladder(1).unwrap(), vec![0, 1, 3, 2]);
-        assert_eq!(base_binary_ladder(2).unwrap(), vec![0, 1, 3, 2]);
-        assert_eq!(base_binary_ladder(3).unwrap(), vec![0, 1, 3, 7, 5, 4]);
-        assert_eq!(
-            base_binary_ladder(7).unwrap(),
-            vec![0, 1, 3, 7, 15, 11, 9, 8]
-        );
+        assert_eq!(base_binary_ladder(0), vec![0, 1]);
+        assert_eq!(base_binary_ladder(1), vec![0, 1, 3, 2]);
+        assert_eq!(base_binary_ladder(2), vec![0, 1, 3, 2]);
+        assert_eq!(base_binary_ladder(3), vec![0, 1, 3, 7, 5, 4]);
+        assert_eq!(base_binary_ladder(7), vec![0, 1, 3, 7, 15, 11, 9, 8]);
     }
 
     /// A base ladder determines its greatest version uniquely: the largest rung
@@ -334,7 +292,7 @@ mod tests {
     #[test]
     fn base_ladder_pins_the_greatest_version() {
         for greatest in 0_u32..=2_000 {
-            let ladder = base_binary_ladder(greatest).unwrap();
+            let ladder = base_binary_ladder(greatest);
             let included: Vec<u32> = ladder.iter().copied().filter(|v| *v <= greatest).collect();
             let absent: Vec<u32> = ladder.iter().copied().filter(|v| *v > greatest).collect();
             assert_eq!(
@@ -370,16 +328,10 @@ mod tests {
     /// inclusion proof for 7 already shows the greatest version exceeds 5.
     #[test]
     fn search_ladder_stops_once_the_target_is_settled() {
-        assert_eq!(
-            search_binary_ladder(5, 100, &[], &[]).unwrap(),
-            vec![0, 1, 3, 7]
-        );
+        assert_eq!(search_binary_ladder(5, 100, &[], &[]), vec![0, 1, 3, 7]);
         // The mirror image: greatest version 5, target 100. The *non*-inclusion
         // proof for 7 settles it, and the ladder is the same one.
-        assert_eq!(
-            search_binary_ladder(100, 5, &[], &[]).unwrap(),
-            vec![0, 1, 3, 7]
-        );
+        assert_eq!(search_binary_ladder(100, 5, &[], &[]), vec![0, 1, 3, 7]);
     }
 
     /// When the target is exactly the greatest version there is nothing to
@@ -388,8 +340,8 @@ mod tests {
     fn search_ladder_with_target_equal_to_greatest_is_the_base_ladder() {
         for version in [0_u32, 1, 6, 7, 100, 1_000, 65_535] {
             assert_eq!(
-                search_binary_ladder(version, version, &[], &[]).unwrap(),
-                base_binary_ladder(version).unwrap(),
+                search_binary_ladder(version, version, &[], &[]),
+                base_binary_ladder(version),
                 "version {version}"
             );
         }
@@ -399,23 +351,14 @@ mod tests {
     /// what ends the ladder even when it is not sent.
     #[test]
     fn search_ladder_drops_known_lookups_without_changing_where_it_ends() {
-        let full = search_binary_ladder(5, 100, &[], &[]).unwrap();
+        let full = search_binary_ladder(5, 100, &[], &[]);
         assert_eq!(full, vec![0, 1, 3, 7]);
 
+        assert_eq!(search_binary_ladder(5, 100, &[1], &[]), vec![0, 3, 7]);
+        assert_eq!(search_binary_ladder(5, 100, &[7], &[]), vec![0, 1, 3]);
+        assert_eq!(search_binary_ladder(5, 100, &[], &[3]), vec![0, 1, 7]);
         assert_eq!(
-            search_binary_ladder(5, 100, &[1], &[]).unwrap(),
-            vec![0, 3, 7]
-        );
-        assert_eq!(
-            search_binary_ladder(5, 100, &[7], &[]).unwrap(),
-            vec![0, 1, 3]
-        );
-        assert_eq!(
-            search_binary_ladder(5, 100, &[], &[3]).unwrap(),
-            vec![0, 1, 7]
-        );
-        assert_eq!(
-            search_binary_ladder(5, 100, &[0, 1, 3, 7], &[]).unwrap(),
+            search_binary_ladder(5, 100, &[0, 1, 3, 7], &[]),
             Vec::<u32>::new()
         );
     }
@@ -443,39 +386,37 @@ mod tests {
         );
     }
 
-    /// The `uint32` edge from the module documentation. `u32::MAX - 1` is fine;
-    /// `u32::MAX` is not expressible and says so instead of wrapping, truncating,
-    /// or looping.
+    /// The `uint32` edge from the module documentation. §5 says a lookup for a version above
+    /// `2^32-1` is skipped and treated as a non-inclusion, so the ladder for the greatest
+    /// possible version is just the powers of two minus one: 33 inclusions and nothing above.
     #[test]
-    fn greatest_version_of_u32_max_is_not_representable() {
-        let ladder = base_binary_ladder(u32::MAX - 1).unwrap();
-        assert_eq!(*ladder.iter().max().unwrap(), u32::MAX);
+    fn the_greatest_possible_version_has_a_ladder_with_no_non_inclusion() {
+        let powers: Vec<u32> = (0..=32_u32)
+            .map(|exponent| ((1_u64 << exponent) - 1) as u32)
+            .collect();
+        assert_eq!(base_binary_ladder(u32::MAX), powers);
+        // Nothing distinguishes target from greatest, so the search ladder is all of it.
+        assert_eq!(search_binary_ladder(u32::MAX, u32::MAX, &[], &[]), powers);
 
+        // One below the top still pins itself with a binary search under 2^32-1.
+        let below = base_binary_ladder(u32::MAX - 1);
+        assert_eq!(*below.iter().max().unwrap(), u32::MAX);
+        assert_eq!(*below.last().unwrap(), u32::MAX - 1);
+        assert_eq!(below.len(), 64, "33 powers, then 31 halvings");
+
+        // A search ladder with anything to distinguish target from greatest still ends early.
+        assert_eq!(search_binary_ladder(0, u32::MAX, &[], &[]), vec![0, 1]);
+        assert_eq!(search_binary_ladder(u32::MAX, 0, &[], &[]), vec![0, 1]);
         assert_eq!(
-            base_binary_ladder(u32::MAX),
-            Err(Error::UnrepresentableRung {
-                rung: (1 << 33) - 1,
-                greatest: u32::MAX
-            })
-        );
-        assert_eq!(
-            search_binary_ladder(u32::MAX, u32::MAX, &[], &[]),
-            Err(Error::UnrepresentableRung {
-                rung: (1 << 33) - 1,
-                greatest: u32::MAX
-            })
+            *search_binary_ladder(u32::MAX - 1, u32::MAX, &[], &[])
+                .last()
+                .unwrap(),
+            u32::MAX
         );
 
-        // A search ladder with anything to distinguish target from greatest
-        // terminates inside the representable range.
-        assert!(search_binary_ladder(0, u32::MAX, &[], &[]).is_ok());
-        assert!(search_binary_ladder(u32::MAX, 0, &[], &[]).is_ok());
-        assert!(search_binary_ladder(u32::MAX - 1, u32::MAX, &[], &[]).is_ok());
-
-        // And monitoring is defined at the top of the range.
+        // Monitoring was always defined at the top of the range.
         let monitoring = monitoring_binary_ladder(u32::MAX, &[]);
-        assert_eq!(*monitoring.iter().max().unwrap(), u32::MAX);
-        assert_eq!(monitoring.len(), 33, "0, 1, 3, … 2^32-1");
+        assert_eq!(monitoring, powers);
     }
 
     /// The Go peer builds its search ladder from the base ladder of the *target*
@@ -510,7 +451,7 @@ mod tests {
         for target in 0_u32..=120 {
             for greatest in 0_u32..=120 {
                 assert_eq!(
-                    search_binary_ladder(target, greatest, &[], &[]).unwrap(),
+                    search_binary_ladder(target, greatest, &[], &[]),
                     target_indexed(target, greatest),
                     "target {target}, greatest {greatest}"
                 );
@@ -524,7 +465,7 @@ mod tests {
             (u32::MAX - 1, u32::MAX - 1),
         ] {
             assert_eq!(
-                search_binary_ladder(target, greatest, &[], &[]).unwrap(),
+                search_binary_ladder(target, greatest, &[], &[]),
                 target_indexed(target, greatest),
                 "target {target}, greatest {greatest}"
             );
@@ -537,7 +478,7 @@ mod tests {
     /// carries a VRF proof for version 1 alone.
     #[test]
     fn the_first_version_needs_only_the_rung_above_it() {
-        assert_eq!(update_binary_ladder(0, 0).unwrap(), vec![1]);
+        assert_eq!(update_binary_ladder(0, 0), vec![1]);
     }
 
     /// The three bullets, each visible in the answer, and the third doing more work than it
@@ -548,9 +489,9 @@ mod tests {
     /// the owner's hands. One VRF proof survives, for the new greatest version itself.
     #[test]
     fn a_multi_version_update_keeps_the_new_versions_and_drops_the_known_ones() {
-        assert_eq!(base_binary_ladder(6).unwrap(), vec![0, 1, 3, 7, 5, 6]);
-        assert_eq!(base_binary_ladder(3).unwrap(), vec![0, 1, 3, 7, 5, 4]);
-        assert_eq!(update_binary_ladder(4, 6).unwrap(), vec![6]);
+        assert_eq!(base_binary_ladder(6), vec![0, 1, 3, 7, 5, 6]);
+        assert_eq!(base_binary_ladder(3), vec![0, 1, 3, 7, 5, 4]);
+        assert_eq!(update_binary_ladder(4, 6), vec![6]);
     }
 
     /// Ascending and duplicate-free, which §13.5's `binary_ladder` field requires. Worth
@@ -561,7 +502,7 @@ mod tests {
     fn the_set_is_ascending_and_has_no_repeats() {
         for start in 0_u32..40 {
             for end in start..40 {
-                let versions = update_binary_ladder(start, end).unwrap();
+                let versions = update_binary_ladder(start, end);
                 assert!(
                     versions.windows(2).all(|pair| pair[0] < pair[1]),
                     "start {start}, end {end}: {versions:?}"
@@ -577,12 +518,12 @@ mod tests {
     fn new_versions_are_covered_and_known_rungs_are_not() {
         for start in 0_u32..30 {
             for end in start..30 {
-                let versions = update_binary_ladder(start, end).unwrap();
+                let versions = update_binary_ladder(start, end);
                 for created in start..=end {
                     let known = if start == 0 {
                         created == 0
                     } else {
-                        base_binary_ladder(start - 1).unwrap().contains(&created)
+                        base_binary_ladder(start - 1).contains(&created)
                     };
                     assert_eq!(
                         versions.contains(&created),
@@ -591,7 +532,7 @@ mod tests {
                     );
                 }
                 if start > 0 {
-                    for known in base_binary_ladder(start - 1).unwrap() {
+                    for known in base_binary_ladder(start - 1) {
                         assert!(
                             !versions.contains(&known),
                             "start {start}, end {end}: {known} is already held"
@@ -602,23 +543,13 @@ mod tests {
         }
     }
 
-    /// The `uint32` ceiling reaches this shape too, through the ladder for the new greatest
-    /// version. An owner cannot be told that `u32::MAX` is the greatest version of a label,
-    /// here for the same reason as everywhere else: the proof would need version `2^32`.
+    /// The top of the version range reaches this shape too. An owner creating version
+    /// `u32::MAX` already holds every search key the ladder asks for: they are the powers of two
+    /// minus one, which the ladder for the version before it covers as well.
     #[test]
-    fn the_top_version_is_unrepresentable_here_too() {
-        assert_eq!(
-            update_binary_ladder(u32::MAX, u32::MAX),
-            Err(Error::UnrepresentableRung {
-                rung: (1 << 33) - 1,
-                greatest: u32::MAX,
-            })
-        );
-        // One below the ceiling is fine, and comes out empty for the reason below.
-        assert_eq!(
-            update_binary_ladder(u32::MAX - 1, u32::MAX - 1).unwrap(),
-            []
-        );
+    fn the_top_version_needs_nothing_new() {
+        assert_eq!(update_binary_ladder(u32::MAX, u32::MAX), []);
+        assert_eq!(update_binary_ladder(u32::MAX - 1, u32::MAX - 1), []);
     }
 
     /// A single-version update can need no VRF proofs at all, and that is not the log holding
@@ -634,13 +565,13 @@ mod tests {
     /// and its own ladder reaches a rung further right.
     #[test]
     fn a_single_version_update_often_needs_nothing() {
-        assert_eq!(update_binary_ladder(2, 2).unwrap(), []);
+        assert_eq!(update_binary_ladder(2, 2), []);
         let empty = (1_u32..40)
-            .filter(|version| update_binary_ladder(*version, *version).unwrap().is_empty())
+            .filter(|version| update_binary_ladder(*version, *version).is_empty())
             .count();
         assert_eq!(empty, 19);
         // Version 3 is `2^2 - 1`, so its ladder probes 7 and the owner has never seen it.
-        assert_eq!(update_binary_ladder(3, 3).unwrap(), vec![4, 5, 7]);
+        assert_eq!(update_binary_ladder(3, 3), vec![4, 5, 7]);
     }
 }
 
@@ -649,20 +580,21 @@ mod error_tests {
     use super::*;
     use alloc::string::ToString as _;
 
-    /// The one error a ladder can produce says which rung it wanted and for which
-    /// greatest version, because both are needed to see why it is unrepresentable.
+    /// A ladder that cannot be answered says how many lookups it has and how many results
+    /// arrived, because both are needed to see which way the log got it wrong.
     #[test]
-    fn the_unrepresentable_rung_renders_both_numbers() {
+    fn a_ladder_shape_error_renders_both_counts() {
         use core::error::Error as _;
 
-        let err = Error::UnrepresentableRung {
-            rung: (1 << 33) - 1,
-            greatest: u32::MAX,
+        let err = Error::LadderShape {
+            rungs: 3,
+            results: 5,
         };
         let rendered = err.to_string();
-        assert!(rendered.contains("8589934591"), "{rendered}");
-        assert!(rendered.contains("4294967295"), "{rendered}");
-        assert!(rendered.contains("uint32"), "{rendered}");
+        assert!(
+            rendered.contains('3') && rendered.contains('5'),
+            "{rendered}"
+        );
         assert!(err.source().is_none());
     }
 }
@@ -787,7 +719,7 @@ mod interpretation_tests {
     fn interpretation_recovers_the_comparison() {
         for target in 0_u32..=60 {
             for greatest in 0_u32..=60 {
-                let ladder = search_binary_ladder(target, greatest, &[], &[]).unwrap();
+                let ladder = search_binary_ladder(target, greatest, &[], &[]);
                 let results = honest_results(&ladder, greatest, target);
                 assert_eq!(
                     interpret_search_ladder(&ladder, target, &results).unwrap(),
@@ -803,7 +735,7 @@ mod interpretation_tests {
     /// stopped there, `Equal` and `Greater` would be indistinguishable.
     #[test]
     fn an_inclusion_at_the_target_does_not_end_the_ladder() {
-        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+        let ladder = search_binary_ladder(6, 6, &[], &[]);
         assert_eq!(ladder, alloc::vec![0, 1, 3, 7, 5, 6]);
 
         // The stopping rules do not fire on the rung equal to the target, so an
@@ -823,7 +755,7 @@ mod interpretation_tests {
             Ordering::Equal
         );
 
-        let seven = search_binary_ladder(6, 7, &[], &[]).unwrap();
+        let seven = search_binary_ladder(6, 7, &[], &[]);
         let greater = honest_results(&seven, 7, 6);
         assert_eq!(
             interpret_search_ladder(&seven, 6, &greater).unwrap(),
@@ -836,7 +768,7 @@ mod interpretation_tests {
     /// extra results ignored.
     #[test]
     fn results_past_a_stopping_rule_are_rejected() {
-        let ladder = search_binary_ladder(5, 100, &[], &[]).unwrap();
+        let ladder = search_binary_ladder(5, 100, &[], &[]);
         let mut results = honest_results(&ladder, 100, 5);
         assert_eq!(
             interpret_search_ladder(&ladder, 5, &results).unwrap(),
@@ -853,7 +785,7 @@ mod interpretation_tests {
 
     #[test]
     fn a_short_or_over_long_response_is_rejected() {
-        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+        let ladder = search_binary_ladder(6, 6, &[], &[]);
 
         // Fewer results than the ladder needs, with no stopping rule reached.
         let short = honest_results(&ladder, 6, 6);
@@ -879,7 +811,7 @@ mod interpretation_tests {
     /// trust: this function reads a proof, it does not check one.
     #[test]
     fn flipping_an_outcome_changes_the_verdict() {
-        let ladder = search_binary_ladder(6, 6, &[], &[]).unwrap();
+        let ladder = search_binary_ladder(6, 6, &[], &[]);
         let honest = honest_results(&ladder, 6, 6);
         assert_eq!(
             interpret_search_ladder(&ladder, 6, &honest).unwrap(),

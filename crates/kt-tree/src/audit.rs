@@ -60,14 +60,22 @@ pub enum Error {
     /// The two are one error because the ordering is strict: a repeat inside a list shows
     /// up as a pair that does not ascend.
     NotAscending {
-        /// `"added"` or `"removed"`.
+        /// `"added"`, `"removed"` or `"leaves"`.
         list: &'static str,
         /// The index whose predecessor does not compare less than it.
         index: usize,
     },
+    /// Step 2: a leaf in `leaves` shares its `vrf_output` with one in `added` or `removed`.
+    ///
+    /// A moved leaf is by definition one the update does not otherwise touch, so naming it
+    /// twice would give the proof two answers for one key.
+    LeafOverlap {
+        /// Its index in `leaves`.
+        index: usize,
+    },
     /// Steps 3 and 4: the proof does not answer every key the update names.
     ResultCount {
-        /// `added.len() + removed.len()`.
+        /// `added.len() + removed.len() + leaves.len()`.
         expected: usize,
         /// What the proof carries.
         actual: usize,
@@ -80,6 +88,11 @@ pub enum Error {
     /// Step 4: a removed leaf was not in the tree.
     RemovedNotPresent {
         /// Its index in `removed`.
+        index: usize,
+    },
+    /// Step 4: a leaf claimed to have moved was not in the tree.
+    MovedNotPresent {
+        /// Its index in `leaves`.
         index: usize,
     },
     /// Step 6: the previous root the update implies is not the one the auditor holds.
@@ -143,6 +156,10 @@ impl core::fmt::Display for Error {
             Self::NotAscending { list, index } => {
                 write!(f, "`{list}` does not ascend by vrf_output at index {index}")
             }
+            Self::LeafOverlap { index } => write!(
+                f,
+                "leaves[{index}] has the same vrf_output as a leaf in added or removed"
+            ),
             Self::ResultCount { expected, actual } => write!(
                 f,
                 "the proof answers {actual} keys but the update names {expected}"
@@ -153,6 +170,9 @@ impl core::fmt::Display for Error {
             ),
             Self::RemovedNotPresent { index } => {
                 write!(f, "removed[{index}] is not in the tree")
+            }
+            Self::MovedNotPresent { index } => {
+                write!(f, "leaves[{index}] is not in the tree")
             }
             Self::PrefixRootMismatch { .. } => {
                 write!(
@@ -310,9 +330,24 @@ pub fn verify_update(
     // it is how a label's value is replaced.
     ascending("added", &update.added)?;
     ascending("removed", &update.removed)?;
+    ascending("leaves", &update.leaves)?;
+    for (index, leaf) in update.leaves.iter().enumerate() {
+        let named = update
+            .added
+            .iter()
+            .chain(update.removed.iter())
+            .any(|other| other.vrf_output == leaf.vrf_output);
+        if named {
+            return Err(Error::LeafOverlap { index });
+        }
+    }
 
     // Steps 3 and 4 read results positionally, so the count has to be right first.
-    let expected = update.added.len().saturating_add(update.removed.len());
+    let expected = update
+        .added
+        .len()
+        .saturating_add(update.removed.len())
+        .saturating_add(update.leaves.len());
     if update.proof.results.len() != expected {
         return Err(Error::ResultCount {
             expected,
@@ -347,6 +382,23 @@ pub fn verify_update(
             .is_some_and(|result| result.result_type() == PrefixSearchResultType::Inclusion);
         if !included {
             return Err(Error::RemovedNotPresent { index });
+        }
+    }
+    // Step 4, continued: a moved leaf is one that sat in the tree before the update, and the
+    // proof's third run of results is the one that says so.
+    for index in 0..update.leaves.len() {
+        let position = update
+            .added
+            .len()
+            .saturating_add(update.removed.len())
+            .saturating_add(index);
+        let included = update
+            .proof
+            .results
+            .get(position)
+            .is_some_and(|result| result.result_type() == PrefixSearchResultType::Inclusion);
+        if !included {
+            return Err(Error::MovedNotPresent { index });
         }
     }
 
@@ -389,8 +441,13 @@ pub fn verify_update(
     }
 
     // Steps 6 and 7.
-    let mutation =
-        prefix::evaluate_before_after(suite, &update.added, &update.removed, &update.proof)?;
+    let mutation = prefix::evaluate_before_after(
+        suite,
+        &update.added,
+        &update.removed,
+        &update.leaves,
+        &update.proof,
+    )?;
     if let Some(state) = previous {
         if mutation.before != state.prefix_root {
             return Err(Error::PrefixRootMismatch {
@@ -555,9 +612,19 @@ mod tests {
     ) -> (HashValue, AuditorUpdate) {
         let mut tree = PrefixTree::new();
         tree.extend(existing.iter().copied()).unwrap();
+        // The log's side: apply the change to a copy to learn which leaves it moved, then
+        // prove everything the update names in the tree as it stood before.
+        let removed_keys: Vec<HashValue> = removed.iter().map(|l| l.vrf_output).collect();
+        // Tests that hand the auditor an impossible change (a removal of what is not there)
+        // get no leaves, and are rejected by the auditor rather than by this helper.
+        let leaves = tree
+            .clone()
+            .mutate(added, &removed_keys)
+            .unwrap_or_default();
         let keys: Vec<HashValue> = added
             .iter()
             .chain(removed.iter())
+            .chain(leaves.iter())
             .map(|l| l.vrf_output)
             .collect();
         let proof = tree.prove(SUITE, &keys).unwrap();
@@ -567,6 +634,7 @@ mod tests {
                 timestamp: 1_700_000_000_000,
                 added: added.to_vec(),
                 removed: removed.to_vec(),
+                leaves,
                 proof,
             },
         )
@@ -755,17 +823,44 @@ mod tests {
         );
     }
 
-    /// The removal shape the draft cannot express: everything structural passes, the
-    /// root comes out, and `root_determined` is false — which is the only thing standing
-    /// between an auditor and a signature over a root nobody can reproduce.
+    /// The removal shape §15.2 could not express before `leaves` existed: the removed
+    /// leaf's sibling is a leaf, which must be promoted. With the sibling named in
+    /// `leaves` the root is determined, and it is the tree's.
     #[test]
-    fn a_removal_beside_an_uncovered_sibling_is_not_signable() {
+    fn a_removal_beside_a_leaf_is_signable_once_the_sibling_is_named() {
         let existing = [
             leaf(0x00, 1, 0xa1),
             leaf(0x40, 2, 0xb2),
             leaf(0x80, 3, 0xc3),
         ];
         let (root, update) = update_for(&existing, &[], &[existing[0]]);
+        assert_eq!(update.leaves, vec![existing[1]], "the sibling moved up");
+        let state = state(0, root);
+
+        let accepted = verify_update(SUITE, WINDOW, &update, Some(&state)).unwrap();
+        assert!(accepted.root_determined);
+
+        let mut after = PrefixTree::new();
+        after.extend(existing[1..].iter().copied()).unwrap();
+        assert_eq!(accepted.state.prefix_root, after.root(SUITE));
+    }
+
+    /// The same removal from a log that leaves `leaves` empty, so the proof never covers
+    /// the sibling. Everything structural passes, the root comes out, and
+    /// `root_determined` is false: the only thing standing between an auditor and a
+    /// signature over a root nobody can reproduce.
+    #[test]
+    fn omitting_the_moved_leaf_is_not_signable() {
+        let existing = [
+            leaf(0x00, 1, 0xa1),
+            leaf(0x40, 2, 0xb2),
+            leaf(0x80, 3, 0xc3),
+        ];
+        let (root, mut update) = update_for(&existing, &[], &[existing[0]]);
+        update.leaves.clear();
+        let mut tree = PrefixTree::new();
+        tree.extend(existing.iter().copied()).unwrap();
+        update.proof = tree.prove(SUITE, &[existing[0].vrf_output]).unwrap();
         let state = state(0, root);
 
         let accepted = verify_update(SUITE, WINDOW, &update, Some(&state)).unwrap();
@@ -777,6 +872,64 @@ mod tests {
             accepted.state.prefix_root,
             after.root(SUITE),
             "and the root it would have signed is not the tree's"
+        );
+    }
+
+    /// Step 2's new half: `leaves` ascends, does not repeat, and shares no key with
+    /// `added` or `removed`.
+    #[test]
+    fn leaves_are_held_to_step_two() {
+        let existing = [
+            leaf(0x00, 1, 0xa1),
+            leaf(0x40, 2, 0xb2),
+            leaf(0x80, 3, 0xc3),
+        ];
+        let (root, update) = update_for(&existing, &[], &[existing[0]]);
+        let state = state(0, root);
+
+        let mut unsorted = update.clone();
+        unsorted.leaves = vec![existing[2], existing[1]];
+        assert_eq!(
+            verify_update(SUITE, WINDOW, &unsorted, Some(&state)),
+            Err(Error::NotAscending {
+                list: "leaves",
+                index: 1
+            })
+        );
+
+        let mut repeated = update.clone();
+        repeated.leaves = vec![existing[1], existing[1]];
+        assert_eq!(
+            verify_update(SUITE, WINDOW, &repeated, Some(&state)),
+            Err(Error::NotAscending {
+                list: "leaves",
+                index: 1
+            })
+        );
+
+        let mut overlapping = update;
+        overlapping.leaves = vec![existing[0]];
+        assert_eq!(
+            verify_update(SUITE, WINDOW, &overlapping, Some(&state)),
+            Err(Error::LeafOverlap { index: 0 })
+        );
+    }
+
+    /// Step 4's new half: every moved leaf must have been in the tree.
+    #[test]
+    fn a_moved_leaf_must_have_been_present() {
+        let existing = [leaf(0x00, 1, 0xa1), leaf(0x80, 2, 0xb2)];
+        let (root, mut update) = update_for(&existing, &[], &[existing[0]]);
+        let absent = leaf(0x40, 9, 0xee);
+        update.leaves = vec![absent];
+        let mut tree = PrefixTree::new();
+        tree.extend(existing.iter().copied()).unwrap();
+        update.proof = tree
+            .prove(SUITE, &[existing[0].vrf_output, absent.vrf_output])
+            .unwrap();
+        assert_eq!(
+            verify_update(SUITE, WINDOW, &update, Some(&state(0, root))),
+            Err(Error::MovedNotPresent { index: 0 })
         );
     }
 
@@ -927,6 +1080,7 @@ mod tests {
                 timestamp: 1_700_000_000_000 + step as u64 * 1_000,
                 added: vec![*added],
                 removed: Vec::new(),
+                leaves: Vec::new(),
                 proof,
             };
             tree.insert(*added).unwrap();

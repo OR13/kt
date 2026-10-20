@@ -8,11 +8,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 
 	"github.com/Bren2010/katie/crypto/suites"
-	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/log"
 	logmath "github.com/Bren2010/katie/tree/log/math"
 	"github.com/Bren2010/katie/tree/prefix"
@@ -56,7 +56,7 @@ func logTreeVectors(sha string) (*File, error) {
 		entries := logEntries(size)
 
 		// Build the tree, collecting each leaf value and the full subtree heads.
-		store := memory.NewLogStore()
+		store := newLogStore()
 		tree := log.NewTree(cs, store)
 		leafValues := make([]string, 0, size)
 		var fullSubtrees [][]byte
@@ -243,7 +243,7 @@ func prefixTreeVectors(sha string) (*File, error) {
 	}
 
 	for _, spec := range prefixCases() {
-		store := memory.NewPrefixStore()
+		store := newPrefixStore()
 		tree := prefix.NewTree(cs, store)
 
 		add := make([]prefix.Entry, 0, len(spec.entries))
@@ -253,7 +253,7 @@ func prefixTreeVectors(sha string) (*File, error) {
 				Commitment: entry.commitment,
 			})
 		}
-		root, _, _, err := tree.Mutate(0, add, nil)
+		res, err := tree.Mutate(0, add, nil)
 		if err != nil {
 			return nil, fmt.Errorf("case %q: building the tree: %w", spec.name, err)
 		}
@@ -277,7 +277,7 @@ func prefixTreeVectors(sha string) (*File, error) {
 			}
 			entries = append(entries, entry)
 		}
-		if err := prefix.Verify(cs, entries, &proof, root); err != nil {
+		if err := prefix.Verify(cs, entries, &proof, res.Root); err != nil {
 			return nil, fmt.Errorf("case %q: katie rejects its own proof: %w", spec.name, err)
 		}
 
@@ -293,7 +293,7 @@ func prefixTreeVectors(sha string) (*File, error) {
 				"searches": hexAll(spec.searches),
 			},
 			Expect: map[string]any{
-				"root":     hex.EncodeToString(root),
+				"root":     hex.EncodeToString(res.Root),
 				"proof":    hex.EncodeToString(buf.Bytes()),
 				"results":  searchResultJSON(proof.Results),
 				"elements": hexAll(proof.Elements),
@@ -681,7 +681,7 @@ func ladderInterpretationVectors(sha string) (*File, error) {
 // unexported.
 func prefixProofFromOutcomes(cs suites.CipherSuite, outcomes []bool) (*prefix.PrefixProof, error) {
 	buf := &bytes.Buffer{}
-	buf.WriteByte(byte(len(outcomes)))
+	binary.Write(buf, binary.BigEndian, uint32(len(outcomes))) // four-byte count since draft a214b15
 	for _, included := range outcomes {
 		if included {
 			buf.WriteByte(1) // inclusion
@@ -690,8 +690,7 @@ func prefixProofFromOutcomes(cs suites.CipherSuite, outcomes []bool) (*prefix.Pr
 		}
 		buf.WriteByte(0) // depth
 	}
-	buf.WriteByte(0) // elements: two-byte count of zero
-	buf.WriteByte(0)
+	binary.Write(buf, binary.BigEndian, uint32(0)) // elements: four-byte count of zero
 	return prefix.NewPrefixProof(cs, buf)
 }
 

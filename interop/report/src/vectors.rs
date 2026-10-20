@@ -266,10 +266,10 @@ pub struct MutationInput {
     pub add: Vec<PrefixEntryInput>,
     /// Leaves the update removes.
     pub remove: Vec<PrefixEntryInput>,
-    /// Set where a removal empties a slot whose sibling is a bare copath hash, so
-    /// §3.3's collapse rests on a node type the proof does not reveal.
+    /// Set where the update moves a leaf but the log does not name it in `leaves`, so
+    /// the proof carries that leaf's sibling only as a hash.
     #[serde(default)]
-    pub sibling_uncovered: bool,
+    pub omit_leaves: bool,
 }
 
 /// `prefix-mutation.json` expectations.
@@ -282,8 +282,10 @@ pub struct MutationExpect {
     pub after: String,
     /// The wire-encoded batch `PrefixProof`, hex.
     pub proof: String,
-    /// One result per key, additions then removals.
+    /// One result per key: additions, then removals, then moved leaves.
     pub results: Vec<PrefixResultExpect>,
+    /// Leaves the mutation moved closer to the root (§15.2 `leaves`).
+    pub leaves: Vec<PrefixEntryInput>,
     /// Copath values, hex.
     pub elements: Vec<String>,
     /// What the peer's own verifier reconstructs for the "before" root, hex; absent

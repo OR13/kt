@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §11.2, §11.3, §11.4",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "cipher_suite": 2,
   "notes": "Signed tree heads and the configuration every signature covers. `configuration` is the encoded Configuration, `tree_head_tbs` is what the signature is computed over, and `tree_head` is the wire TreeHead. Note the §11.2 reading recorded here: leaf_public_key is emitted only under thirdPartyManagement, which is what katie does and what the draft's prose supports, while the grouped-case reading of the struct would also put it in contactMonitoring -- and keytrans-verification's own notes take that second reading. The two differ by 34 bytes in the Configuration and therefore in every TreeHeadTBS. The negative cases are signatures that must not verify.",

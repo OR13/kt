@@ -87,6 +87,8 @@ enum Case {
         added: Vec<Leaf>,
         /// Leaves the update removes.
         removed: Vec<Leaf>,
+        /// Leaves the update moved closer to the root (§15.2 `leaves`).
+        leaves: Vec<Leaf>,
         /// The wire-encoded batch `PrefixProof`, hex.
         proof: String,
         /// The root before the update, hex.
@@ -362,8 +364,7 @@ fn search_cases() -> Result<Vec<Case>, String> {
     let mut current = start;
     loop {
         let local = u32::try_from(current).unwrap_or(0);
-        let versions = ladder::search_binary_ladder(GREATEST, local, &left_inclusion, &[])
-            .map_err(|err| format!("ladder at {current}: {err}"))?;
+        let versions = ladder::search_binary_ladder(GREATEST, local, &left_inclusion, &[]);
         let tree = tree_at(current)?;
         let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
         let proof = tree
@@ -544,8 +545,7 @@ fn search_cases() -> Result<Vec<Case>, String> {
         right_non_inclusion.sort_unstable();
         right_non_inclusion.dedup();
         let versions =
-            ladder::search_binary_ladder(target, local, &left_inclusion, &right_non_inclusion)
-                .map_err(|err| format!("ladder at {current}: {err}"))?;
+            ladder::search_binary_ladder(target, local, &left_inclusion, &right_non_inclusion);
         let tree = tree_at(current)?;
         let searches: Vec<HashValue> = versions.iter().map(|v| key_for(*v)).collect();
         let proof = tree
@@ -718,12 +718,11 @@ fn search_cases() -> Result<Vec<Case>, String> {
 
 /// §15.2 updates for the peer to replay, plus the encodings for its decoder.
 ///
-/// Only the shapes the two implementations agree on are here. The peer does not treat
-/// §11.9's all-zero copath element as an empty subtree, and it refuses a replacement
-/// outright — those two divergences are pinned in the other direction, by
-/// `interop/vectors/prefix-mutation.json`, where the peer's own tree supplies the root it
-/// should have reached. Sending them here as expected failures would restate that finding
-/// while making this file's `reject` cases mean two different things.
+/// The updates here are the ones the peer's verifier can agree on now that `leaves` exists:
+/// a removal that promotes a sibling names the sibling, so the peer reaches the root the
+/// tree actually takes. One case leaves them out on purpose and expects the peer to
+/// *fail* to reproduce the root, which is the over-acceptance direction for §15.2: a log
+/// that omits `leaves` must not be able to get an auditor to agree with it.
 fn mutation_cases() -> Result<Vec<Case>, String> {
     let leaf = |first: u8, tag: u8, commitment: u8| PrefixLeaf {
         vrf_output: {
@@ -755,12 +754,15 @@ fn mutation_cases() -> Result<Vec<Case>, String> {
         existing: Vec<PrefixLeaf>,
         added: Vec<PrefixLeaf>,
         removed: Vec<PrefixLeaf>,
+        /// Leave the moved leaves out of the update, as a dishonest log might.
+        omit_leaves: bool,
     }
     let spec = |name, existing, added, removed| Spec {
         name,
         existing,
         added,
         removed,
+        omit_leaves: false,
     };
 
     let specs = [
@@ -775,6 +777,38 @@ fn mutation_cases() -> Result<Vec<Case>, String> {
             vec![leaf(0x20, 5, 0xe5)],
             vec![a],
         ),
+        // The removed leaf's sibling is a leaf and is promoted, so the update names it.
+        spec("remove-beside-a-leaf", vec![a, b, c], vec![], vec![a]),
+        // The survivor rises two levels.
+        spec(
+            "remove-collapsing-a-chain",
+            vec![a, leaf(0x20, 5, 0xe5), c],
+            vec![],
+            vec![a],
+        ),
+        // Two removals each orphan a leaf.
+        spec(
+            "remove-two-siblings-apart",
+            vec![a, b, c, d],
+            vec![],
+            vec![a, c],
+        ),
+        // The sibling is a parent: nothing moves.
+        spec(
+            "remove-beside-a-parent",
+            vec![a, b, leaf(0x60, 6, 0xf6), c],
+            vec![],
+            vec![a],
+        ),
+        Spec {
+            omit_leaves: true,
+            ..spec(
+                "remove-beside-a-leaf-leaves-omitted",
+                vec![a, b, c],
+                vec![],
+                vec![a],
+            )
+        },
     ];
 
     let mut cases = Vec::new();
@@ -783,26 +817,59 @@ fn mutation_cases() -> Result<Vec<Case>, String> {
         existing,
         added,
         removed,
+        omit_leaves,
     } in specs
     {
         let mut tree = prefix::PrefixTree::new();
         tree.extend(existing.iter().copied())
             .map_err(|err| format!("{name}: building the tree: {err}"))?;
 
+        let removed_keys: Vec<HashValue> = removed.iter().map(|l| l.vrf_output).collect();
+        let moved = tree
+            .clone()
+            .mutate(&added, &removed_keys)
+            .map_err(|err| format!("{name}: mutating: {err}"))?;
+        if omit_leaves && moved.is_empty() {
+            return Err(format!("{name}: omit_leaves, but the update moves nothing"));
+        }
+        // What the update claims: the real moved leaves, unless this is the dishonest log.
+        let named: Vec<PrefixLeaf> = if omit_leaves { Vec::new() } else { moved };
+
         let keys: Vec<HashValue> = added
             .iter()
             .chain(removed.iter())
+            .chain(named.iter())
             .map(|l| l.vrf_output)
             .collect();
         let proof = tree
             .prove(SUITE, &keys)
             .map_err(|err| format!("{name}: proving: {err}"))?;
-        let mutation = prefix::evaluate_before_after(SUITE, &added, &removed, &proof)
+        let mutation = prefix::evaluate_before_after(SUITE, &added, &removed, &named, &proof)
             .map_err(|err| format!("{name}: evaluating: {err}"))?;
-        if !mutation.determined() {
+        // The root the tree actually takes, from scratch, which is what an honest auditor
+        // must reach and a dishonest log's auditor does not.
+        let mut after_tree = prefix::PrefixTree::new();
+        let kept = existing
+            .iter()
+            .filter(|l| !removed.iter().any(|r| r.vrf_output == l.vrf_output))
+            .chain(added.iter());
+        after_tree
+            .extend(kept.copied())
+            .map_err(|err| format!("{name}: building the tree after: {err}"))?;
+        let truth = after_tree.root(SUITE);
+        // Whether the root "follows from the proof" is no longer the question: a removal beside
+        // a bare sibling is read as "the sibling is a parent" because a leaf would have been in
+        // `leaves`. What matters is whether the root is the tree's.
+        if omit_leaves {
+            if mutation.after == truth {
+                return Err(format!(
+                    "{name}: omitting the moved leaves should leave the auditor on the wrong root"
+                ));
+            }
+        } else if mutation.after != truth {
             return Err(format!(
-                "{name}: the root is not determined by the proof, so the peer's agreement \
-                 would not mean anything"
+                "{name}: our own verifier does not reach the tree's root, so the peer's \
+                 agreement would not mean anything"
             ));
         }
         let encoded =
@@ -810,18 +877,21 @@ fn mutation_cases() -> Result<Vec<Case>, String> {
 
         cases.push(Case::PrefixMutation {
             name: format!("mutation-{name}"),
-            expect: ACCEPT,
+            expect: if omit_leaves { REJECT } else { ACCEPT },
             added: hex_leaves(&added),
             removed: hex_leaves(&removed),
+            leaves: hex_leaves(&named),
             proof: hex::encode(&encoded),
             before: hex::encode(mutation.before.as_bytes()),
-            after: hex::encode(mutation.after.as_bytes()),
+            // The root the log would publish, not the one this verifier assumed.
+            after: hex::encode(truth.as_bytes()),
         });
 
         let update = AuditorUpdate {
             timestamp: 1_700_000_000_000,
             added: added.clone(),
             removed: removed.clone(),
+            leaves: named,
             proof,
         };
         let bytes =
@@ -1280,8 +1350,7 @@ fn owner_update_cases() -> Result<Vec<Case>, String> {
                 current = ibst::left(current).map_err(|err| format!("left of {current}: {err}"))?;
             }
             // Step 2.2's omissions, seeded as if the skipped entries had been inspected.
-            let ladder = ladder::search_binary_ladder(owner_greatest, owner_greatest, &[], &[])
-                .map_err(|err| format!("seed ladder: {err}"))?;
+            let ladder = ladder::search_binary_ladder(owner_greatest, owner_greatest, &[], &[]);
             let assume = |established: &mut Vec<(u64, Vec<u32>, Vec<u32>)>,
                           at: u64,
                           bound: u32,
@@ -1315,8 +1384,7 @@ fn owner_update_cases() -> Result<Vec<Case>, String> {
                         greatest_at(current, cap),
                         &left_inclusion,
                         &right_non_inclusion,
-                    )
-                    .map_err(|err| format!("ladder at {current}: {err}"))?;
+                    );
                     let searches: Vec<HashValue> =
                         versions.iter().map(|version| key_for(*version)).collect();
                     let proof = tree_at(current, cap)?
@@ -1356,8 +1424,7 @@ fn owner_update_cases() -> Result<Vec<Case>, String> {
                 greatest_at(position, cap),
                 &left_inclusion,
                 &right_non_inclusion,
-            )
-            .map_err(|err| format!("ladder at {position}: {err}"))?;
+            );
             let searches: Vec<HashValue> =
                 versions.iter().map(|version| key_for(*version)).collect();
             let proof = tree_at(position, cap)?
@@ -1369,8 +1436,7 @@ fn owner_update_cases() -> Result<Vec<Case>, String> {
         }
 
         // The new versions a ladder for the new greatest version would not look up.
-        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[])
-            .map_err(|err| format!("covered ladder: {err}"))?;
+        let covered = ladder::search_binary_ladder(end_ver, end_ver, &[], &[]);
         let additional: Vec<u32> = (owner_greatest.saturating_add(1)..=end_ver)
             .filter(|version| !covered.contains(version))
             .collect();

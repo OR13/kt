@@ -470,7 +470,7 @@ fn ladder_suite(dir: &Path) -> Result<Suite, Error> {
             LadderInput::Base { greatest } => (
                 "base_binary_ladder(greatest) (§5, App. B)",
                 format!("greatest version {greatest}"),
-                render_result(ladder::base_binary_ladder(*greatest), |v| render_list(&v)),
+                render_list(&ladder::base_binary_ladder(*greatest)),
             ),
             LadderInput::Search {
                 target,
@@ -484,15 +484,12 @@ fn ladder_suite(dir: &Path) -> Result<Suite, Error> {
                     render_list(left_inclusion),
                     render_list(right_non_inclusion)
                 ),
-                render_result(
-                    ladder::search_binary_ladder(
-                        *target,
-                        *greatest,
-                        left_inclusion,
-                        right_non_inclusion,
-                    ),
-                    |v| render_list(&v),
-                ),
+                render_list(&ladder::search_binary_ladder(
+                    *target,
+                    *greatest,
+                    left_inclusion,
+                    right_non_inclusion,
+                )),
             ),
             LadderInput::Monitoring {
                 target,
@@ -1161,8 +1158,7 @@ fn ladder_keys(
     // The response's ladder can be shorter than §5's full sequence, for the same reason a
     // per-entry ladder can: the sequence stops once it has placed the greatest version. So the
     // steps pair with a prefix of it.
-    let versions = ladder::search_binary_ladder(target, target, &[], &[])
-        .map_err(|err| format!("ladder: {err}"))?;
+    let versions = ladder::search_binary_ladder(target, target, &[], &[]);
     if response.binary_ladder.len() > versions.len() {
         return Err(format!(
             "the response's ladder has {} steps, more than the {} §5 gives for version {target}",
@@ -1258,10 +1254,10 @@ fn replay_greatest_version(
     // when the user advertised a size.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        // The peer's procedure, not the current text's: a proof's elements are ordered by
-        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
-        // 2026-07-28. See `ibst::update_view_ancestors_only`.
-        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
+        // §4.2 as the draft now reads it, which is also what the peer runs since it
+        // implemented the 2026-07-28 frontier restart: a proof's elements are ordered by the
+        // algorithm that *built* it (§12.3).
+        Some(advertised) => ibst::update_view(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1338,10 +1334,10 @@ fn replay_fixed_version(
     // §12.3.1's view update comes first, exactly as for a greatest-version search.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        // The peer's procedure, not the current text's: a proof's elements are ordered by
-        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
-        // 2026-07-28. See `ibst::update_view_ancestors_only`.
-        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
+        // §4.2 as the draft now reads it, which is also what the peer runs since it
+        // implemented the 2026-07-28 frontier restart: a proof's elements are ordered by the
+        // algorithm that *built* it (§12.3).
+        Some(advertised) => ibst::update_view(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1608,10 +1604,10 @@ fn replay_contact_monitor(
     // §12.3.4's view update comes first, as for every other operation.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        // The peer's procedure, not the current text's: a proof's elements are ordered by
-        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
-        // 2026-07-28. See `ibst::update_view_ancestors_only`.
-        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
+        // §4.2 as the draft now reads it, which is also what the peer runs since it
+        // implemented the 2026-07-28 frontier restart: a proof's elements are ordered by the
+        // algorithm that *built* it (§12.3).
+        Some(advertised) => ibst::update_view(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {
@@ -1674,9 +1670,7 @@ fn replay_owner_init(
     // reproducing that set in the same order the log built it — ascending, per §13.3.
     let mut wanted: Vec<u32> = vec![0];
     for greatest in &response.greatest_versions {
-        for version in ladder::search_binary_ladder(*greatest, *greatest, &[], &[])
-            .map_err(|err| format!("ladder for version {greatest}: {err}"))?
-        {
+        for version in ladder::search_binary_ladder(*greatest, *greatest, &[], &[]) {
             if !wanted.contains(&version) {
                 wanted.push(version);
             }
@@ -2047,6 +2041,33 @@ fn append_suite(dir: &Path) -> Result<Suite, Error> {
     })
 }
 
+fn entries_of(
+    entries: &[crate::vectors::PrefixEntryInput],
+) -> Vec<crate::vectors::PrefixEntryInput> {
+    entries
+        .iter()
+        .map(|entry| crate::vectors::PrefixEntryInput {
+            vrf_output: entry.vrf_output.clone(),
+            commitment: entry.commitment.clone(),
+        })
+        .collect()
+}
+
+/// A list of leaves as one comparable string.
+fn hex_leaves(leaves: &[PrefixLeaf]) -> String {
+    leaves
+        .iter()
+        .map(|leaf| {
+            format!(
+                "{}:{}",
+                hex::encode(leaf.vrf_output.as_bytes()),
+                hex::encode(leaf.commitment.as_bytes())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// §15.2: the prefix tree mutation an auditor replays from a proof.
 fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
     const FILE: &str = "prefix-mutation.json";
@@ -2080,14 +2101,50 @@ fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
             })?;
         }
 
-        // The batch an auditor is sent covers the additions first, then the removals.
+        // The log's side, done here independently of the peer: apply the update to a copy to
+        // learn which leaves it moves. §3.3's tree is history independent, so these depend
+        // only on the contents before and after.
+        let by_key =
+            |a: &PrefixLeaf, b: &PrefixLeaf| a.vrf_output.as_bytes().cmp(b.vrf_output.as_bytes());
+        let (mut added, mut removed) = (added, removed);
+        added.sort_unstable_by(by_key);
+        removed.sort_unstable_by(by_key);
+        let removed_keys: Vec<HashValue> = removed.iter().map(|leaf| leaf.vrf_output).collect();
+        let moved = tree
+            .clone()
+            .mutate(&added, &removed_keys)
+            .map_err(|err| alloc_string(&err));
+        let peer_leaves = leaves("leaves[]", &entries_of(&case.expect.leaves))?;
+
+        // The log that omitted `leaves` has none to compare; the generator refused to emit
+        // the case unless the update really does move something.
+        let mut checks = Vec::new();
+        if !case.input.omit_leaves {
+            checks.push(Check::new(
+                "leaves the update moves up (§15.2, §3.3)",
+                hex_leaves(&peer_leaves),
+                match &moved {
+                    Ok(moved) => hex_leaves(moved),
+                    Err(err) => format!("mutation failed: {err}"),
+                },
+            ));
+        }
+
+        // The batch an auditor is sent covers the additions, then the removals, then the
+        // moved leaves — unless this is the log that left them out.
+        let named: &[PrefixLeaf] = if case.input.omit_leaves {
+            &[]
+        } else {
+            &peer_leaves
+        };
         let keys: Vec<HashValue> = added
             .iter()
             .chain(removed.iter())
+            .chain(named.iter())
             .map(|leaf| leaf.vrf_output)
             .collect();
         let built = tree.prove(suite, &keys);
-        let mut checks = vec![Check::new(
+        checks.push(Check::new(
             "batch proof for the update's keys (§12.2)",
             case.expect.proof.clone(),
             match built.as_ref().map(kt_wire::codec::encode) {
@@ -2095,7 +2152,7 @@ fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
                 Ok(Err(err)) => format!("encoding failed: {err}"),
                 Err(err) => format!("proving failed: {err}"),
             },
-        )];
+        ));
 
         // Everything below replays the *peer's* proof bytes, which is the direction that
         // matters: an auditor is handed those, not its own.
@@ -2103,7 +2160,7 @@ fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
         let replayed = kt_wire::codec::decode::<PrefixProof>(&peer_bytes)
             .map_err(|err| format!("decoding the peer's proof failed: {err}"))
             .and_then(|proof| {
-                prefix::evaluate_before_after(suite, &added, &removed, &proof)
+                prefix::evaluate_before_after(suite, &added, &removed, named, &proof)
                     .map_err(|err| format!("refused: {err}"))
             });
 
@@ -2116,32 +2173,22 @@ fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
             },
         ));
 
-        // Which root to expect depends on whether the proof determines one. Where a
-        // removal empties a slot beside an uncovered sibling it does not, and the value
-        // to agree with the peer on is the one both reach by assuming no collapse. Where
-        // it does, the value to reach is the root the peer's own tree took — a stronger
-        // oracle than its verifier, and in two of these cases they differ.
-        let (what, expected) = if case.input.sibling_uncovered {
-            let peer = case.expect.peer_after.clone().unwrap_or_default();
-            let label = if peer == case.expect.after {
-                "root after the update, assuming no collapse (§15.2 step 7) — \
-                 the assumption holds here, but the proof does not say so"
-            } else {
-                "root after the update, assuming no collapse (§15.2 step 7) — \
-                 the assumption is wrong here and the tree's root is unreachable"
-            };
-            (label.to_owned(), peer)
+        // Which root to expect depends on whether the log named the moved leaves. When it did
+        // the value to reach is the root the peer's own tree took. When it did not, the
+        // value to agree on is what the peer's verifier makes of the same proof — the wrong
+        // root, reached the same way by both — and the check after this one says it is
+        // not the tree's.
+        let (what, expected) = if case.input.omit_leaves {
+            (
+                "root after the update, from a log that omitted `leaves` (§15.2 step 7) — \
+                 both verifiers assume no collapse"
+                    .to_owned(),
+                case.expect.peer_after.clone().unwrap_or_default(),
+            )
         } else {
             let mut label = "root after the update (§15.2 step 7)".to_owned();
-            match (&case.expect.peer_error, &case.expect.peer_after) {
-                (Some(err), _) => {
-                    label.push_str(&format!(" — the peer declines this update: {err}"))
-                }
-                (None, Some(peer)) if *peer != case.expect.after => label.push_str(&format!(
-                    " — the peer's verifier returns {}…, which its own tree does not have",
-                    &peer[..12.min(peer.len())]
-                )),
-                _ => {}
+            if let Some(err) = &case.expect.peer_error {
+                label.push_str(&format!(" — the peer declines this update: {err}"));
             }
             (label, case.expect.after.clone())
         };
@@ -2153,21 +2200,19 @@ fn mutation_suite(dir: &Path) -> Result<Suite, Error> {
                 Err(detail) => detail.clone(),
             },
         ));
-
-        // And the part no vector can supply: whether that root followed from the proof.
-        checks.push(Check::new(
-            "whether the proof determines the root it produced (§15.2)",
-            if case.input.sibling_uncovered {
-                "assumed"
-            } else {
-                "determined"
-            },
-            match &replayed {
-                Ok(mutation) if mutation.determined() => "determined",
-                Ok(_) => "assumed",
-                Err(_) => "no root",
-            },
-        ));
+        if case.input.omit_leaves {
+            checks.push(Check::new(
+                "and that root is not the tree's: omitting `leaves` forks the auditor from the log",
+                "differs",
+                match &replayed {
+                    Ok(mutation) if hex::encode(mutation.after.as_bytes()) == case.expect.after => {
+                        "equal"
+                    }
+                    Ok(_) => "differs",
+                    Err(_) => "no root",
+                },
+            ));
+        }
 
         cases.push(Case {
             name: name.to_owned(),
@@ -3063,33 +3108,30 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
         let size = case.input.size;
         let advertised = case.input.advertised;
 
-        // The peer implements §4.2 as it read before 2026-07-28, so that is what its
-        // answers are compared against. The current text's procedure is checked below,
-        // against the property the amendment added rather than against the peer.
+        // The peer implements the 2026-07-28 frontier restart, so its answers are compared
+        // against the draft's procedure directly. Before katie `a2959a5` it did not, and
+        // the two were checked separately (`KT-05`); that finding is closed.
         let mut checks = vec![Check::new(
-            "update_view as the peer reads §4.2 (before 2026-07-28)",
+            "update_view (§4.2)",
             render_list(&case.expect.entries),
-            render_result(
-                ibst::update_view_ancestors_only(size, advertised),
-                |entries| render_list(&entries),
-            ),
+            render_result(ibst::update_view(size, advertised), |entries| {
+                render_list(&entries)
+            }),
         )];
 
-        // What the amendment guarantees: the list ends at the new rightmost entry, so a
-        // user always learns the timestamp their clock bounds are checked against. There is
-        // no peer answer to compare this to — the peer predates the clause — so the check
-        // is against the draft's own guarantee, and it is the only check here that is not a
-        // cross-implementation comparison.
-        let current = ibst::update_view(size, advertised);
+        // The property the amendment added, which holds by construction once the lists
+        // agree but is the reason the amendment exists: the list ends at the new rightmost
+        // entry, so a user always learns the timestamp their clock bounds are checked
+        // against.
         let up_to_date = advertised == Some(size);
         checks.push(Check::new(
-            "update_view under the current §4.2 ends at the rightmost entry",
+            "update_view ends at the rightmost entry",
             if up_to_date {
                 "nothing to send".to_owned()
             } else {
                 format!("ends at entry {}", size.saturating_sub(1))
             },
-            render_result(current, |entries| {
+            render_result(ibst::update_view(size, advertised), |entries| {
                 if up_to_date && entries.is_empty() {
                     "nothing to send".to_owned()
                 } else {
@@ -3115,10 +3157,11 @@ fn update_view_suite(dir: &Path) -> Result<Suite, Error> {
             checks.push(Check::new(
                 "whether the rightmost entry is left unchecked (§4.2)",
                 expected.to_string(),
-                render_result(
-                    ibst::ancestors_only_leaves_right_edge_unchecked(size, advertised),
-                    |flag| flag.to_string(),
-                ),
+                render_result(ibst::update_view(size, advertised), |entries| {
+                    let unchanged = advertised == Some(size);
+                    let covered = entries.last() == Some(&size.saturating_sub(1));
+                    (!unchanged && !covered).to_string()
+                }),
             ));
         }
 
@@ -3421,10 +3464,12 @@ fn interpretation_suite(dir: &Path) -> Result<Suite, Error> {
         let mut checks = vec![Check::new(
             "the ladder itself (§6.2)",
             render_list(&case.input.ladder),
-            render_result(
-                ladder::search_binary_ladder(case.input.target, case.input.greatest, &[], &[]),
-                |versions| render_list(&versions),
-            ),
+            render_list(&ladder::search_binary_ladder(
+                case.input.target,
+                case.input.greatest,
+                &[],
+                &[],
+            )),
         )];
 
         // The verdict, rendered as the peer's -1/0/1 so the comparison is direct.
@@ -3800,10 +3845,10 @@ fn replay_owner_update(
     // §12.3.1's view update first, as for every other operation.
     let view = match case.input.last {
         None => ibst::frontier(size).map_err(|err| format!("frontier: {err}"))?,
-        // The peer's procedure, not the current text's: a proof's elements are ordered by
-        // the algorithm that *built* it (§12.3), and the peer runs §4.2 as it read before
-        // 2026-07-28. See `ibst::update_view_ancestors_only`.
-        Some(advertised) => ibst::update_view_ancestors_only(size, Some(advertised))
+        // §4.2 as the draft now reads it, which is also what the peer runs since it
+        // implemented the 2026-07-28 frontier restart: a proof's elements are ordered by the
+        // algorithm that *built* it (§12.3).
+        Some(advertised) => ibst::update_view(size, Some(advertised))
             .map_err(|err| format!("update view: {err}"))?,
     };
     for position in &view {

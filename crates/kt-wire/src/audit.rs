@@ -26,8 +26,9 @@ use alloc::vec::Vec;
 /// struct {
 ///   uint64 timestamp;
 ///
-///   PrefixLeaf added<0..2^16-1>;
-///   PrefixLeaf removed<0..2^16-1>;
+///   PrefixLeaf added<0..2^32-1>;
+///   PrefixLeaf removed<0..2^32-1>;
+///   PrefixLeaf leaves<0..2^32-1>;
 ///
 ///   PrefixProof proof;
 /// } AuditorUpdate;
@@ -38,12 +39,16 @@ use alloc::vec::Vec;
 /// ascending by `vrf_output` with no repeats *within* a list — though the same
 /// `vrf_output` may appear in both, which is how a label's value is replaced (step 2).
 ///
+/// `leaves` are the leaves a removal moved *up* because their sibling became empty
+/// (§3.3: a remaining leaf replaces its parent until it has a sibling or is the root).
+/// Without it the proof would carry only the hash of such a leaf, an auditor could not
+/// tell that its position changes, and it would compute a different root than the log —
+/// this is what makes the prefix tree history independent. It is sorted ascending by
+/// `vrf_output`, has no repeats, and shares no `vrf_output` with `added` or `removed`.
+///
 /// `proof` is a single batch lookup in the *previous* entry's prefix tree covering every
-/// search key either list names, with `proof.results` ordered as `added` then `removed`.
-/// Note what that ordering implies: the results are pinned to the keys being changed, so
-/// there is no way for the update to describe any other node — including the sibling of
-/// a leaf being removed, which §3.3's canonical form may need. See
-/// `kt_tree::prefix::evaluate_before_after`.
+/// search key any list names, with `proof.results` ordered as `added`, then `removed`,
+/// then `leaves`. See `kt_tree::prefix::evaluate_before_after`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditorUpdate {
     /// The new log entry's timestamp, in milliseconds since the UNIX epoch.
@@ -52,16 +57,18 @@ pub struct AuditorUpdate {
     pub added: Vec<PrefixLeaf>,
     /// Prefix tree leaves this entry removes.
     pub removed: Vec<PrefixLeaf>,
+    /// Prefix tree leaves that moved closer to the root because a sibling was removed.
+    pub leaves: Vec<PrefixLeaf>,
     /// A batch lookup in the previous entry's prefix tree for every key named above.
     pub proof: PrefixProof,
 }
 
 impl AuditorUpdate {
-    /// `PrefixLeaf added<0..2^16-1>`, and the same for `removed`.
+    /// `PrefixLeaf added<0..2^32-1>`, and the same for `removed` and `leaves`.
     ///
-    /// §2.1.2 as this draft uses it counts *elements*, not bytes, so the bound is 65535
-    /// leaves rather than 65535 bytes' worth of them.
-    pub const LEAVES: VectorSpec = VectorSpec::new((1 << 16) - 1);
+    /// §2.1.2 as this draft uses it counts *elements*, not bytes, so the bound is 2^32-1
+    /// leaves rather than that many bytes' worth of them.
+    pub const LEAVES: VectorSpec = VectorSpec::new((1 << 32) - 1);
 }
 
 impl Encode for AuditorUpdate {
@@ -69,6 +76,7 @@ impl Encode for AuditorUpdate {
         self.timestamp.encode(enc)?;
         enc.vector(Self::LEAVES, &self.added)?;
         enc.vector(Self::LEAVES, &self.removed)?;
+        enc.vector(Self::LEAVES, &self.leaves)?;
         self.proof.encode(enc)
     }
 }
@@ -78,11 +86,13 @@ impl Decode for AuditorUpdate {
         let timestamp = u64::decode(dec)?;
         let added = dec.vector(Self::LEAVES)?;
         let removed = dec.vector(Self::LEAVES)?;
+        let leaves = dec.vector(Self::LEAVES)?;
         let proof = PrefixProof::decode(dec)?;
         Ok(Self {
             timestamp,
             added,
             removed,
+            leaves,
             proof,
         })
     }
@@ -113,6 +123,7 @@ mod tests {
             timestamp: 1_700_000_000_000,
             added: vec![leaf(0x11), leaf(0x22)],
             removed: vec![leaf(0x33)],
+            leaves: vec![leaf(0x55)],
             proof: PrefixProof {
                 results: vec![
                     PrefixSearchResult::NonInclusionParent { depth: 3 },
@@ -136,12 +147,15 @@ mod tests {
     #[test]
     fn the_length_prefixes_count_leaves() {
         let bytes = encode(&update()).unwrap();
-        // timestamp, then a uint16 of 2 for `added`, then two 64-byte leaves.
+        // timestamp, then a uint32 of 2 for `added`, then two 64-byte leaves.
         assert_eq!(&bytes[..8], &1_700_000_000_000_u64.to_be_bytes());
-        assert_eq!(&bytes[8..10], &[0, 2]);
-        assert_eq!(&bytes[10..42], &[0x11; 32]);
-        // And a uint16 of 1 for `removed`, after the 128 bytes of `added`.
-        assert_eq!(&bytes[138..140], &[0, 1]);
+        assert_eq!(&bytes[8..12], &[0, 0, 0, 2]);
+        assert_eq!(&bytes[12..44], &[0x11; 32]);
+        // A uint32 of 1 for `removed`, after the 128 bytes of `added`...
+        assert_eq!(&bytes[140..144], &[0, 0, 0, 1]);
+        // ...and one for `leaves`, after `removed`'s single 64-byte leaf.
+        assert_eq!(&bytes[208..212], &[0, 0, 0, 1]);
+        assert_eq!(&bytes[212..244], &[0x55; 32]);
     }
 
     #[test]
@@ -152,16 +166,17 @@ mod tests {
             timestamp: 0,
             added: Vec::new(),
             removed: Vec::new(),
+            leaves: Vec::new(),
             proof: PrefixProof {
                 results: Vec::new(),
                 elements: Vec::new(),
             },
         };
-        // Eight bytes of timestamp, a uint16 each for `added` and `removed`, then the
-        // proof's own two prefixes — a uint8 for `results<0..2^8-1>` and a uint16 for
-        // `elements<0..2^16-1>`.
+        // Eight bytes of timestamp, a uint32 each for `added`, `removed` and `leaves`, then
+        // the proof's own two prefixes, both uint32 now that `results` and `elements` are
+        // `<0..2^32-1>`.
         let bytes = encode(&empty).unwrap();
-        assert_eq!(bytes.len(), 8 + 2 + 2 + 1 + 2);
+        assert_eq!(bytes.len(), 8 + 4 + 4 + 4 + 4 + 4);
         assert_eq!(decode::<AuditorUpdate>(&bytes).unwrap(), empty);
     }
 

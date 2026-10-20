@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §4.1, Appendix A",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "notes": "Implicit binary search tree over log entry indices. No cipher suite: pure integer math. `root` is 2^floor(log2(size))-1, `frontier` is the root followed by repeated right children to the last entry. In `nodes`, a null `left` means the index is a leaf and a null `right` means the node is the rightmost entry and its right subtree is empty; both must be refused rather than answered. `nodes` lists every index when size \u003c= 64 and the frontier otherwise.",
   "cases": [

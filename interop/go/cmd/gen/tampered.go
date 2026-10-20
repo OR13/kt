@@ -28,7 +28,6 @@ import (
 	"github.com/Bren2010/katie/crypto/commitments"
 	"github.com/Bren2010/katie/crypto/suites"
 	"github.com/Bren2010/katie/crypto/vrf/edwards25519"
-	"github.com/Bren2010/katie/db/memory"
 	"github.com/Bren2010/katie/tree/log"
 	"github.com/Bren2010/katie/tree/prefix"
 	"github.com/Bren2010/katie/tree/transparency/structs"
@@ -122,7 +121,7 @@ func tamperedLogCases() ([]Case, error) {
 	// more than one subtree head.
 	const size uint64 = 11
 	entries := logEntries(size)
-	store := memory.NewLogStore()
+	store := newLogStore()
 	tree := log.NewTree(cs, store)
 	values := make([][]byte, 0, size)
 	var fullSubtrees [][]byte
@@ -252,7 +251,7 @@ func tamperedLogCases() ([]Case, error) {
 // log.Tree.Append rather than reimplementing the decomposition keeps katie the
 // source of truth for what a verifier would have retained.
 func mathFullSubtreeValues(cs suites.CipherSuite, values [][]byte, size uint64) [][]byte {
-	store := memory.NewLogStore()
+	store := newLogStore()
 	tree := log.NewTree(cs, store)
 	var out [][]byte
 	for i := uint64(0); i < size; i++ {
@@ -271,13 +270,13 @@ func tamperedPrefixCases() ([]Case, error) {
 
 	// The §3.3 figure's tree, which has all three terminal kinds reachable.
 	spec := prefixCases()[6] // "figure-mixed-result-types"
-	store := memory.NewPrefixStore()
+	store := newPrefixStore()
 	tree := prefix.NewTree(cs, store)
 	add := make([]prefix.Entry, 0, len(spec.entries))
 	for _, e := range spec.entries {
 		add = append(add, prefix.Entry{VrfOutput: e.vrfOutput, Commitment: e.commitment})
 	}
-	root, _, _, err := tree.Mutate(0, add, nil)
+	res, err := tree.Mutate(0, add, nil)
 	if err != nil {
 		return nil, fmt.Errorf("building the prefix tree: %w", err)
 	}
@@ -305,7 +304,7 @@ func tamperedPrefixCases() ([]Case, error) {
 	emit := func(name, tamper string, mutate func(*prefix.PrefixProof)) error {
 		broken := clonePrefixProof(&proof)
 		mutate(broken)
-		if err := prefix.Verify(cs, entries, broken, root); err == nil {
+		if err := prefix.Verify(cs, entries, broken, res.Root); err == nil {
 			return fmt.Errorf("case %q: katie accepted it, so it is not a negative case", name)
 		}
 		var buf bytes.Buffer
@@ -318,7 +317,7 @@ func tamperedPrefixCases() ([]Case, error) {
 				"kind":     "prefix-tree",
 				"searches": searches,
 				"proof":    hex.EncodeToString(buf.Bytes()),
-				"root":     hex.EncodeToString(root),
+				"root":     hex.EncodeToString(res.Root),
 			},
 			Expect: map[string]any{"error": true, "tamper": tamper},
 		})

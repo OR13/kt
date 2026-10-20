@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §3.2, §11.8, §12.1",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "notes": "Left-balanced log tree. `leaf_values` are Hash(LogEntry) for each entry; `root` is the tree root; `full_subtrees` are the heads a verifier retains for a tree of that size, left to right. Each request is a batch proof: `proven_leaves` are the leaf indices being shown, `retained_size` is a smaller tree the verifier already saw (its full subtree heads are the ones listed for that size), and `proof` is the wire-encoded InclusionProof. A request with no proven leaves and a retained size is a pure consistency proof; one with proven leaves and no retained size is a pure inclusion proof; one with both is the batched form, including the §12.1 case where a proven leaf sits inside a retained subtree.",
   "cases": [

@@ -3,7 +3,7 @@
   "draft": "draft-ietf-keytrans-protocol-05 §6.2",
   "generator": {
     "impl": "katie",
-    "sha": "00da52541f6ae6a7f3905181e2ba9de8ec0d6cdc"
+    "sha": "a2959a53b4d669467fd5eea8ac4da298c038f47c"
   },
   "cipher_suite": 2,
   "notes": "What a search binary ladder's outcomes say about the greatest version of a label: -1 if it is below the target, 0 if equal, 1 if above. `results` lists whether each lookup was an inclusion, in ladder order, as an honest log would answer them. `verdict` is katie's InterpretSearchLadder. The ladder and the inference share §6.2's stopping rules, so a vector that pins only one of them would miss a disagreement about where a ladder ends.",
