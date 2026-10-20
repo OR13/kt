@@ -575,6 +575,8 @@ file lists them all with their status. `KT-` is an implementation bug in the Go 
 `DRAFT-` a gap or ambiguity in the specification, and `NOTE-` a difference that is not a
 bug in either but would silently break a third implementation that guessed differently.
 
+**Resolved at katie `a2959a5`** (ladders computed in `uint64`, rungs above `2^32-1` dropped, as §5 now says); the text below describes pin `00da5254`.
+
 **[KT-01] katie's binary ladder does not terminate for versions at or above `2^31-1`.**
 `tree/transparency/math.baseBinaryLadder` computes in `uint32` and takes the
 binary-search midpoint as `(lower + upper) / 2`. Once that sum passes `MaxUint32`
@@ -662,6 +664,8 @@ VRF outputs this is a `2^-255` coincidence, and a log cannot grind for it becaus
 must produce a valid VRF proof for whatever label-version pair it uses. Worth a
 sentence in the draft rather than a fix.
 
+**Resolved** by `AuditorUpdate.leaves`, which names the promoted sibling; the text below describes the draft before it, measured at pin `00da5254`.
+
 **[DRAFT-04] §15.2 makes some removals unauditable, and both implementations guess.** An
 auditor is sent an `AuditorUpdate` — leaves added, leaves removed, and one batch
 proof in the *previous* entry's prefix tree — and has to reconstruct the root the new
@@ -685,6 +689,8 @@ root katie does, so the two interoperate, but reports it through
 verifier's opinion. The fix belongs in the draft: the update needs to be able to name
 the sibling, or `removed` needs to carry it.
 
+**Resolved at katie `a2959a5`**; the text below describes pin `00da5254`.
+
 **[KT-02] katie treats §11.9's all-zero copath element as an opaque node.** The same
 reconstruction, different cause, and here the two implementations differ. When a
 removal empties the last leaf under a parent whose other slot was supplied as an
@@ -695,6 +701,8 @@ root its own tree does not have: for a two-leaf tree with both leaves removed, i
 gives `dc48a742…` where `Tree.Mutate` gives the all-zero root. `kt-tree::prefix`
 resolves the stand-in and reaches the tree's root. Pinned as a divergence in
 `prefix-mutation.json`.
+
+**Resolved at katie `a2959a5`**; the text below describes pin `00da5254`.
 
 **[KT-03] katie cannot evaluate the replacement §15.2 explicitly permits.** Step 2 says "a
 VRF output in `added` is also allowed to be in `removed`", and step 3 exempts exactly
@@ -746,6 +754,8 @@ versions. Measured against katie: for a seven-entry log with greatest version 6,
 `[0, 1, 3, 7, 5, 6]` and the three inspected entries carry 5, 3 and 2 results. Not a bug in
 either implementation — but the draft never says the results are a prefix, and it is the first
 thing an implementer gets wrong.
+
+**Resolved at katie `a2959a5`**, which implements the restart; the text below describes pin `00da5254`.
 
 **[KT-05] katie implements §4.2 as it read before 2026-07-28.** Its `UpdateView` has no frontier
 restart, so for the 15 advertised sizes in `update-view.json` where the user's rightmost entry is
@@ -951,7 +961,7 @@ code rather than one.
 | `KT-06` | §9.1 step 2.1 skipped unconditionally, where the current text requires a previous version to have existed | katie | `kt-tree::combined` test `a_first_version_skips_nothing_in_the_previous_tree` | tracked locally |
 | `KT-07` | `ManagerUpdateRequest.signed_version` ordered before `values`, where §14 puts it after | katie | `kt-wire::requests` round-trip pins the draft's order as bytes | asked as [#50](https://github.com/ietf-wg-keytrans/draft-protocol/issues/50) |
 | `DRAFT-12` | §13.5 gained `skipped_versions`, but §9.1 does not say how its ladder set or additional-proof set treats a skipped version | draft | `kt-wire::responses` decodes the field; the algorithm is untouched | tracked locally |
-| `KT-08` | `main` at `f93331d` does not build (`tree/transparency`) and fails two algorithms tests; the pin is the last commit that does | katie | `docs/interop.md` pin paragraph; `go build ./tree/... && go test ./tree/...` at the pin | not filed: mid-refactor |
+| `KT-08` | `main` at `f93331d` does not build (`tree/transparency`) and fails two algorithms tests; the pin is the last commit that does | katie | `docs/interop.md` pin paragraph; `go build ./tree/... && go test ./tree/...` at the pin | **filed**: https://github.com/Bren2010/katie/issues/2 |
 | `NOTE-05` | our first reading of §4.2's restart sent the user's own retained entry; the draft sends only its right children, and the peer caught it | this repo | `update-view.json`; `ibst` test `a_frontier_size_restarts_beyond_the_users_own_entry` | fixed |
 | `NOTE-03` | `opening` sits inside `CommitmentValue` in the draft, outside it in katie | neither | `commitment.json` records both | no action |
 
