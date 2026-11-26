@@ -1,0 +1,29 @@
+{
+  "primitive": "tampered",
+  "draft": "draft-ietf-keytrans-protocol-06 §11.6",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "cipher_suite": 2,
+  "notes": "A commitment binds the version.",
+  "cases": [
+    {
+      "name": "adjacent-version",
+      "input": {
+        "kind": "commitment",
+        "opening": "0102030405060708090a0b0c0d0e0f10",
+        "label": "00ff",
+        "version": 4294967295,
+        "update": {
+          "value": "ff00"
+        },
+        "commitment": "e2b8301b479af7d6a7f6ac07d07a3cb8e2d53fb35ce3aa090e43582533a80608"
+      },
+      "expect": {
+        "error": true,
+        "tamper": "Adjacent version with the original opening."
+      }
+    }
+  ]
+}

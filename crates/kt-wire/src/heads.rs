@@ -48,7 +48,7 @@
 //!
 //! This module followed katie and the prose, because that is what interoperated and
 //! what made semantic sense. [`Configuration::leaf_public_key_modes`] states the
-//! rule in one place, and `interop/vectors/tree-head.json` pins it in all three
+//! rule in one place, and `interop/vectors/katie/tree-head.json` pins it in all three
 //! modes so the choice is checked rather than assumed. The draft has since said the
 //! same, so nothing here changes; had it gone the other way, that function and its
 //! vector would have.

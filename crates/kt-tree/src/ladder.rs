@@ -43,7 +43,7 @@
 //! The Go peer `katie` could not do this at pin `00da5254`: it computed in `uint32`, so
 //! its midpoint wrapped and the search never closed for a greatest version from `2^31 - 1`
 //! upward (`KT-01`). From `a2959a5` it computes in `u64` and filters, as the draft does, and
-//! `interop/vectors/binary-ladder.json` now covers the whole range.
+//! `interop/vectors/katie/binary-ladder.json` now covers the whole range.
 //!
 use alloc::vec::Vec;
 use core::fmt;

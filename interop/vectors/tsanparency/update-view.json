@@ -1,0 +1,24 @@
+{
+  "primitive": "update-view",
+  "draft": "draft-ietf-keytrans-protocol-06 §4.2",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "notes": "Extend a three-entry checkpoint across a subtree boundary.",
+  "cases": [
+    {
+      "name": "three-to-five",
+      "input": {
+        "size": 5,
+        "advertised": 3
+      },
+      "expect": {
+        "entries": [
+          3,
+          4
+        ]
+      }
+    }
+  ]
+}

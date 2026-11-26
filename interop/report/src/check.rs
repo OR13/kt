@@ -43,6 +43,9 @@ use crate::vectors::{
     UpdateViewExpect, UpdateViewInput, VectorFile, VrfCaseInput, VrfExpect,
 };
 
+/// Implementations that produce the common vector suites.
+pub const PEERS: [&str; 2] = ["katie", "tsanparency"];
+
 /// The vector files this crate knows how to check, in dependency order.
 pub const FILES: [&str; 21] = [
     "commitment.json",
@@ -171,6 +174,17 @@ impl std::error::Error for Error {
 /// *disagreement* is not an error: it is a failing [`Check`] in the returned
 /// suites.
 pub fn run(dir: &Path) -> Result<Vec<Suite>, Error> {
+    let mut suites = Vec::new();
+    for peer in PEERS {
+        for mut suite in peer_suites(&dir.join(peer))? {
+            suite.file = format!("{peer}/{}", suite.file);
+            suites.push(suite);
+        }
+    }
+    Ok(suites)
+}
+
+fn peer_suites(dir: &Path) -> Result<Vec<Suite>, Error> {
     Ok(vec![
         commitment_suite(dir)?,
         ibst_suite(dir)?,
@@ -3734,6 +3748,97 @@ fn owner_update_suite(dir: &Path) -> Result<Suite, Error> {
                 ),
             },
         ));
+
+        if let Some(envelope) = &case.expect.envelope {
+            let wire = unhex(FILE, name, "envelope.encoding", &envelope.encoding)?;
+            let mut decoder = Decoder::new(&wire);
+            let decoded = kt_wire::responses::UpdateResponse::decode_with(
+                &mut decoder,
+                DeploymentMode::ContactMonitoring,
+                suite.nc(),
+                suite.np(),
+            )
+            .and_then(|response| {
+                decoder.finish()?;
+                Ok(response)
+            })
+            .map_err(|err| Error::Computation {
+                file: FILE.to_owned(),
+                case: name.to_owned(),
+                detail: err.to_string(),
+            })?;
+            checks.extend([
+                Check::new(
+                    "UpdateResponse encoding",
+                    &envelope.encoding,
+                    render_result(kt_wire::codec::encode(&decoded), hex::encode),
+                ),
+                Check::new(
+                    "update position",
+                    case.input.position.to_string(),
+                    decoded.position.to_string(),
+                ),
+                Check::new(
+                    "reported values",
+                    render_list(&envelope.values),
+                    render_list(
+                        &decoded
+                            .values
+                            .iter()
+                            .map(|v| hex::encode(&v.value))
+                            .collect::<Vec<_>>(),
+                    ),
+                ),
+                Check::new(
+                    "commitment openings",
+                    render_list(&envelope.openings),
+                    render_list(
+                        &decoded
+                            .info
+                            .iter()
+                            .map(|v| hex::encode(&v.opening))
+                            .collect::<Vec<_>>(),
+                    ),
+                ),
+                Check::new(
+                    "full tree head",
+                    &envelope.full_tree_head,
+                    render_result(kt_wire::codec::encode(&decoded.full_tree_head), hex::encode),
+                ),
+                Check::new(
+                    "embedded update proof",
+                    &case.expect.proof,
+                    render_result(kt_wire::codec::encode(&decoded.update), hex::encode),
+                ),
+                Check::new(
+                    "binary ladder",
+                    render_list(
+                        &envelope
+                            .binary_ladder
+                            .iter()
+                            .map(|s| {
+                                format!("{}:{}", s.proof, s.commitment.as_deref().unwrap_or(""))
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                    render_list(
+                        &decoded
+                            .binary_ladder
+                            .iter()
+                            .map(|s| {
+                                format!(
+                                    "{}:{}",
+                                    hex::encode(&s.proof),
+                                    s.commitment
+                                        .map(|c| hex::encode(c.as_bytes()))
+                                        .unwrap_or_default()
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                ),
+            ]);
+        }
 
         // The replay. §12.3's exact-count rule is what turns this into a test of the *reading*:
         // an implementation that orders §9.1's requests differently does not compute something

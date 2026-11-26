@@ -1,0 +1,27 @@
+{
+  "primitive": "commitment",
+  "draft": "draft-ietf-keytrans-protocol-06 §11.6",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "cipher_suite": 2,
+  "notes": "Binary label and value with a high unsigned version.",
+  "cases": [
+    {
+      "name": "binary-label-high-version",
+      "input": {
+        "label": "00ff",
+        "version": 4294967294,
+        "opening": "0102030405060708090a0b0c0d0e0f10",
+        "update": {
+          "value": "ff00"
+        }
+      },
+      "expect": {
+        "commitment": "e2b8301b479af7d6a7f6ac07d07a3cb8e2d53fb35ce3aa090e43582533a80608",
+        "commitment_value": "0102030405060708090a0b0c0d0e0f100200fffffffffe00000002ff00"
+      }
+    }
+  ]
+}

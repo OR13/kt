@@ -562,6 +562,8 @@ pub struct OwnerStateInput {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerUpdateExpect {
+    /// Complete response when the producer implements the update operation.
+    pub envelope: Option<UpdateEnvelope>,
     /// The whole encoded `CombinedTreeProof`, hex.
     pub proof: String,
     /// Its timestamps, in the algorithm's request order.
@@ -578,6 +580,22 @@ pub struct OwnerUpdateExpect {
     /// The contact monitoring entry step 4 adds, absent when step 3 applied.
     #[serde(default)]
     pub contact: Option<ContactEntryExpect>,
+}
+
+/// Contact-monitoring UpdateResponse fields outside the combined proof.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateEnvelope {
+    /// Complete wire encoding.
+    pub encoding: String,
+    /// Values returned during catch-up.
+    pub values: Vec<String>,
+    /// Opening for each created version.
+    pub openings: Vec<String>,
+    /// Encoded FullTreeHead.
+    pub full_tree_head: String,
+    /// Proofs for versions newly learned by the owner.
+    pub binary_ladder: Vec<LadderStepExpect>,
 }
 
 /// The entry §9.1 step 4 adds to the owner's contact monitoring map.

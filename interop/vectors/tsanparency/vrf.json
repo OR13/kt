@@ -1,0 +1,39 @@
+{
+  "primitive": "vrf",
+  "draft": "draft-ietf-keytrans-protocol-06 §11.7",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "cipher_suite": 2,
+  "notes": "The same proof must fail for the adjacent version.",
+  "cases": [
+    {
+      "name": "binary-label-high-version",
+      "input": {
+        "private_key": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+        "public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "label": "00ff",
+        "version": 4294967294
+      },
+      "expect": {
+        "vrf_input": "0200fffffffffe",
+        "proof": "0a9fd2b4fbe297ecd8afdba86d87ad6e4bb85ee3ad5822808e7195f5734f611057d42dd010c02e96f9bde1d51097e7643f4b4e49cff1fe756760803bc1709d37693fc8686d87dc5a1562c234615d2c0a",
+        "output": "ea1d8ffd8e78a8ecf13edbc93d8119111391e89994a0811efacb665f919c1af2"
+      }
+    },
+    {
+      "name": "wrong-version",
+      "input": {
+        "private_key": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+        "public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "label": "00ff",
+        "version": 4294967295,
+        "proof": "0a9fd2b4fbe297ecd8afdba86d87ad6e4bb85ee3ad5822808e7195f5734f611057d42dd010c02e96f9bde1d51097e7643f4b4e49cff1fe756760803bc1709d37693fc8686d87dc5a1562c234615d2c0a"
+      },
+      "expect": {
+        "error": true
+      }
+    }
+  ]
+}

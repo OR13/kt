@@ -24,7 +24,7 @@
 //! # Two things §12.2 leaves implicit
 //!
 //! Both are resolved here the way the Go peer resolves them, and both are pinned
-//! by `interop/vectors/prefix-tree.json` so the choice is checked rather than
+//! by `interop/vectors/katie/prefix-tree.json` so the choice is checked rather than
 //! assumed. The draft has since settled the first:
 //!
 //! 1. **What `depth` counts for `nonInclusionParent`** — *resolved on 2026-07-28 in

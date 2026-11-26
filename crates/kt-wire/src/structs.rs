@@ -434,7 +434,7 @@ mod tests {
     use crate::codec::{Decoder, encode};
     use alloc::vec;
 
-    /// The first vector in `interop/vectors/commitment.json`, hand-checked
+    /// The first vector in `interop/vectors/katie/commitment.json`, hand-checked
     /// against §11.6 field by field: 16 bytes of opening, a zero-length label,
     /// version 0, then an `UpdateValue` whose only content is a zero-length
     /// `value` vector with a four-byte prefix.

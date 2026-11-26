@@ -10,7 +10,7 @@
 //
 // Usage:
 //
-//	go run ./cmd/gen -out ../vectors
+//	go run ./cmd/gen -out ../vectors/katie
 package main
 
 import (
@@ -62,7 +62,7 @@ type Case struct {
 const draftRev = "draft-ietf-keytrans-protocol-05"
 
 func main() {
-	out := flag.String("out", "../vectors", "directory to write vectors into")
+	out := flag.String("out", "../vectors/katie", "directory to write vectors into")
 	flag.Parse()
 
 	sha, err := katieSHA()

@@ -18,8 +18,9 @@ report/    Rust crate — checks the vectors, emits proofs, renders the evidence
 
 | Direction | Producer | Checker | Files |
 |---|---|---|---|
-| Go → Rust | `interop/go/cmd/gen` | `cargo test` via `kt_interop::check` | `vectors/*.json` except `from-kt.json` |
-| Rust → Go | `kt-interop-emit` | `interop/go/cmd/verify` | `vectors/from-kt.json` |
+| Go → Rust | `interop/go/cmd/gen` | `cargo test` via `kt_interop::check` | `vectors/katie/*.json` |
+| TypeScript → Rust | tsanparency | `cargo test` via `kt_interop::check` | `vectors/tsanparency/*.json` |
+| Rust → Go | `kt-interop-emit` | `interop/go/cmd/verify` | `vectors/kt/from-kt.json` |
 
 The second is not symmetry for its own sake. Recomputing the peer's values cannot
 catch an implementation that is self-consistently wrong, and it cannot catch
@@ -31,8 +32,8 @@ case katie accepts is a real disagreement about validity rather than a broken
 fixture.
 
 ```sh
-cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/from-kt.json
-cd interop/go && go run ./cmd/verify -in ../vectors/from-kt.json
+cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/kt/from-kt.json
+cd interop/go && go run ./cmd/verify -in ../vectors/kt/from-kt.json
 ```
 
 ## The evidence page
@@ -91,7 +92,7 @@ differ are a visible diff — which is the point.
 
 ```sh
 git submodule update --init                 # katie must be present
-cd interop/go && go run ./cmd/gen -out ../vectors
+cd interop/go && go run ./cmd/gen -out ../vectors/katie
 cargo test --workspace                      # Rust asserts against the vectors
 ```
 

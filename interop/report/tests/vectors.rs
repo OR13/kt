@@ -70,14 +70,17 @@ fn every_vector_check_agrees() {
 #[test]
 fn all_known_vector_files_are_checked() {
     let report = report();
-    assert_eq!(report.suites.len(), check::FILES.len());
-    for file in check::FILES {
-        let suite = suite(&report, file);
-        assert!(!suite.cases.is_empty(), "{file} has no cases");
-        assert!(
-            suite.checks() >= suite.cases.len(),
-            "{file}: fewer checks than cases"
-        );
+    assert_eq!(report.suites.len(), check::FILES.len() * check::PEERS.len());
+    for peer in check::PEERS {
+        for name in check::FILES {
+            let file = format!("{peer}/{name}");
+            let suite = suite(&report, &file);
+            assert!(!suite.cases.is_empty(), "{file} has no cases");
+            assert!(
+                suite.checks() >= suite.cases.len(),
+                "{file}: fewer checks than cases"
+            );
+        }
     }
 }
 
@@ -87,7 +90,8 @@ fn all_known_vector_files_are_checked() {
 fn every_suite_records_its_oracle() {
     let report = report();
     for suite in &report.suites {
-        assert_eq!(suite.generator.implementation, "katie", "{}", suite.file);
+        let (oracle, _) = suite.file.split_once('/').expect("peer directory");
+        assert_eq!(suite.generator.implementation, oracle, "{}", suite.file);
         assert_eq!(
             suite.generator.sha.len(),
             40,
@@ -123,7 +127,7 @@ fn every_suite_records_its_oracle() {
 #[test]
 fn commitment_vectors_still_test_refusal() {
     let report = report();
-    let commitment = suite(&report, "commitment.json");
+    let commitment = suite(&report, "katie/commitment.json");
     assert!(
         commitment.negative_cases() > 0,
         "commitment.json has no negative cases: a vector file that only exercises the \
@@ -144,7 +148,7 @@ fn commitment_vectors_still_test_refusal() {
 #[test]
 fn ibst_vectors_still_test_refusal() {
     let report = report();
-    let ibst = suite(&report, "ibst.json");
+    let ibst = suite(&report, "katie/ibst.json");
 
     let refusals = ibst
         .cases
@@ -180,7 +184,7 @@ fn ibst_vectors_still_test_refusal() {
 #[test]
 fn ladder_vectors_cover_all_three_variants() {
     let report = report();
-    let ladder = suite(&report, "binary-ladder.json");
+    let ladder = suite(&report, "katie/binary-ladder.json");
 
     let count = |needle: &str| {
         ladder

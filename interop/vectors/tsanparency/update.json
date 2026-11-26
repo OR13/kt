@@ -1,0 +1,194 @@
+{
+  "primitive": "update",
+  "draft": "draft-ietf-keytrans-protocol-06 §9.1, §13.5",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "cipher_suite": 2,
+  "notes": "One owner creates a version. Another at the same checkpoint learns its value. Both envelopes include the complete proof.",
+  "cases": [
+    {
+      "name": "created",
+      "input": {
+        "mode": 1,
+        "label": "00ff",
+        "signature_public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "vrf_public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "monitoring_window": 50,
+        "mutations": [
+          {
+            "add": [
+              {
+                "label": "00ff",
+                "value": "01"
+              }
+            ]
+          },
+          {
+            "add": [
+              {
+                "label": "00ff",
+                "value": "02"
+              }
+            ]
+          }
+        ],
+        "entry_timestamps": [
+          100,
+          101
+        ],
+        "tree_size": 2,
+        "position": 1,
+        "versions": 1,
+        "owner": {
+          "starting": 0,
+          "version_at_starting": 0,
+          "upcoming": []
+        },
+        "last": 1,
+        "ladder": [
+          {
+            "version": 0,
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "commitment": "95939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c"
+          },
+          {
+            "version": 1,
+            "vrf_output": "e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693",
+            "commitment": "073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5"
+          },
+          {
+            "version": 2,
+            "vrf_output": "97861c152b2262055fc62b945853b845415fe305091505815c9c8452c190a960"
+          },
+          {
+            "version": 3,
+            "vrf_output": "8567803f1b4221cf6717cb059a3156b44976da8cf33aa3ed685465f293ce5e4a"
+          }
+        ],
+        "note": "created"
+      },
+      "expect": {
+        "timestamps": [
+          101
+        ],
+        "prefix_proofs": [],
+        "prefix_roots": [
+          "8faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc938"
+        ],
+        "inclusion": [],
+        "proof": "01000000000000006500018faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc9380000",
+        "distinguished": true,
+        "envelope": {
+          "encoding": "020000000000000002004084f5d29d9be5ee8a5d6b5ee626524d08508c76b0d37db02caef5f9a35b321813ad7f4a02c546d7f8e9632ffff24a989335bf13e9d0d1a7bfbd3d2f54dfb78a03000000000000000100010404040404040404040404040404040402a15d7e00a46449acde9128ddd0d39b303bd0df8e8da6a37e4dbc48c6e6311a83e2c44548dd48d445d02c2d6854ee7d5c69d52df00e197ef3f34ce7bf6172194b01d3636d0865ddaaf2689a5fa21de30600b67179b3d08d8eb4cefc811458b6d38eaba8566b24032ab1b77bc1682b26c75a249460b1cf871a57d3daeb34fc109ee74c77d9205950185a9d20972101a634add5eaefb2d999cfe62bd7759a79b4a0020001000000000000006500018faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc9380000",
+          "values": [],
+          "openings": [
+            "04040404040404040404040404040404"
+          ],
+          "full_tree_head": "020000000000000002004084f5d29d9be5ee8a5d6b5ee626524d08508c76b0d37db02caef5f9a35b321813ad7f4a02c546d7f8e9632ffff24a989335bf13e9d0d1a7bfbd3d2f54dfb78a03",
+          "binary_ladder": [
+            {
+              "proof": "a15d7e00a46449acde9128ddd0d39b303bd0df8e8da6a37e4dbc48c6e6311a83e2c44548dd48d445d02c2d6854ee7d5c69d52df00e197ef3f34ce7bf6172194b01d3636d0865ddaaf2689a5fa21de306"
+            },
+            {
+              "proof": "b67179b3d08d8eb4cefc811458b6d38eaba8566b24032ab1b77bc1682b26c75a249460b1cf871a57d3daeb34fc109ee74c77d9205950185a9d20972101a634add5eaefb2d999cfe62bd7759a79b4a002"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "catch-up",
+      "input": {
+        "mode": 1,
+        "label": "00ff",
+        "signature_public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "vrf_public_key": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "monitoring_window": 50,
+        "mutations": [
+          {
+            "add": [
+              {
+                "label": "00ff",
+                "value": "01"
+              }
+            ]
+          },
+          {
+            "add": [
+              {
+                "label": "00ff",
+                "value": "02"
+              }
+            ]
+          }
+        ],
+        "entry_timestamps": [
+          100,
+          101
+        ],
+        "tree_size": 2,
+        "position": 1,
+        "versions": 1,
+        "owner": {
+          "starting": 0,
+          "version_at_starting": 0,
+          "upcoming": []
+        },
+        "last": 1,
+        "ladder": [
+          {
+            "version": 0,
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "commitment": "95939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c"
+          },
+          {
+            "version": 1,
+            "vrf_output": "e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693",
+            "commitment": "073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5"
+          },
+          {
+            "version": 2,
+            "vrf_output": "97861c152b2262055fc62b945853b845415fe305091505815c9c8452c190a960"
+          },
+          {
+            "version": 3,
+            "vrf_output": "8567803f1b4221cf6717cb059a3156b44976da8cf33aa3ed685465f293ce5e4a"
+          }
+        ],
+        "note": "catch-up"
+      },
+      "expect": {
+        "timestamps": [
+          101
+        ],
+        "prefix_proofs": [],
+        "prefix_roots": [
+          "8faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc938"
+        ],
+        "inclusion": [],
+        "proof": "01000000000000006500018faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc9380000",
+        "distinguished": true,
+        "envelope": {
+          "encoding": "020000000000000002004084f5d29d9be5ee8a5d6b5ee626524d08508c76b0d37db02caef5f9a35b321813ad7f4a02c546d7f8e9632ffff24a989335bf13e9d0d1a7bfbd3d2f54dfb78a030000000000000001010000000102010404040404040404040404040404040402a15d7e00a46449acde9128ddd0d39b303bd0df8e8da6a37e4dbc48c6e6311a83e2c44548dd48d445d02c2d6854ee7d5c69d52df00e197ef3f34ce7bf6172194b01d3636d0865ddaaf2689a5fa21de30600b67179b3d08d8eb4cefc811458b6d38eaba8566b24032ab1b77bc1682b26c75a249460b1cf871a57d3daeb34fc109ee74c77d9205950185a9d20972101a634add5eaefb2d999cfe62bd7759a79b4a0020001000000000000006500018faf6576e4eac73d4e0cb38debdbeed33b8cf8bf3a89248add5329f67c3bc9380000",
+          "values": [
+            "02"
+          ],
+          "openings": [
+            "04040404040404040404040404040404"
+          ],
+          "full_tree_head": "020000000000000002004084f5d29d9be5ee8a5d6b5ee626524d08508c76b0d37db02caef5f9a35b321813ad7f4a02c546d7f8e9632ffff24a989335bf13e9d0d1a7bfbd3d2f54dfb78a03",
+          "binary_ladder": [
+            {
+              "proof": "a15d7e00a46449acde9128ddd0d39b303bd0df8e8da6a37e4dbc48c6e6311a83e2c44548dd48d445d02c2d6854ee7d5c69d52df00e197ef3f34ce7bf6172194b01d3636d0865ddaaf2689a5fa21de306"
+            },
+            {
+              "proof": "b67179b3d08d8eb4cefc811458b6d38eaba8566b24032ab1b77bc1682b26c75a249460b1cf871a57d3daeb34fc109ee74c77d9205950185a9d20972101a634add5eaefb2d999cfe62bd7759a79b4a002"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

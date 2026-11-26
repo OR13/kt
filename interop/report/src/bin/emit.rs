@@ -1,8 +1,8 @@
 //! Emits proofs *from* this implementation for the Go peer to verify.
 //!
 //! ```sh
-//! cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/from-kt.json
-//! cd interop/go && go run ./cmd/verify -in ../vectors/from-kt.json
+//! cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/kt/from-kt.json
+//! cd interop/go && go run ./cmd/verify -in ../vectors/kt/from-kt.json
 //! ```
 //!
 //! Everything else in `interop/` runs Go → Rust: the peer produces a value and we
@@ -212,7 +212,7 @@ const ACCEPT: &str = "accept";
 const REJECT: &str = "reject";
 
 fn main() -> ExitCode {
-    let mut out = PathBuf::from("interop/vectors/from-kt.json");
+    let mut out = PathBuf::from("interop/vectors/kt/from-kt.json");
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
