@@ -1,0 +1,24 @@
+{
+  "primitive": "log-math",
+  "draft": "draft-ietf-keytrans-protocol-06 §12.1",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "notes": "Coordinates of the retained subtree heads.",
+  "cases": [
+    {
+      "name": "five-leaf-frontier",
+      "input": {
+        "kind": "full-subtrees",
+        "size": 5
+      },
+      "expect": {
+        "indices": [
+          3,
+          8
+        ]
+      }
+    }
+  ]
+}

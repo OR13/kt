@@ -257,7 +257,9 @@ impl Area {
     /// Whether some file attests that this area rejects what the peer rejects.
     #[must_use]
     pub fn has_refusal_evidence(&self) -> bool {
-        self.evidence.iter().any(|file| file == "tampered.json")
+        self.evidence
+            .iter()
+            .any(|file| file == "katie/tampered.json")
     }
 }
 
@@ -350,91 +352,112 @@ pub fn coverage_table() -> Vec<Area> {
             "§2.1",
             "Presentation-language codec",
             "kt-wire::codec",
-            &["commitment.json"],
+            &["katie/commitment.json", "tsanparency/commitment.json"],
         ),
         verified(
             "§11.5",
             "UpdateValue",
             "kt-wire::structs",
-            &["commitment.json"],
+            &["katie/commitment.json"],
         ),
         verified(
             "§11.6",
             "CommitmentValue",
             "kt-wire::structs",
-            &["commitment.json"],
+            &["katie/commitment.json"],
         ),
         verified(
             "§11.6",
             "Commitment, HMAC(Kc, CommitmentValue)",
             "kt-crypto::commitment",
-            &["commitment.json", "tampered.json"],
+            &[
+                "katie/commitment.json",
+                "katie/tampered.json",
+                "tsanparency/tampered.json",
+            ],
         ),
         verified(
             "§4.1, App. A",
             "Implicit binary search tree",
             "kt-tree::ibst",
-            &["ibst.json"],
+            &["katie/ibst.json", "tsanparency/ibst.json"],
         ),
         verified(
             "§5, App. B",
             "Binary ladders",
             "kt-tree::ladder",
-            &["binary-ladder.json"],
+            &["katie/binary-ladder.json", "tsanparency/binary-ladder.json"],
         ),
         verified(
             "§11.7",
             "VRF: ECVRF-EDWARDS25519-SHA512-TAI",
             "kt-crypto::vrf",
-            &["vrf.json", "tampered.json"],
+            &[
+                "katie/vrf.json",
+                "tsanparency/vrf.json",
+                "katie/tampered.json",
+            ],
         ),
         verified(
             "§3.2, §11.8, §12.1",
             "Log tree: root, batch inclusion and consistency proofs",
             "kt-tree::log",
-            &["log-tree.json", "log-math.json", "tampered.json"],
+            &[
+                "katie/log-tree.json",
+                "tsanparency/log-tree.json",
+                "katie/log-math.json",
+                "tsanparency/log-math.json",
+                "katie/tampered.json",
+            ],
         ),
         verified(
             "§6.2",
             "Search ladder interpretation: is the greatest version below, at, or above",
             "kt-tree::ladder",
-            &["ladder-interpretation.json"],
+            &[
+                "katie/ladder-interpretation.json",
+                "tsanparency/ladder-interpretation.json",
+            ],
         ),
         verified(
             "§11.5, §13.1–§13.5",
             "Request structures and response building blocks",
             "kt-wire::requests",
-            &["requests.json"],
+            &["katie/requests.json", "tsanparency/requests.json"],
         ),
         verified(
             "§4.2",
             "Updating a view of the tree: which entries must be checked",
             "kt-tree::ibst",
-            &["update-view.json"],
+            &["katie/update-view.json", "tsanparency/update-view.json"],
         ),
         verified(
             "§11.2, §11.4",
             "Configuration, TreeHead, and FullTreeHead verification",
             "kt-crypto::signature",
-            &["tree-head.json"],
+            &["katie/tree-head.json", "tsanparency/tree-head.json"],
         ),
         verified(
             "§11.4",
             "FullTreeHead wire encoding, whose shape the deployment mode decides",
             "kt-wire::heads",
-            &["tree-head.json"],
+            &["katie/tree-head.json"],
         ),
         verified(
             "§11.3",
             "AuditorTreeHead verification",
             "kt-crypto::signature",
-            &["tree-head.json"],
+            &["katie/tree-head.json"],
         ),
         verified(
             "§3.3, §11.9, §12.2",
             "Prefix tree: root, membership and non-membership proofs",
             "kt-tree::prefix",
-            &["prefix-tree.json", "tampered.json"],
+            &[
+                "katie/prefix-tree.json",
+                "tsanparency/prefix-tree.json",
+                "katie/tampered.json",
+            ],
         ),
         verified(
             "§11.1, §17.1",
@@ -444,7 +467,11 @@ pub fn coverage_table() -> Vec<Area> {
             // code, so `tree-head.json` pins `0x0002` as bytes, and the `Nc`, `Hash.Nh` and
             // `VRF.Np` the registry attaches to it are what every other file's lengths depend
             // on. A wrong registry entry would fail there rather than here.
-            &["tree-head.json", "commitment.json", "vrf.json"],
+            &[
+                "katie/tree-head.json",
+                "katie/commitment.json",
+                "katie/vrf.json",
+            ],
         ),
         verified(
             "§11.1",
@@ -452,7 +479,11 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-crypto::hash",
             // Selecting the wrong hash changes every commitment, every tree root and every
             // signature input, so the files that pin those pin this.
-            &["commitment.json", "log-tree.json", "prefix-tree.json"],
+            &[
+                "katie/commitment.json",
+                "katie/log-tree.json",
+                "katie/prefix-tree.json",
+            ],
         ),
         verified(
             "§11.2",
@@ -460,98 +491,104 @@ pub fn coverage_table() -> Vec<Area> {
             "kt-wire::structs",
             // All three modes, with three distinct Configuration encodings: the mode byte sits
             // right after the suite code, and what follows it differs per mode.
-            &["tree-head.json"],
+            &["katie/tree-head.json"],
         ),
         verified(
             "§11.7, §17.1",
             "VRF: ECVRF-P256-SHA256-TAI, verified — proving is a log's operation and is not",
             "kt-crypto::vrf::p256",
-            &["vrf-p256.json"],
+            &["katie/vrf-p256.json", "tsanparency/vrf-p256.json"],
         ),
         verified(
             "§11.3, §11.4, §17.1",
             "Signatures: ECDSA/P-256 over SHA-256, r||s as 64 fixed-width bytes",
             "kt-crypto::signature",
-            &["tree-head-p256.json"],
+            &[
+                "katie/tree-head-p256.json",
+                "tsanparency/tree-head-p256.json",
+            ],
         ),
         verified(
             "§3.4",
             "Combined tree: log entries committing to prefix tree roots",
             "kt-wire::structs, kt-tree::log",
-            &["log-tree.json", "log-append.json", "auditor-update.json"],
+            &[
+                "katie/log-tree.json",
+                "katie/log-append.json",
+                "tsanparency/log-append.json",
+                "katie/auditor-update.json",
+            ],
         ),
         verified(
             "§12.3, §13.1",
             "CombinedTreeProof and SearchResponse, as a running log serves them",
             "kt-wire::proofs, kt-wire::responses",
-            &["search.json"],
+            &["katie/search.json", "tsanparency/search.json"],
         ),
         verified(
             "§12.3",
             "CombinedTreeProof element ordering, and its five consumption rules",
             "kt-tree::combined",
-            &["search.json"],
+            &["katie/search.json"],
         ),
         verified(
             "§6.3",
             "Greatest-version search, replayed against a running log's responses",
             "kt-tree::combined",
-            &["search.json"],
+            &["katie/search.json"],
         ),
         verified(
             "§7.2",
             "Fixed-version search, replayed against a running log's responses",
             "kt-tree::combined",
-            &["search.json"],
+            &["katie/search.json"],
         ),
         verified(
             "§7.1",
             "Log entry expiry, and the distinguished-entry conditions it triggers",
             "kt-tree::combined",
-            &["search.json"],
+            &["katie/search.json"],
         ),
         verified(
             "§13.2–§13.4",
             "Monitoring response structures, as a running log serves them",
             "kt-wire::responses",
-            &["monitor.json"],
+            &["katie/monitor.json", "tsanparency/monitor.json"],
         ),
         verified(
             "§8.2, §12.3.4",
             "Contact monitoring, replayed against a running log's responses",
             "kt-tree::combined",
-            &["monitor.json"],
+            &["katie/monitor.json"],
         ),
         verified(
             "§8.3 first algorithm, §12.3.5",
             "Owner initialization: adopting a label's history at a distinguished entry",
             "kt-tree::combined",
-            &["monitor.json"],
+            &["katie/monitor.json"],
         ),
         verified(
             "§8.3 second algorithm, §12.3.6",
             "Owner monitoring: the recursive walk over recent distinguished entries",
             "kt-tree::combined",
-            &["monitor.json"],
+            &["katie/monitor.json"],
         ),
         verified(
             "§9.1",
             "Updating a label: the two-tree check a label owner makes on new versions",
             "kt-tree::combined",
-            &["update.json"],
+            &["katie/update.json", "tsanparency/update.json"],
+        ),
+        verified(
+            "§13.5",
+            "Contact-monitoring UpdateResponse envelope",
+            "kt-wire::responses",
+            &["tsanparency/update.json"],
         ),
         Area {
-            section: "§13.5".to_owned(),
-            name: "UpdateRequest, UpdateResponse, and §14's ManagerUpdateRequest".to_owned(),
-            module: Some("kt-wire::requests, kt-wire::responses".to_owned()),
-            // The requests are pinned as bytes by requests.json. The *response* is not, and
-            // cannot be: katie's tree.Update cannot serve one at all (KT-04), so no
-            // UpdateResponse has ever been measured. Its members are pinned individually —
-            // FullTreeHead by tree-head.json, UpdateInfo and BinaryLadderStep by requests.json,
-            // the CombinedTreeProof by update.json — but the envelope itself is checked only by
-            // this side's round-trips, and §14's ManagerUpdateRequest follows the peer's field
-            // order because §14's own listing is corrupt (DRAFT-11). Saying "verified" would
-            // overstate both.
+            section: "§14".to_owned(),
+            name: "ManagerUpdateRequest".to_owned(),
+            module: Some("kt-wire::requests".to_owned()),
             coverage: Coverage::ImplementedUnverified,
             evidence: Vec::new(),
         },
@@ -564,13 +601,16 @@ pub fn coverage_table() -> Vec<Area> {
             "§15.2",
             "AuditorUpdate, and all of the auditor's checks on one log entry",
             "kt-wire::audit, kt-tree::audit",
-            &["auditor-update.json"],
+            &[
+                "katie/auditor-update.json",
+                "tsanparency/auditor-update.json",
+            ],
         ),
         verified(
             "§6.1",
             "Distinguished log entries: which entries every user checks against",
             "kt-tree::distinguished",
-            &["distinguished.json"],
+            &["katie/distinguished.json", "tsanparency/distinguished.json"],
         ),
         Area {
             section: "§10.1".to_owned(),
@@ -586,13 +626,17 @@ pub fn coverage_table() -> Vec<Area> {
             "§3.2, §11.8",
             "Growing the log tree one leaf at a time, from retained subtree heads",
             "kt-tree::log",
-            &["log-append.json", "auditor-update.json"],
+            &["katie/log-append.json", "katie/auditor-update.json"],
         ),
         verified(
             "§15.2, §3.3",
             "Prefix tree root before and after an audited update",
             "kt-tree::prefix",
-            &["prefix-mutation.json", "auditor-update.json"],
+            &[
+                "katie/prefix-mutation.json",
+                "tsanparency/prefix-mutation.json",
+                "katie/auditor-update.json",
+            ],
         ),
         todo("live wire", "HTTP interop against a running Go peer"),
     ]

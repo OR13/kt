@@ -1,0 +1,53 @@
+{
+  "primitive": "ladder-interpretation",
+  "draft": "draft-ietf-keytrans-protocol-06 §6.2",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "notes": "A search stops on either side of its target.",
+  "cases": [
+    {
+      "name": "target-two-greatest-1",
+      "input": {
+        "target": 2,
+        "greatest": 1,
+        "ladder": [
+          0,
+          1,
+          3,
+          2
+        ],
+        "results": [
+          true,
+          true,
+          false,
+          false
+        ]
+      },
+      "expect": {
+        "verdict": -1
+      }
+    },
+    {
+      "name": "target-two-greatest-3",
+      "input": {
+        "target": 2,
+        "greatest": 3,
+        "ladder": [
+          0,
+          1,
+          3
+        ],
+        "results": [
+          true,
+          true,
+          true
+        ]
+      },
+      "expect": {
+        "verdict": 1
+      }
+    }
+  ]
+}

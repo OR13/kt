@@ -20,7 +20,7 @@
 //! The draft places `opaque opening[Nc]` inside `CommitmentValue`; the Go peer
 //! `katie` keeps `opening` outside its struct and writes it to the HMAC before
 //! the serialized remainder. The hashed bytes are identical — the difference is
-//! only where the field lives — and `interop/vectors/commitment.json` records
+//! only where the field lives — and `interop/vectors/katie/commitment.json` records
 //! both the full `CommitmentValue` encoding and the resulting commitment, so the
 //! two factorings are pinned against each other. This crate follows the draft.
 
@@ -192,7 +192,7 @@ mod tests {
         verify(SUITE, &value, &commitment).unwrap();
     }
 
-    /// The negative case from `interop/vectors/commitment.json`: flipping a bit
+    /// The negative case from `interop/vectors/katie/commitment.json`: flipping a bit
     /// in the opening must not verify.
     #[test]
     fn wrong_opening_does_not_verify() {

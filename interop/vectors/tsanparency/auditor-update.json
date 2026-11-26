@@ -1,0 +1,122 @@
+{
+  "primitive": "auditor-update",
+  "draft": "draft-ietf-keytrans-protocol-06 §15.2",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "12f0195f16f41a41189e77494ca4c81e34cfa56c"
+  },
+  "cipher_suite": 2,
+  "notes": "Initial and retained heads, including timestamp ordering. Each accepted root was verified against the TypeScript auditor signature.",
+  "cases": [
+    {
+      "name": "first-signed-head",
+      "input": {
+        "entries": [],
+        "inserted": [],
+        "first_entry": true,
+        "log_size": 0,
+        "window": 50,
+        "previous_timestamp": 0,
+        "prefix_root": "0000000000000000000000000000000000000000000000000000000000000000",
+        "log_full_subtrees": [],
+        "frontier_timestamps": [],
+        "timestamp": 100,
+        "added": [
+          {
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "commitment": "95939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c"
+          }
+        ],
+        "removed": []
+      },
+      "expect": {
+        "encoding": "0000000000000064000000018117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad80095939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c000000000000000000000001030000000000",
+        "verdict": "accepted",
+        "tree_size": 1,
+        "log_root": "9d55fbe7905975b559ccb8bc941187660c634e89940559e72e126e57a3377e02"
+      }
+    },
+    {
+      "name": "retained-head-rejects-earlier-update",
+      "input": {
+        "entries": [
+          {
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "commitment": "95939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c"
+          }
+        ],
+        "inserted": [
+          {
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "position": 0
+          }
+        ],
+        "first_entry": false,
+        "log_size": 1,
+        "window": 50,
+        "previous_timestamp": 100,
+        "prefix_root": "71042e6da829a6c09a2ea7ed5f01533e25c7eb71a0855de9b39aba6c2c94767c",
+        "log_full_subtrees": [
+          "9d55fbe7905975b559ccb8bc941187660c634e89940559e72e126e57a3377e02"
+        ],
+        "frontier_timestamps": [
+          100
+        ],
+        "timestamp": 99,
+        "added": [
+          {
+            "vrf_output": "e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693",
+            "commitment": "073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5"
+          }
+        ],
+        "removed": []
+      },
+      "expect": {
+        "encoding": "000000000000006300000001e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5000000000000000000000001028117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad80095939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c0000000000",
+        "verdict": "rejected"
+      }
+    },
+    {
+      "name": "extend-retained-head",
+      "input": {
+        "entries": [
+          {
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "commitment": "95939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c"
+          }
+        ],
+        "inserted": [
+          {
+            "vrf_output": "8117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad800",
+            "position": 0
+          }
+        ],
+        "first_entry": false,
+        "log_size": 1,
+        "window": 50,
+        "previous_timestamp": 100,
+        "prefix_root": "71042e6da829a6c09a2ea7ed5f01533e25c7eb71a0855de9b39aba6c2c94767c",
+        "log_full_subtrees": [
+          "9d55fbe7905975b559ccb8bc941187660c634e89940559e72e126e57a3377e02"
+        ],
+        "frontier_timestamps": [
+          100
+        ],
+        "timestamp": 101,
+        "added": [
+          {
+            "vrf_output": "e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693",
+            "commitment": "073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5"
+          }
+        ],
+        "removed": []
+      },
+      "expect": {
+        "encoding": "000000000000006500000001e28db59fc1ba6f4526ad5910a55c73557247718caea7946e7a0b048e050ca693073949b62c5b25654bdd1710680477b2ead7e671f5141bd18bd8982668a928f5000000000000000000000001028117972ab8e32318dc6a0e6b8c455ed4aa5d6e843461e9ca03acad85495ad80095939eefa7df75315ace4d63e2c3c50e9ae3b3d43148668af92075fff6337b7c0000000000",
+        "verdict": "accepted",
+        "tree_size": 2,
+        "log_root": "9ce4f7bf02e34e6bfd99a5541aa09e0930e4b22085839203ebab1de1d13a650a"
+      }
+    }
+  ]
+}

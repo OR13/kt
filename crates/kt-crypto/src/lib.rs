@@ -20,7 +20,7 @@
 //! # Status
 //!
 //! [`commitment`] (§11.6) is implemented and pinned against the Go peer by
-//! `interop/vectors/commitment.json`. [`vrf`] and [`signature`] are not
+//! `interop/vectors/katie/commitment.json`. [`vrf`] and [`signature`] are not
 //! implemented yet.
 //!
 //! `UpdateValue` (§11.5) lives in `kt-wire` with the other protocol structs;

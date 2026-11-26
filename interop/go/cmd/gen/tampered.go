@@ -10,7 +10,7 @@
 // rejected by katie's own verifier before it is written out. That confirmation is
 // what makes them usable as a shared oracle: the peer is asserting "this is
 // invalid", so a Rust verifier that accepts one is not making a different
-// judgement call, it is wrong. Together with interop/vectors/from-kt.json, which
+// judgement call, it is wrong. Together with interop/vectors/kt/from-kt.json, which
 // runs the same idea in the other direction, both implementations now have to agree
 // about what is invalid and not merely about what is valid.
 //

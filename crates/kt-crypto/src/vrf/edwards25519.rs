@@ -20,7 +20,7 @@
 //!
 //! Three, in increasing distance from this code: RFC 9381's Appendix B vectors
 //! (implementation-independent, and the ones that matter most), the peer's
-//! `crypto/vrf/edwards25519`, and `interop/vectors/vrf.json`.
+//! `crypto/vrf/edwards25519`, and `interop/vectors/katie/vrf.json`.
 
 use alloc::vec::Vec;
 use core::fmt;

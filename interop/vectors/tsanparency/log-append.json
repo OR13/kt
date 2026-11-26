@@ -1,0 +1,243 @@
+{
+  "primitive": "log-append",
+  "draft": "draft-ietf-keytrans-protocol-06 §3.2, §11.8",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "cipher_suite": 2,
+  "notes": "Empty prefix tree across ticks. Consecutive entries can share a timestamp. Sizes 7, 8 and 9 cover the carry into a balanced subtree and the next append.",
+  "cases": [
+    {
+      "name": "empty-prefix-ticks-size-1",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000000
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0"
+        ],
+        "size": 1
+      },
+      "expect": {
+        "full_subtrees": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0"
+        ],
+        "root": "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-2",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000000
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0"
+        ],
+        "size": 2
+      },
+      "expect": {
+        "full_subtrees": [
+          "baeb9f00c13816bb305013adf45f5c38db2b8d56173973eb8ce9f75b68e37bc1"
+        ],
+        "root": "baeb9f00c13816bb305013adf45f5c38db2b8d56173973eb8ce9f75b68e37bc1"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-3",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000001
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517"
+        ],
+        "size": 3
+      },
+      "expect": {
+        "full_subtrees": [
+          "baeb9f00c13816bb305013adf45f5c38db2b8d56173973eb8ce9f75b68e37bc1",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517"
+        ],
+        "root": "5a5a0280df95e1840319ec57e1a5f3a6ea79dcbd18f8a128855d8161a79e7a17"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-4",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000001
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517"
+        ],
+        "size": 4
+      },
+      "expect": {
+        "full_subtrees": [
+          "1fd94be88e7acc9fd3b93919061cc40bf872b977e3af27c4013fd83fc199e25a"
+        ],
+        "root": "1fd94be88e7acc9fd3b93919061cc40bf872b977e3af27c4013fd83fc199e25a"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-5",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000002
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c"
+        ],
+        "size": 5
+      },
+      "expect": {
+        "full_subtrees": [
+          "1fd94be88e7acc9fd3b93919061cc40bf872b977e3af27c4013fd83fc199e25a",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c"
+        ],
+        "root": "aadca5312becf7992b3a3e653a86ba03d5df24b72dce0077921ce7a312a168f5"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-6",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000002
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c"
+        ],
+        "size": 6
+      },
+      "expect": {
+        "full_subtrees": [
+          "1fd94be88e7acc9fd3b93919061cc40bf872b977e3af27c4013fd83fc199e25a",
+          "e53fb8628fed4fe16a57ef2c5e9d6fcace154c5ad04dc42138a25261fbd0bd20"
+        ],
+        "root": "45aab60c7f8dfe513533257f0d2992cd8532714c06db4d1159f38fc82a6166ae"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-7",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000003
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4"
+        ],
+        "size": 7
+      },
+      "expect": {
+        "full_subtrees": [
+          "1fd94be88e7acc9fd3b93919061cc40bf872b977e3af27c4013fd83fc199e25a",
+          "e53fb8628fed4fe16a57ef2c5e9d6fcace154c5ad04dc42138a25261fbd0bd20",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4"
+        ],
+        "root": "7e0e932254896987fb93da81b718b85549d737d45c2480309b420b890b4a00fb"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-8",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000003
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4"
+        ],
+        "size": 8
+      },
+      "expect": {
+        "full_subtrees": [
+          "dccba5e6b63deab74a2c9ad10936b6b4a0daae2ab66e8577e54295c5f3f59147"
+        ],
+        "root": "dccba5e6b63deab74a2c9ad10936b6b4a0daae2ab66e8577e54295c5f3f59147"
+      }
+    },
+    {
+      "name": "empty-prefix-ticks-size-9",
+      "input": {
+        "entries": [
+          {
+            "prefix_tree": "0000000000000000000000000000000000000000000000000000000000000000",
+            "timestamp": 1800000000004
+          }
+        ],
+        "leaves": [
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "875c4ecfd5fc77fc3c209fca270776e83d3dd8799546263289e399a8b1a5aaf0",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "8b9877ac764350506ff874de5d80dd14e277e72348587a738cf5e4808654b517",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "5dc5f0fd2b005ac860e8e090e2763a6a209b4fa173ff2dc2fb131015cc4eca6c",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4",
+          "c4a7e89a8d5da0b3ce246523f5ad96c112ff14b32124f6efc58e1691abb05be4",
+          "59847144f7ccb6af86c305f3b847716c4c0e47dcb900879e016caa12ee5fcdf3"
+        ],
+        "size": 9
+      },
+      "expect": {
+        "full_subtrees": [
+          "dccba5e6b63deab74a2c9ad10936b6b4a0daae2ab66e8577e54295c5f3f59147",
+          "59847144f7ccb6af86c305f3b847716c4c0e47dcb900879e016caa12ee5fcdf3"
+        ],
+        "root": "4ec709693d15b3aa57fb4cb8fba9de894ac2570bd4672ff1ee01887ba669d5f7"
+      }
+    }
+  ]
+}

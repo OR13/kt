@@ -22,8 +22,8 @@
 //! ([`ladder`], §5) are pure integer functions with pseudocode in Appendices A
 //! and B. They need no cryptography, no state, and no I/O — which makes them the
 //! cheapest high-confidence interop win available, and they are done: both are
-//! pinned against the Go peer by `interop/vectors/ibst.json` and
-//! `interop/vectors/binary-ladder.json`.
+//! pinned against the Go peer by `interop/vectors/katie/ibst.json` and
+//! `interop/vectors/katie/binary-ladder.json`.
 //!
 //! Where the appendices assume Python's unbounded integers, this crate uses the
 //! wire types (`u64` log indices, `u32` versions) and turns the cases the

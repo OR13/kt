@@ -80,7 +80,7 @@ jobs:
       - run: go vet ./...
         working-directory: interop/go
       - name: Regenerate vectors
-        run: go run ./cmd/gen -out ../vectors
+        run: go run ./cmd/gen -out ../vectors/katie
         working-directory: interop/go
 
       # The other direction: proofs built by the Rust side, checked by katie's
@@ -89,9 +89,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Emit kt-generated proofs
-        run: cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/from-kt.json
+        run: cargo run -p kt-interop --bin kt-interop-emit -- --out interop/vectors/kt/from-kt.json
       - name: The Go peer must agree about every one of them
-        run: go run ./cmd/verify -in ../vectors/from-kt.json
+        run: go run ./cmd/verify -in ../vectors/kt/from-kt.json
         working-directory: interop/go
 
       # Everything the Rust side checks, run against the vectors that were just
@@ -115,7 +115,7 @@ jobs:
       - name: Vectors must be reproducible
         run: |
           git diff --exit-code -- interop/vectors \
-            ':(exclude)interop/vectors/search.json' \
-            ':(exclude)interop/vectors/monitor.json' \
-            ':(exclude)interop/vectors/update.json' \
-            ':(exclude)interop/vectors/tree-head-p256.json'
+            ':(exclude)interop/vectors/katie/search.json' \
+            ':(exclude)interop/vectors/katie/monitor.json' \
+            ':(exclude)interop/vectors/katie/update.json' \
+            ':(exclude)interop/vectors/katie/tree-head-p256.json'

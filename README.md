@@ -110,31 +110,31 @@ Implemented and verified against the Go peer, byte for byte:
 | Implemented | Draft | Verified by |
 |---|---|---|
 | Presentation-language codec (`kt-wire::codec`) | §2.1 | every vector file below |
-| `UpdateValue`, `CommitmentValue` (`kt-wire::structs`) | §11.5, §11.6 | [`commitment.json`](interop/vectors/commitment.json) |
-| Commitment, `HMAC(Kc, CommitmentValue)` (`kt-crypto::commitment`) | §11.6 | [`commitment.json`](interop/vectors/commitment.json) — 6 positive, 1 negative |
-| Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/ibst.json) — 38 log sizes |
-| Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/binary-ladder.json) — 76 cases |
-| VRF, ECVRF-EDWARDS25519-SHA512-TAI (`kt-crypto::vrf`) | §11.7 | [RFC 9381 App. B](https://www.rfc-editor.org/rfc/rfc9381.html) vectors **and** [`vrf.json`](interop/vectors/vrf.json) — 10 positive, 1 negative |
-| Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/log-tree.json) — 19 sizes, 297 proofs; [`log-math.json`](interop/vectors/log-math.json) — 1679 decompositions |
-| Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/prefix-tree.json) — 11 trees |
-| `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — all three deployment modes |
-| `FullTreeHead` wire encoding, both shapes (`kt-wire::heads`) | §11.4 | [`tree-head.json`](interop/vectors/tree-head.json) — the mode decides how many bytes follow |
-| Updating a view of the tree (`kt-tree::ibst`) | §4.2 | [`update-view.json`](interop/vectors/update-view.json) — 190 size/advertised pairs |
-| Search ladder interpretation (`kt-tree::ladder`) | §6.2 | [`ladder-interpretation.json`](interop/vectors/ladder-interpretation.json) — 211 target/greatest pairs |
-| §13 request structures + response building blocks (`kt-wire::requests`) | §11.5, §13.1–§13.5 | [`requests.json`](interop/vectors/requests.json) — 22 structures |
-| Prefix tree root before and after an audited update (`kt-tree::prefix`) | §15.2, §3.3 | [`prefix-mutation.json`](interop/vectors/prefix-mutation.json) — 8 update shapes |
-| `AuditorUpdate` + every auditor check on one entry, steps 1–7 (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/auditor-update.json) — 14 cases through katie's own auditor |
-| Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/log-append.json) — 64 sizes, heads and root at each |
-| Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/distinguished.json) — 42 size/window/timestamp shapes |
-| `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/search.json) — 10 responses from a running log |
-| Greatest-version and fixed-version search (`kt-tree::combined`) | §6.3, §7.1, §7.2, §12.3 | [`search.json`](interop/vectors/search.json) — all 12 replayed, each consuming its proof exactly |
-| Monitoring response structures (`kt-wire::responses`) | §13.2–§13.4 | [`monitor.json`](interop/vectors/monitor.json) — contact, owner init, owner monitor |
-| Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/monitor.json) — 4 replayed, each consuming its proof exactly |
-| Owner initialization (`kt-tree::combined`) | §8.3, §12.3.5 | [`monitor.json`](interop/vectors/monitor.json) — replayed, consuming its proof exactly |
-| Owner monitoring (`kt-tree::combined`) | §8.3, §12.3.6 | [`monitor.json`](interop/vectors/monitor.json) — replayed to exhaustion, §8.2 and §8.3 composed |
+| `UpdateValue`, `CommitmentValue` (`kt-wire::structs`) | §11.5, §11.6 | [`commitment.json`](interop/vectors/katie/commitment.json) |
+| Commitment, `HMAC(Kc, CommitmentValue)` (`kt-crypto::commitment`) | §11.6 | [`commitment.json`](interop/vectors/katie/commitment.json) — 6 positive, 1 negative |
+| Implicit binary search tree (`kt-tree::ibst`) | §4.1, App. A | [`ibst.json`](interop/vectors/katie/ibst.json) — 38 log sizes |
+| Binary ladders (`kt-tree::ladder`) | §5, App. B | [`binary-ladder.json`](interop/vectors/katie/binary-ladder.json) — 76 cases |
+| VRF, ECVRF-EDWARDS25519-SHA512-TAI (`kt-crypto::vrf`) | §11.7 | [RFC 9381 App. B](https://www.rfc-editor.org/rfc/rfc9381.html) vectors **and** [`vrf.json`](interop/vectors/katie/vrf.json) — 10 positive, 1 negative |
+| Log tree: root, batch inclusion + consistency proofs (`kt-tree::log`) | §3.2, §11.8, §12.1 | [`log-tree.json`](interop/vectors/katie/log-tree.json) — 19 sizes, 297 proofs; [`log-math.json`](interop/vectors/katie/log-math.json) — 1679 decompositions |
+| Prefix tree: root, membership + non-membership proofs (`kt-tree::prefix`) | §3.3, §11.9, §12.2 | [`prefix-tree.json`](interop/vectors/katie/prefix-tree.json) — 11 trees |
+| `Configuration`, tree head + auditor head + full head signatures (`kt-crypto::signature`) | §11.2, §11.3, §11.4 | [`tree-head.json`](interop/vectors/katie/tree-head.json) — all three deployment modes |
+| `FullTreeHead` wire encoding, both shapes (`kt-wire::heads`) | §11.4 | [`tree-head.json`](interop/vectors/katie/tree-head.json) — the mode decides how many bytes follow |
+| Updating a view of the tree (`kt-tree::ibst`) | §4.2 | [`update-view.json`](interop/vectors/katie/update-view.json) — 190 size/advertised pairs |
+| Search ladder interpretation (`kt-tree::ladder`) | §6.2 | [`ladder-interpretation.json`](interop/vectors/katie/ladder-interpretation.json) — 211 target/greatest pairs |
+| §13 request structures + response building blocks (`kt-wire::requests`) | §11.5, §13.1–§13.5 | [`requests.json`](interop/vectors/katie/requests.json) — 22 structures |
+| Prefix tree root before and after an audited update (`kt-tree::prefix`) | §15.2, §3.3 | [`prefix-mutation.json`](interop/vectors/katie/prefix-mutation.json) — 8 update shapes |
+| `AuditorUpdate` + every auditor check on one entry, steps 1–7 (`kt-wire::audit`, `kt-tree::audit`) | §15.2 | [`auditor-update.json`](interop/vectors/katie/auditor-update.json) — 14 cases through katie's own auditor |
+| Growing the log tree from retained subtree heads (`kt-tree::log`) | §3.2, §11.8 | [`log-append.json`](interop/vectors/katie/log-append.json) — 64 sizes, heads and root at each |
+| Distinguished log entries (`kt-tree::distinguished`) | §6.1 | [`distinguished.json`](interop/vectors/katie/distinguished.json) — 42 size/window/timestamp shapes |
+| `CombinedTreeProof` + `SearchResponse` (`kt-wire::proofs`, `kt-wire::responses`) | §12.3, §13.1 | [`search.json`](interop/vectors/katie/search.json) — 10 responses from a running log |
+| Greatest-version and fixed-version search (`kt-tree::combined`) | §6.3, §7.1, §7.2, §12.3 | [`search.json`](interop/vectors/katie/search.json) — all 12 replayed, each consuming its proof exactly |
+| Monitoring response structures (`kt-wire::responses`) | §13.2–§13.4 | [`monitor.json`](interop/vectors/katie/monitor.json) — contact, owner init, owner monitor |
+| Contact monitoring (`kt-tree::combined`) | §8.2, §12.3.4 | [`monitor.json`](interop/vectors/katie/monitor.json) — 4 replayed, each consuming its proof exactly |
+| Owner initialization (`kt-tree::combined`) | §8.3, §12.3.5 | [`monitor.json`](interop/vectors/katie/monitor.json) — replayed, consuming its proof exactly |
+| Owner monitoring (`kt-tree::combined`) | §8.3, §12.3.6 | [`monitor.json`](interop/vectors/katie/monitor.json) — replayed to exhaustion, §8.2 and §8.3 composed |
 
 **Refusing what the peer refuses.**
-[`tampered.json`](interop/vectors/tampered.json) holds 18 proofs and openings that
+[`tampered.json`](interop/vectors/katie/tampered.json) holds 18 proofs and openings that
 katie built, corrupted, and confirmed its own verifier rejects — so accepting one is
 a bug rather than a difference of opinion. Every other vector file asks whether we
 compute the same values, which a verifier that accepted everything would also pass.
@@ -178,7 +178,7 @@ The draft's prose settles it: `leaf_public_key` verifies "the Service Operator's
 signature on modifications", and §11.5 gives `UpdateSuffix` a signature only under
 `thirdPartyManagement`, so under contact monitoring the key would have nothing to
 verify. This implementation follows the prose and katie, and
-[`tampered.json`](interop/vectors/tampered.json) carries a signature valid under the
+[`tampered.json`](interop/vectors/katie/tampered.json) carries a signature valid under the
 *other* reading that must be rejected — so if the working group resolves it the other
 way, a test starts failing rather than a document going stale.
 

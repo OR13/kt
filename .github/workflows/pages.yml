@@ -40,7 +40,7 @@ jobs:
 
       - name: Vectors must be reproducible from the pinned peer
         run: |
-          go run ./cmd/gen -out ../vectors
+          go run ./cmd/gen -out ../vectors/katie
         working-directory: interop/go
       - run: git diff --exit-code -- interop/vectors
 

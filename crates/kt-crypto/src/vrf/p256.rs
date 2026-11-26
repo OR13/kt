@@ -31,7 +31,7 @@
 //! Two, and they are independent of each other: RFC 9381's Appendix B.1 test
 //! vectors for `ECVRF-P256-SHA256-TAI`, which are in the tests below and settle the
 //! byte order and every domain separator, and the peer's `crypto/vrf/p256` by way
-//! of `interop/vectors/vrf.json`.
+//! of `interop/vectors/katie/vrf.json`.
 
 use p256::elliptic_curve::PrimeField as _;
 use p256::elliptic_curve::sec1::{FromSec1Point as _, Sec1Point, ToSec1Point as _};

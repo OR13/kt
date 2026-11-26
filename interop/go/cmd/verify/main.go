@@ -12,7 +12,7 @@
 //
 // Usage:
 //
-//	go run ./cmd/verify -in ../vectors/from-kt.json
+//	go run ./cmd/verify -in ../vectors/kt/from-kt.json
 package main
 
 import (
@@ -126,7 +126,7 @@ const (
 )
 
 func main() {
-	in := flag.String("in", "../vectors/from-kt.json", "file of kt-generated proofs to verify")
+	in := flag.String("in", "../vectors/kt/from-kt.json", "file of kt-generated proofs to verify")
 	verbose := flag.Bool("v", false, "print a line per case")
 	flag.Parse()
 

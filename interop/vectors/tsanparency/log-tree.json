@@ -1,0 +1,70 @@
+{
+  "primitive": "log-tree",
+  "draft": "draft-ietf-keytrans-protocol-06 §12.1",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "notes": "One batch proves a retained leaf and a new leaf after an unbalanced checkpoint.",
+  "cases": [
+    {
+      "name": "retained-three-to-five",
+      "input": {
+        "entries": [
+          {
+            "timestamp": 0,
+            "prefix_tree": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+          },
+          {
+            "timestamp": 49,
+            "prefix_tree": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+          },
+          {
+            "timestamp": 50,
+            "prefix_tree": "dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986"
+          },
+          {
+            "timestamp": 50,
+            "prefix_tree": "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5"
+          },
+          {
+            "timestamp": 100,
+            "prefix_tree": "e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71"
+          }
+        ],
+        "requests": [
+          {
+            "proven_leaves": [
+              1,
+              4
+            ],
+            "retained_size": 3
+          }
+        ]
+      },
+      "expect": {
+        "root": "7dc5fccbfe3a025a9d17366e5d1f15e809a86dd49461e0331591daf774e0e938",
+        "full_subtrees": [
+          "65f35814bc28eb5584a4f7bced745a45e1b34030023c76524c95af12d6d11c05",
+          "7b9b8480007e3faa25684a84beebee580fe67df42aea025a4889c49c94ca76ea"
+        ],
+        "leaf_values": [
+          "3a37d7c7b7e06216f1c0c83de297dae6f366ad861c2c6daf71e486415407c2d4",
+          "b4db015d34fe867e247180678d6f674dbaefef63f58dca079c02706e66fc8d91",
+          "9d11a1171bf61b5d28ca628e7cabfb650e7a87f580592baf7597bc6fef200cde",
+          "876c4058b0fced83a2376fd923f4294b474302574ba6d853f417298cab78bd9c",
+          "7b9b8480007e3faa25684a84beebee580fe67df42aea025a4889c49c94ca76ea"
+        ],
+        "proofs": [
+          {
+            "proof": "00023a37d7c7b7e06216f1c0c83de297dae6f366ad861c2c6daf71e486415407c2d4876c4058b0fced83a2376fd923f4294b474302574ba6d853f417298cab78bd9c",
+            "elements": [
+              "3a37d7c7b7e06216f1c0c83de297dae6f366ad861c2c6daf71e486415407c2d4",
+              "876c4058b0fced83a2376fd923f4294b474302574ba6d853f417298cab78bd9c"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

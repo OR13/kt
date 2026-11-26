@@ -1,0 +1,51 @@
+{
+  "primitive": "ibst",
+  "draft": "draft-ietf-keytrans-protocol-06 §4.1",
+  "generator": {
+    "impl": "tsanparency",
+    "sha": "b8563c2436202c456e5e8c792a8aac25124face2"
+  },
+  "notes": "Incomplete final subtree.",
+  "cases": [
+    {
+      "name": "five-entry-tree",
+      "input": {
+        "size": 5
+      },
+      "expect": {
+        "root": 3,
+        "frontier": [
+          3,
+          4
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 1,
+            "left": 0,
+            "right": 2
+          },
+          {
+            "index": 2,
+            "left": null,
+            "right": null
+          },
+          {
+            "index": 3,
+            "left": 1,
+            "right": 4
+          },
+          {
+            "index": 4,
+            "left": null,
+            "right": null
+          }
+        ]
+      }
+    }
+  ]
+}
